@@ -479,6 +479,7 @@
         - 0.2.9 :   Add snapmirror type option
         - 0.3.0 :   Modify NonInteractive mode for ConfigureDR and for CloneDR with ForceOriginalClone
         - 0.3.1 :   Add PreserveIdentity Mode
+        - 0.3.2 :   Correct Firewall Policy sync during UpdateDR
 #>
 [CmdletBinding(HelpURI = "https://github.com/oliviermasson/svmtool", DefaultParameterSetName = "ListInstance")]
 Param (

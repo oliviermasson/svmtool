@@ -5,7 +5,7 @@
     This module contains several functions to manage SVMDR, Backup and Restore Configuration...
 .NOTES
     Authors  : Olivier Masson, Jerome Blanchet, Mirko Van Colen
-    Release  : November 11th, 2019
+    Release  : January 30th, 2020
 
 #>
 
@@ -7227,6 +7227,7 @@ Try {
                 $Return = $True
                 Write-Log "[$workOn] Network Interface [$PrimaryInterfaceName] already exists"
                 $SecondaryInterface  = Get-NcNetInterface -InterfaceName $PrimaryInterfaceName -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
+                $SecondaryFirewallPolicy=$SecondaryInterface.FirewallPolicy
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
                 $SecondaryInterfaceAutoReverse=$SecondaryInterface.IsAutoRevert
                 if($PrimaryIsAutoRevert -ne $SecondaryInterfaceAutoReverse)
@@ -7242,6 +7243,12 @@ Try {
                         $out = Set-NcNetInterface -Name $PrimaryInterfaceName -AutoRevert $False -Vserver $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar
                     }
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcNetInterface failed [$ErrorVar]" }
+                }
+                if($PrimaryFirewallPolicy -ne $SecondaryFirewallPolicy){
+                    Write-Log "[$workOn] Network Interface [$PrimaryInterfaceName] Firewall Policy is different [$PrimaryFirewallPolicy] vs [$SecondaryFirewallPolicy]"
+                    Write-LogDebug "Set-NcNetInterface -Name $PrimaryInterfaceName -FirewallPolicy $PrimaryFirewallPolicy -Vserver $mySecondaryVserver -controller $mySecondaryController"
+                    $out = Set-NcNetInterface -Name $PrimaryInterfaceName -FirewallPolicy $PrimaryFirewallPolicy -Vserver $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar   
+                    if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Set-NcNetInterface failed [$ErrorVar]" }
                 }
             }
             # treats other network route
@@ -10477,7 +10484,7 @@ Try {
     }
     if($Backup -eq $True){
         $PrimaryVserver | ConvertTo-Json -Depth 5 | Out-File -FilePath $($Global:JsonPath+"Get-NcVserver.json") -Encoding ASCII -Width 65535
-        if( ($ret=get-item $($Global:JsonPath+"Get-NcVserver.json") -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcVserver.json") -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$($Global:JsonPath+"Get-NcVserver.json") saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcVserver.json")"
