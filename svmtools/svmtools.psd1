@@ -6,7 +6,7 @@
 # Generated on: 2018-06-07
 #
 # Update by : Olivier MASSON
-# Updated on : 2020-01-30
+# Updated on : 2020-03-17
 #
 # Version Control :
 #   1.0.4 : Initial version
@@ -58,13 +58,15 @@
 #           Modify NonInteractive Mode for CloneDR with ForceCloneOriginal option
 #   1.2.9 : Add PreserveIdentity Mode
 #   1.2.10: Correct Firewall Policy sync during UpdateDR
+#   1.3.0 : Change some behaviour around NonInteractive mode
+#           Fix update_cifs_usergroup
 @{
 
     # Script module or binary module file associated with this manifest.
     RootModule        = '.\svmtools.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.2.10'
+    ModuleVersion     = '1.3.0'
 
     # Supported PSEditions
     # CompatiblePSEditions = @()

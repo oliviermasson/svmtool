@@ -5,7 +5,7 @@
     This module contains several functions to manage SVMDR, Backup and Restore Configuration...
 .NOTES
     Authors  : Olivier Masson, Jerome Blanchet, Mirko Van Colen
-    Release  : January 30th, 2020
+    Release  : March 17th, 2020
 
 #>
 
@@ -463,11 +463,10 @@ function Read-HostOptions{
     }else{
         $ans = Read-Host
     }
-    while(-not ($optionlist -contains $ans) -or ($ans -eq "") -or ($ans -eq $null)){
+    while(-not ($optionlist -contains $ans) -or ($ans -eq "") -or ($null -eq $ans)){
         Format-Colors "Please choose from [{0:Yellow}] : " -Arguments $options -NoNewLine
         $ans = Read-Host
     }
-
     return $ans
 }
 
@@ -4717,8 +4716,12 @@ Catch {
     $SameIP=@()
 	foreach($lif in $lifsdest){
         $lif_name=$lif.InterfaceName
-		$lif_ip=$lif.Address
-		if( ($lif_ip -notin $IPsource) -or ($Global:RESTORE_ORIGINAL -eq $True -or $Global:ForceCloneOriginal.IsPresent) ){
+        $lif_ip=$lif.Address
+        if( $lif_ip -match "^169\.254" ){
+            Write-LogDebug "Ignore this APIPA lif [$lif_name]"
+            Continue
+        }
+		if( ($lif_ip -notin $IPsource) -or ($Global:RESTORE_ORIGINAL -eq $True -or $Global:ForceCloneOriginal.IsPresent)){
 			Write-LogDebug "[$workOn] Set LIF [$lif_name] into state [$state]"
 			$ret=Set-NcNetInterface -Name $lif_name -Vserver $mySecondaryVserver -Controller $mySecondaryController -AdministrativeStatus $state -ErrorVariable ErrorVar
 			if($? -ne $true){
@@ -4738,8 +4741,17 @@ Catch {
     }else{
         if($LIFset -eq $false){
             if($Restore -eq $False){
-                Write-Log "[$workOn] ERROR: You need at least one lif on the destination that can communicate with Active Directory. Use ConfigureDR to create one"
-                return $False
+                if($state -eq "up"){
+                    #if($Global:Run_Mode -eq "UpdateDR" -and ($null -ne $Global:TemporarySecondaryCifsIp))
+                    if($null -ne $Global:TemporarySecondaryCifsIp){
+                        Write-LogDebug "Temporary LIF will be managed inside Update_Cifs_usergroup function"
+                        return $True
+                    }else{
+                        Write-Log "[$workOn] ERROR: You need at least one lif on the destination that can communicate with Active Directory. Use ConfigureDR to create one"
+                        #return $False
+                        return $True
+                    }
+                }
             }else{
                 return $True
             }
@@ -7098,16 +7110,20 @@ Try {
                     if ( $ANS1 -eq 'y' ) 
                     {
                         $BackupOfGateway=""
-                        if( ($Global:PreserveIdentity -eq $True) -and (-not $Global:ForceCloneOriginal.IsPresent) ){    
+                        $APIPA_Mode=$False
+                        #if( ($Global:PreserveIdentity -eq $True) -and (-not $Global:ForceCloneOriginal.IsPresent) ){
+                        if( ( ($Global:PreserveIdentity -eq $True) -or ( ($Global:Run_Mode -eq "CloneDR") -and ($Global:NonInteractive.IsPresent) ) ) -and ( -not $Global:ForceCloneOriginal.IsPresent ) ){
                             $tmp1 = (Get-Random -minimum 0 -maximum 255)
                             $tmp2 = (Get-Random -minimum 1 -maximum 254)
                             $BackupOfGateway=$PrimaryGateway
                             $PrimaryAddress = "169.254.$tmp1.$tmp2"
                             $PrimaryNetMask = "255.255.0.0"
                             $PrimaryGateway = ""
-                            Write-LogWarn "[$workOn] Working in PreserveIdentity Mode - creating APIPA address [$PrimaryAddress]"
+                            Write-LogWarn "[$workOn] Working in PreserveIdentity or NonInteractive CloneDR Mode - creating APIPA address [$PrimaryAddress]"
+                            $APIPA_Mode=$True
                         }
-                        if( -not ($Global:ForceCloneOriginal.IsPresent) -or ($Global:PreserveIdentity -eq $False) ){
+                        #if((-not ($Global:ForceCloneOriginal.IsPresent) -and ($Global:Run_Mode -eq "CloneDR")) -or (($Global:PreserveIdentity -eq $False) -and ($Global:Run_Mode -eq "ConfigureDR"))){
+                        <# if( (($APIPA_Mode -eq $False) -and (-not $Global:NonInteractive.IsPresent)) -or ($Global:NonInteractive.IsPresent -and ($Global:PreserveIdentity -eq $False) ) ){
                             $myIpAddr=ask_IpAddr_from_cli -myIpAddr $PrimaryAddress -workOn $workOn -forceAsk $True
                             $myNetMask=ask_NetMask_from_cli -myNetMask $PrimaryNetMask -workOn $workOn -forceAsk $True
                             $myGateway=ask_gateway_from_cli -myGateway $PrimaryGateway -workOn $workOn -forceAsk $True
@@ -7115,6 +7131,15 @@ Try {
                             $myIpAddr = $PrimaryAddress  
                             $myNetMask = $PrimaryNetMask
                             $myGateway = $PrimaryGateway
+                        } #>
+                        if(($APIPA_Mode -eq $True) -or ($Global:ForceCloneOriginal.IsPresent) ){
+                            $myIpAddr = $PrimaryAddress  
+                            $myNetMask = $PrimaryNetMask
+                            $myGateway = $PrimaryGateway    
+                        }else{
+                            $myIpAddr=ask_IpAddr_from_cli -myIpAddr $PrimaryAddress -workOn $workOn -forceAsk $True
+                            $myNetMask=ask_NetMask_from_cli -myNetMask $PrimaryNetMask -workOn $workOn -forceAsk $True
+                            $myGateway=ask_gateway_from_cli -myGateway $PrimaryGateway -workOn $workOn -forceAsk $True    
                         }
                         if($nodeMatchRegEx -ne ""){
                             $nodeRegEx=replace_regex_groupmatches -string $PrimaryCurrentNode -regex $nodeMatchRegEx -replacewith "(.*)"
@@ -7130,7 +7155,7 @@ Try {
                             {
                                 Write-Log "[$workOn] Create the LIF $LIF"
                                 if( -not ($Global:ForceCloneOriginal.IsPresent) ){
-                                    Write-LogDebug "Dns Domain is only set during Migrate, ActivateDR, ReActivate or CloneVserverDR with ForceCloneOriginal"
+                                    Write-LogDebug "Dns Domain is only set during Migrate, ActivateDR, ReActivate or CloneDR with ForceCloneOriginal"
                                     Write-LogDebug "Dns Domain will remain empty for temporary LIF"
                                     $PrimaryDnsDomainName=""    
                                 }
@@ -7145,6 +7170,7 @@ Try {
                                     Write-LogDebug "New-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver  -Role $PrimaryRole -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -FirewallPolicy $PrimaryFirewallPolicy -Address $myIpAddr -Netmask $myNetMask -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus down -AutoRevert $PrimaryIsAutoRevert  -Controller $mySecondaryController"
                                     $SecondaryInterface=New-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver  -Role $PrimaryRole -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -FirewallPolicy $PrimaryFirewallPolicy -Address $myIpAddr -Netmask $myNetMask -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus down -AutoRevert $PrimaryIsAutoRevert  -Controller $mySecondaryController  -ErrorVariable ErrorVar
                                 }
+                                #exit 0
                                 if($BackupOfGateway){
                                     # set gateway back to original, to add routes
                                     $myGateway = $BackupOfGateway
@@ -8808,7 +8834,7 @@ Try {
         $Global:NEED_CIFS_SERVER=$True
         $SecondaryCifsServerInfos = Get-NcCifsServer -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsServer failed [$ErrorVar]" }
-
+        $SecondaryCifsLifCreated=$false
         if ( $SecondaryCifsServerInfos -eq $null ) 
         {
             Write-Log "[$workOn] Add CIFS Server in Vserver DR : [$mySecondaryVserver] [$mySecondaryController]"
@@ -8854,7 +8880,7 @@ Try {
             }
             # creating temp cifs lif
             if($TemporarySecondaryCifsIp -and $SecondaryCifsLifMaster){
-                Write-LogDebug "[$workOn] Create tmp lif to join AD [$SecondaryCifsLifMaster][$TemporarySecondaryCifsIp]"
+                Write-LogWarn "[$workOn] Create Temporary LIF to join AD [$SecondaryCifsLifMaster][$TemporarySecondaryCifsIp]"
                 $SecondaryCifsLifCreated=$false
                 if($Global:NonInteractive -or $ForClone -or $Global:PreserveIdentity -eq $True){
                     Write-Log "[$workOn] getting master lif to clone"
@@ -9023,6 +9049,7 @@ Try {
         }
 
     }
+    $Global:SecondaryCifsLifCreated=$SecondaryCifsLifCreated
     if($Backup -eq $False -and $Restore -eq $False -and $ForClone -eq $False){
         $PrimaryCifsServer=Get-NcCifsServer  -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsServer failed [$ErrorVar]" }
@@ -9101,7 +9128,7 @@ Try {
     if($Backup -eq $False -and $Restore -eq $False){
         if($WinSIDCompatible -eq $False){
             Write-LogDebug "set_all_lif -mySecondaryVserver $mySecondaryVserver -myPrimaryVserver $myPrimaryVserver -mySecondaryController $mySecondaryController  -myPrimaryController $myPrimaryController -state up"
-            if (-not $Global:SecondaryCifsLifCreate){
+            if (-not $Global:SecondaryCifsLifCreated){
                 if (($ret=set_all_lif -mySecondaryVserver $mySecondaryVserver -myPrimaryVserver $myPrimaryVserver -mySecondaryController $mySecondaryController  -myPrimaryController $myPrimaryController -state up) -ne $True ) {
                         Write-LogError "ERROR: Failed to set all lif up on [$mySecondaryVserver]"
                         clean_and_exit 1
@@ -9175,7 +9202,7 @@ Try {
             foreach ( $NetBiosAliase in ( $PrimaryNetbiosAliases | Skip-Null ) ) {
                 Write-Log "[$mySecondaryVserver] Change NetBiosAlias to [$NetBiosAliase]"
                 Write-LogDebug "set_all_lif -mySecondaryVserver $mySecondaryVserver -myPrimaryVserver $myPrimaryVserver -mySecondaryController $mySecondaryController  -myPrimaryController $myPrimaryController -state up"
-                if ( -not $Global:SecondaryCifsLifCreate ){
+                if ( -not $Global:SecondaryCifsLifCreated ){
                     if (($ret=set_all_lif -mySecondaryVserver $mySecondaryVserver -myPrimaryVserver $myPrimaryVserver -mySecondaryController $mySecondaryController  -myPrimaryController $myPrimaryController -state up) -ne $True ) {
                         Write-LogError "ERROR: Failed to set all lif up on [$mySecondaryVserver]"
                         clean_and_exit 1
@@ -9580,7 +9607,7 @@ $request=@"
         
         if( -not ($FromReactivate.IsPresent) ){
             Write-LogDebug "Not in a ReActivate process, so disable LIF on [$MySecondaryVserver]"
-            if ( -not $Global:SecondaryCifsLifCreate ){
+            if ( -not $Global:SecondaryCifsLifCreated ){
                 if (($ret=set_all_lif -mySecondaryVserver $mySecondaryVserver -myPrimaryVserver $myPrimaryVserver -mySecondaryController $mySecondaryController  -myPrimaryController $myPrimaryController -state down) -ne $True ) {
                     Write-LogError "ERROR: Failed to set all lif up on [$mySecondaryVserver]"
                     clean_and_exit 1
@@ -10261,7 +10288,7 @@ Function show_vserver_dr (
             }
         }
         # search for cloned vserver and display them
-        Write-Host "`nCLONED SVM         LIST :"
+        Write-Host "`nCLONE              LIST :"
         Write-Host "---------------------------"
         Write-LogDebug "search for cloned vserver"
         if ( ( $CloneVserverList=get_vserver_clone -DestinationVserver ($SecondaryVserver.VserverName) -mySecondaryController $mySecondaryController) -eq $null ){
@@ -10418,7 +10445,7 @@ Try {
         Write-LogError "ERROR: Failed to set all lif up on [$mySecondaryVserver]"
         $Return=$False
     }
-    if ( ( $ret=update_cifs_usergroup -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) {
+    if ( ( $ret=update_cifs_usergroup -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn -TemporarySecondaryCifsIp $TemporarySecondaryCifsIp -SecondaryCifsLifMaster $SecondaryCifsLifMaster -SecondaryCifsLifCustomVlan $SecondaryCifsLifCustomVlan -Backup $runBackup -Restore $runRestore) -ne $True ) {
         Write-LogError "ERROR: update_cifs_usergroup failed" 
         $Return=$False			
     }
@@ -10501,7 +10528,7 @@ Try {
         $PrimaryComment=$PrimaryVserver.Comment
         $SecondaryVserver = Get-NcVserver -Controller $mySecondaryController -Name $mySecondaryVserver  -ErrorVariable ErrorVar 
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" }
-        if ( $SecondaryVserver -ne $null ) 
+        if ( $null -ne $SecondaryVserver ) 
         {
             Write-Log "[$mySecondaryVserver] Already exists on $mySecondaryController"
             $SecondaryRootVolume = $SecondaryVserver.RootVolume
@@ -10580,7 +10607,8 @@ Try {
     if ( ( $ret=create_update_role_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all Role"}
     if ( ( $ret=create_lif_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore -nodeMatchRegEx $nodeMatchRegEx) -ne $True ) { Write-LogError "ERROR: Failed to create all LIF" ; $Return = $True }
     
-    if((-not $Global:NonInteractive) -or ($Global:DefaultLocalUserCredentials -ne $null)){
+    #if((-not $Global:NonInteractive) -or ($null -ne $Global:DefaultLocalUserCredentials)){
+    if($null -ne $Global:DefaultLocalUserCredentials){
         if ( ( $ret=create_update_localuser_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all local user"}
     }else{
         Write-LogWarn "SKIPPING local user create/update in NonInteractive Mode with no default credentials"
@@ -10638,15 +10666,15 @@ Try {
             if ( ( $ret=mount_voldr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver  -workOn $workOn -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to mount all volumes " ; $Return = $False }
         }
         if($Backup -eq $False){
-            if ( -not $Global:SecondaryCifsLifCreate ){
-                if (($ret=set_all_lif -mySecondaryVserver $mySecondaryVserver -myPrimaryVserver $myPrimaryVserver -mySecondaryController $mySecondaryController  -myPrimaryController $myPrimaryController -workOn $workOn  -state up -Backup $runBackup -Restore $runRestore) -ne $True ) {
+            if ( -not $Global:SecondaryCifsLifCreated ){
+                if (($ret=set_all_lif -mySecondaryVserver $mySecondaryVserver -myPrimaryVserver $myPrimaryVserver -mySecondaryController $mySecondaryController  -myPrimaryController $myPrimaryController -workOn $workOn -state up -Backup $runBackup -Restore $runRestore) -ne $True ) {
                     Write-LogError "ERROR: Failed to set all lif up on [$mySecondaryVserver]"
                     $Return=$False
                 }
             }
         }
-        if((-not $Global:NonInteractive) -or ($null -ne $Global:DefaultLocalUserCredentials)){ # skip on interactive or no default creds
-            if ( ( $ret=update_cifs_usergroup -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) {
+        if((-not $Global:NonInteractive) -or ($null -ne $Global:DefaultLocalUserCredentials) -or (-not $Global:Run_Mode -eq "UpdateDR")){ # skip on interactive or no default creds or updateDR
+            if ( ( $ret=update_cifs_usergroup -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn -TemporarySecondaryCifsIp $TemporarySecondaryCifsIp -SecondaryCifsLifMaster $SecondaryCifsLifMaster -SecondaryCifsLifCustomVlan $SecondaryCifsLifCustomVlan -Backup $runBackup -Restore $runRestore) -ne $True ) {
 			    Write-LogError "ERROR: update_cifs_usergroup failed" 
 			    $Return=$False			
 		    }
@@ -10654,7 +10682,7 @@ Try {
             Write-LogWarn "SKIPPING cifs user create/update in NonInteractive Mode with no default credentials"
         }
 		if($Backup -eq $False -and $Restore -eq $False){
-            if ( -not $Global:SecondaryCifsLifCreate ){
+            if ( -not $Global:SecondaryCifsLifCreated ){
                 if (($ret=set_all_lif -mySecondaryVserver $mySecondaryVserver -myPrimaryVserver $myPrimaryVserver -mySecondaryController $mySecondaryController  -myPrimaryController $myPrimaryController -workOn $workOn  -state down -Backup $runBackup -Restore $runRestore) -ne $True ) {
                     Write-LogError "ERROR: Failed to set all lif down on [$mySecondaryVserver]"
                     $Return=$False
@@ -10666,7 +10694,7 @@ Try {
 		if ( ( $ret=map_lundr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to map all LUNs " ; $Return = $False }
         if ( ( $ret=set_serial_lundr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-Log "ERROR: Failed to change LUN serial Numbers" ; $Return = $False} 
         if($Global:SecondaryCifsLifCreated){
-            Write-Log "[$workOn] Removing tmp lif"
+            Write-Log "[$workOn] Removing Temporary LIF"
             Write-LogDebug "Get-NcNetInterface -Vserver $mySecondaryVserver -Controller $mySecondaryController | Where-Object {$_.InterfaceName -match `"^tmp_lif_to_join_in_ad_`"}"
             $TempCifsLif=Get-NcNetInterface -Vserver $mySecondaryVserver -Controller $mySecondaryController | Where-Object {$_.InterfaceName -match "^tmp_lif_to_join_in_ad_"}
             Write-logDebug "Set-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController -ErrorVariable ErrorVar"
@@ -11599,6 +11627,21 @@ try{
 }
 
 #############################################################################################
+# this function return True if there is at least one CIFS LIF Up and Ready in a Vserver
+# and return False if it's not the case
+Function Is_One_LIF_Ready (
+    [string] $myVserver,
+    [NetApp.Ontapi.Filer.C.NcController] $myController    
+) {
+    $out=Get-NcNetInterface -VserverContext $myVserver -Query @{InterfaceName="*";OpStatus="up";DataProtocols="cifs"} -Attributes (Get-NcNetInterface -Template) -Controller $myController -ErrorVariable ErrorVar | select InterfaceName
+    if( ($out | Measure-Object).Count -gt 0){
+        return $True
+    }else{
+        return $False
+    }
+}
+
+#############################################################################################
 Function update_cifs_usergroup (
     [NetApp.Ontapi.Filer.C.NcController] $myPrimaryController,
 	[NetApp.Ontapi.Filer.C.NcController] $mySecondaryController,
@@ -11606,25 +11649,110 @@ Function update_cifs_usergroup (
 	[string] $mySecondaryVserver,
     [switch] $NoInteractive,
     [string]$workOn=$mySecondaryVserver,
+    [string]$TemporarySecondaryCifsIp,
+    [string]$SecondaryCifsLifMaster,
+    [string]$SecondaryCifsLifCustomVlan,
     [bool]$Backup,
     [bool]$Restore) {
 try{    
     $Return = $True
-    $RunBackup=$False
-    $RunRestore=$False
     Write-Log "[$workOn] Update CIFS Local User & Local Group"
     Write-LogDebug "update_cifs_usergroup[$myPrimaryVserver]: start"
-    if($Backup -eq $True){Write-LogDebug "run in Backup mode [$myPrimaryVserver]";$RunBackup=$True}
-    if($Restore -eq $True){Write-LogDebug "run in Restore mode [$myPrimaryVserver]";$RunRestore=$True}
+    if($Backup -eq $True){Write-LogDebug "run in Backup mode [$myPrimaryVserver]"}
+    if($Restore -eq $True){Write-LogDebug "run in Restore mode [$myPrimaryVserver]"}
     <# if(-not (check_update_CIFS_server_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $mySecondaryVserver -Backup $RunBackup -Restore $RunRestore)){
         Write-LogDebug "update_cifs_usergroup: end"
         return $True
     } #>
     if($Global:NEED_CIFS_SERVER -eq $False){
         Write-LogDebug "update_cifs_usergroup: end"
-        return $True   
+        return $Return  
     }
-    Write-LogDebug "[$workOn] Set Lif up to authenticate user" 
+    #Write-LogDebug "[$workOn] Set Lif up to authenticate in AD user on DR"^
+    # This could be done only if secondaryu LIF are presents. Which means works in non-preserve identity mode
+    # TODO In preserve identity mode there is no secondary LIF present on DR (at this moment? have to check!), so we must use a temporay CIFS LIF to authenticates user or group to add 
+    $SecondaryCifsLifCreated=$true
+    if (-not (Is_One_LIF_Ready -myVserver $mySecondaryVserver -myController $mySecondaryController) ){
+        if($TemporarySecondaryCifsIp -and $SecondaryCifsLifMaster){
+            Write-LogWarn "[$workOn] Create tmp lif to join AD [$SecondaryCifsLifMaster][$TemporarySecondaryCifsIp]"
+            $SecondaryCifsLifCreated=$false
+            if($Global:NonInteractive -or $ForClone -or $Global:PreserveIdentity -eq $True){
+                Write-Log "[$workOn] getting master lif to clone"
+                $InterfaceMasterPrimary = Get-NcNetInterface $SecondaryCifsLifMaster -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar 
+                $InterfaceMaster = Get-NcNetInterface $SecondaryCifsLifMaster -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
+            }
+            if($InterfaceMaster){
+                $TempInterfaceName=("tmp_lif_to_join_in_ad_" + $InterfaceMaster.InterfaceName)
+                $TempIpAddress=$TemporarySecondaryCifsIp
+                if($Global:NonInteractive -and $ForClone){
+                    $InterfaceMasterNetMask=$InterfaceMasterPrimary.Netmask
+                }else{
+                    $InterfaceMasterNetMask=$InterfaceMaster.Netmask
+                }
+                $InterfaceMasterCurrentNode=$InterfaceMaster.CurrentNode
+                $InterfaceMasterCurrentPort=$InterfaceMaster.CurrentPort
+                if ($SecondaryCifsLifCustomVlan) {
+                    Write-Log "[$workOn] a custom vlan has been provided for the temp cifs lif [$SecondaryCifsLifCustomVlan]"
+                    $SecondaryCifsLifCustomVlanPort = Get-NcNetPortVlan -VlanId $SecondaryCifsLifCustomVlan -Node $InterfaceMasterCurrentNode -Controller $mySecondaryController
+                    if ( $? -ne $True ) {
+                        $Return = $False ; throw "ERROR: Get-NcNetPortVlan failed [$ErrorVar]" 
+                    }
+                    Write-Log ("[$workOn] Custom vlan found [{0}], using this port instead of the temp cifs lif" -f $SecondaryCifsLifCustomVlanPort.InterfaceName)
+                    $InterfaceMasterCurrentPort = $SecondaryCifsLifCustomVlanPort.InterfaceName
+                }                    
+                $InterfaceMasterDataProtocols=$InterfaceMaster.DataProtocols
+                $InterfaceMasterDnsDomainName=$InterfaceMaster.DnsDomainName
+                $InterfaceMasterRole=$InterfaceMaster.Role
+                $InterfaceMasterFirewallPolicy=$InterfaceMaster.FirewallPolicy
+                $InterfaceMasterIsAutoRevert=$InterfaceMaster.IsAutoRevert
+
+                $SecondaryInterface  = Get-NcNetInterface -InterfaceName $TempInterfaceName -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
+                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
+                if ( $null -eq $SecondaryInterface ) 
+                {
+                    if( -not ($Global:ForceCloneOriginal.IsPresent) ){
+                        Write-LogDebug "Dns Domain is only set during Migrate, ActivateDR, ReActivate or CloneVserverDR with ForceCloneOriginal"
+                        Write-LogDebug "Dns Domain will remain empty for temporary LIF"
+                        $InterfaceMasterDnsDomainName=""    
+                    }
+                    Write-Log "[$workOn] Create the LIF [$TempInterfaceName] (cloning from $SecondaryCifsLifMaster)"
+                    Write-Log "[$workOn] LIF [$TempInterfaceName] is the Temp Cifs LIF, it must be in Administrative up status"
+                    Write-LogDebug "New-NcNetInterface -Name $TempInterfaceName -Vserver $mySecondaryVserver -Role $InterfaceMasterRole -Node $InterfaceMasterCurrentNode -Port $InterfaceMasterCurrentPort -DataProtocols $InterfaceMasterDataProtocols -FirewallPolicy $InterfaceMasterFirewallPolicy -Address $TempIpAddress -Netmask $InterfaceMasterNetMask -DnsDomain $InterfaceMasterDnsDomainName -AdministrativeStatus up -AutoRevert $InterfaceMasterIsAutoRevert -Controller $mySecondaryController"
+                    $SecondaryInterface=New-NcNetInterface -Name $TempInterfaceName -Vserver $mySecondaryVserver  -Role $InterfaceMasterRole -Node $InterfaceMasterCurrentNode -Port $InterfaceMasterCurrentPort -DataProtocols $InterfaceMasterDataProtocols -FirewallPolicy $InterfaceMasterFirewallPolicy -Address $TempIpAddress -Netmask $InterfaceMasterNetMask -DnsDomain $InterfaceMasterDnsDomainName -AdministrativeStatus up -AutoRevert $InterfaceMasterIsAutoRevert -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcNetInterface failed [$ErrorVar]" ;  }
+                    $TempCifsLif = Get-NcNetInterface ("tmp_lif_to_join_in_ad_" + $SecondaryCifsLifMaster) -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
+                    $SecondaryCifsLifCreated=$true
+                    $Global:SecondaryCifsLifCreated=$true
+                }
+            }else{
+                Write-LogWarn "[$workOn] the lif [$SecondaryCifsLifMaster] does not exist in vserver [$mySecondaryVserver]"
+            }
+        }else{
+            Write-LogDebug "No Temporary Secondary LIF information provided. Impossible to continue Update_cifs_usergroup"
+            Write-Warning "SKIPPING update CIFS local user & group without one LIF up & ready on secondary"
+            Write-Warning "You must create at least one temporay CIFS LIF on secondary for AD authentication"
+            Write-Warning "Or you must use argument TemporarySecondaryCifsIp and SecondaryCifsLifMaster to let UpdateDR creates this temporary CIFS LIF on secondary for you"
+            Write-LogDebug "update_cifs_usergroup[$myPrimaryVserver]: end"
+            return $False
+        }
+        # if (-not $Global:SecondaryCifsLifCreated){
+        #     if (($ret=set_all_lif -mySecondaryVserver $mySecondaryVserver -myPrimaryVserver $myPrimaryVserver -mySecondaryController $mySecondaryController  -myPrimaryController $myPrimaryController -state up) -ne $True ) {
+        #             Write-LogError "ERROR: Failed to set all lif up on [$mySecondaryVserver]"
+        #             clean_and_exit 1
+        #     }
+        # }else{
+        #     Write-Warning "[$workOn] Impossible to Update CIFS Local User & Group in Preserve Identity Mode. You need at least one LIF on secondary to authenticates user or group with AD"
+        #     Write-LogDebug "update_cifs_usergroup[$myPrimaryVserver]: end"
+        #     return $False
+        # }
+
+    }
+    if (-not $SecondaryCifsLifCreated){
+        Write-Warning "[$workOn] Impossible to Update CIFS Local User & Group. You need at least one LIF Up & Ready on secondary to authenticates user or group with AD"
+        Write-LogDebug "update_cifs_usergroup[$myPrimaryVserver]: end"
+        return $False        
+    }
+    Write-LogOnly "[OK] One LIF is Up & Ready on Secondary Vserver to allow AD authentication"
     Write-LogDebug "[$workOn] Get-NcCifsLocalUser -VserverContext $mySecondaryVserver -controller $mySecondaryController"
     if($Restore -eq $False){
         Write-LogDebug "Get-NcCifsServer -VserverContext $myPrimaryVserver -controller $myPrimaryController"
@@ -11650,33 +11778,34 @@ try{
         $SecondaryCifs=Get-NcCifsServer -VserverContext $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsServer failed [$ErrorVar]" }
         $SecondaryCifsServer=$SecondaryCifs.CifsServer
-        foreach($SecondaryUser in $SecondaryUserList | Skip-Null){
-            $SecondaryUserName=$SecondaryUser.UserName
-
-            try{
-                $ans='n'
-                if($NoInteractive -eq $False){
-                    $ans=Read-HostOptions -question "[$mySecondaryVserver] Do you want to reset Password for User [$SecondaryUserName] on [$mySecondaryVserver]?" -options "y/n" -default "n"
-                }
-                if($ans -eq 'n'){
-                    if($PrimaryCifsServer -ne $SecondaryCifsServer){$SecondaryUserName=$SecondaryUserName -replace $SecondaryCifsServer,$PrimaryCifsServer}
-                    $UserKept+=$SecondaryUserName
-                }else{
-                    Write-LogDebug "Remove-NcCifsLocalUser -UserName $SecondaryUserName -VserverContext $mySecondaryVserver -controller $mySecondaryController"
-                    try{
-                        $out=Remove-NcCifsLocalUser -UserName $SecondaryUserName -VserverContext $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar -Confirm:$False -EA stop
-                        if ( $? -ne $True ) { Write-LogDebug "ERROR: Remove-NcCifsLocalUser failed [$ErrorVar]" }
-                    }catch{
-                        $ErrorMessage = $_.Exception.Message
-                        $ErrorDetails = $_.ErrorDetails
-                        Write-LogDebug "[$mySecondaryVserver] failed to delete Cifs Local User [$ErrorMessage : $ErrorDetails]"
+        # Pre Remove LocalUser only if we have a DefaultLocalUserCredential
+        <# if(($null -ne $Global:DefaultLocalUserCredentials) -or ($Global:DefaultLocalUserCredentials.length -gt 0)){
+            foreach($SecondaryUser in $SecondaryUserList | Skip-Null){
+                $SecondaryUserName=$SecondaryUser.UserName
+                try{
+                    $ans='n'
+                    if($NoInteractive -eq $False){
+                        $ans=Read-HostOptions -question "[$mySecondaryVserver] Do you want to reset Password for User [$SecondaryUserName] on [$mySecondaryVserver]?" -options "y/n" -default "n"
                     }
+                    if($ans -eq 'n'){
+                        if($PrimaryCifsServer -ne $SecondaryCifsServer){$SecondaryUserName=$SecondaryUserName -replace $SecondaryCifsServer,$PrimaryCifsServer}
+                        $UserKept+=$SecondaryUserName
+                    }else{
+                        Write-LogDebug "Remove-NcCifsLocalUser -UserName $SecondaryUserName -VserverContext $mySecondaryVserver -controller $mySecondaryController"
+                        try{
+                            $out=Remove-NcCifsLocalUser -UserName $SecondaryUserName -VserverContext $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar -Confirm:$False -EA stop
+                            if ( $? -ne $True ) { Write-LogDebug "ERROR: Remove-NcCifsLocalUser $SecondaryUserName failed [$ErrorVar]" }
+                        }catch{
+                            $ErrorMessage = $_.Exception.Message
+                            $ErrorDetails = $_.ErrorDetails
+                            Write-LogDebug "[$mySecondaryVserver] failed to delete Cifs Local User [$ErrorMessage : $ErrorDetails]"
+                        }
+                    }
+                }catch{
+                    Write-LogDebug "Cannot remove local CIFS user [$SecondaryUserName] on [$mySecondaryVserver]"
                 }
-            }catch{
-                Write-LogDebug "Cannot remove local CIFS user [$SecondaryUserName] on [$mySecondaryVserver]"
             }
-
-        }
+        } #>
     }
     if($Restore -eq $False){
         Write-LogDebug "Get-NcCifsLocalUser -VserverContext $myPrimaryVserver -controller $myPrimaryController"
@@ -11693,7 +11822,7 @@ try{
     }
     if($Backup -eq $True){
         $PrimaryUserList | ConvertTo-Json -Depth 5 | Out-File -FilePath $($Global:JsonPath+"Get-NcCifsLocalUser.json") -Encoding ASCII -Width 65535
-        if( ($ret=get-item $($Global:JsonPath+"Get-NcCifsLocalUser.json") -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcCifsLocalUser.json") -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$($Global:JsonPath+"Get-NcCifsLocalUser.json") saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcCifsLocalUser.json")"
@@ -11701,79 +11830,82 @@ try{
         }
     }
     if($Backup -eq $False){
-        foreach($User in $PrimaryUserList | Where-Object {$_.UserName -notin $UserKept} | Skip-Null){
-            $UserName=$User.UserName
-            $UserDisabled=$User.Disabled
-            $UserDescription=$User.Description
-            $UserFullname=$User.FullName
-            if($PrimaryCifsServer -ne $SecondaryCifsServer){$UserName=$UserName -replace $PrimaryCifsServer,$SecondaryCifsServer}
-            if($UserFullname.length -eq 0 -or $UserFullname.count -eq 0){$UserFullname=""}
-            Write-LogDebug "Work on [$UserName] [$UserDisabled] [$UserDescription] [$UserFullname] from Primary "
-            if(($UserDescription -match "Built-in") -eq $True){
-                write-logdebug "Get-NcCifsLocalUser -VserverContext $mySecondaryVserver -controller $mySecondaryController"
-                $SecondaryBuiltin=Get-NcCifsLocalUser -VserverContext $mySecondaryVserver -controller $mySecondaryController -ErrorVariable ErrorVar | Where-Object {$_.Description -match "Built-in"}
-                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsLocalUser failed [$ErrorVar]" }
-                $UserName=$SecondaryBuiltin.UserName
-                Write-LogDebug "Work on [$UserName] from Secondary "
-                do{
-                    $modok=$True
-                    $password=get_pwd_from_cli -workOn $workOn -for "CIFS Local User" -name $Username -asSecure
-                    try{
-                        Write-LogDebug "Set-NcCifsLocalUser -UserName $UserName -Password XXXXXXXXXX -VserverContext $mySecondaryVserver -controller $mySecondaryController"
-                        $out=Set-NcCifsLocalUser -UserName $UserName -Password $password -VserverContext $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar
-                        if ( $? -ne $True ) { $Return = $False ;  ;throw "ERROR: Set-NcCifsLocalUser failed [$ErrorVar]" }
-                        Write-LogDebug "Set-NcCifsLocalUser -UserName $UserName -FullName $UserFullname -Description $UserDescription -IsAccountDisable $UserDisabled -VserverContext $mySecondaryVserver -controller $mySecondaryController"
-                        $out=Set-NcCifsLocalUser -UserName $UserName -FullName $UserFullname -Description $UserDescription -IsAccountDisable $UserDisabled -VserverContext $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar
-                        if ( $? -ne $True ) { $Return = $False ;  ;throw "ERROR: Set-NcCifsLocalUser failed [$ErrorVar]" }
-
-
-                    }catch{
-                        Write-Warning "[$workOn] Impossible to modify CIFS local user [$UserName] on [$mySecondaryVserver] reason [$_.Description]"
-                        if(-not $NoInteractive -and -not $Global:NonInteractive){
-                            $modok=$False
-                        }
-                        
-                    }
-                }while($modok -eq $False)
-                 
-            }else{
-
-                do{
-                    $addok=$true
-                    $password=get_pwd_from_cli -workOn $workOn -for "CIFS Local User" -name $Username -asSecure
-
-                    if($UserDisabled -eq $True){
+        # Update LocalUser password on remote only if we have a DefaultLocalUserCredential
+        if(($null -ne $Global:DefaultLocalUserCredentials) -or ($Global:DefaultLocalUserCredentials.length -gt 0)){
+            foreach($User in $PrimaryUserList | Where-Object {$_.UserName -notin $UserKept} | Skip-Null){
+                $UserName=$User.UserName
+                $UserDisabled=$User.Disabled
+                $UserDescription=$User.Description
+                $UserFullname=$User.FullName
+                if($PrimaryCifsServer -ne $SecondaryCifsServer){$UserName=$UserName -replace $PrimaryCifsServer,$SecondaryCifsServer}
+                if($UserFullname.length -eq 0 -or $UserFullname.count -eq 0){$UserFullname=""}
+                Write-LogDebug "Work on [$UserName] [$UserDisabled] [$UserDescription] [$UserFullname] from Primary "
+                if(($UserDescription -match "Built-in") -eq $True){
+                    write-logdebug "Get-NcCifsLocalUser -VserverContext $mySecondaryVserver -controller $mySecondaryController"
+                    $SecondaryBuiltin=Get-NcCifsLocalUser -VserverContext $mySecondaryVserver -controller $mySecondaryController -ErrorVariable ErrorVar | Where-Object {$_.Description -match "Built-in"}
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsLocalUser failed [$ErrorVar]" }
+                    $UserName=$SecondaryBuiltin.UserName
+                    Write-LogDebug "Work on [$UserName] from Secondary "
+                    do{
+                        $modok=$True
+                        $password=get_pwd_from_cli -workOn $workOn -for "CIFS Local User" -name $Username -asSecure
                         try{
-                            Write-LogDebug "New-NcCifsLocalUser -UserName $UserName -Password XXXXXXXXXX -FullName $UserFullname -Description $UserDescription -Disable -VserverContext $mySecondaryVserver -controller $mySecondaryController"
-                            $out=New-NcCifsLocalUser -UserName $UserName -Password $password -FullName $UserFullname -Description $UserDescription -Disable -VserverContext $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar
-
-                            if ( $? -ne $True ) { $Return = $False ;  ;throw "ERROR: New-NcCifsLocalUser failed [$ErrorVar]" }
-
+                            Write-LogDebug "Set-NcCifsLocalUser -UserName $UserName -Password XXXXXXXXXX -VserverContext $mySecondaryVserver -controller $mySecondaryController"
+                            $out=Set-NcCifsLocalUser -UserName $UserName -Password $password -VserverContext $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) { $Return = $False ;  ;throw "ERROR: Set-NcCifsLocalUser failed [$ErrorVar]" }
+                            Write-LogDebug "Set-NcCifsLocalUser -UserName $UserName -FullName $UserFullname -Description $UserDescription -IsAccountDisable $UserDisabled -VserverContext $mySecondaryVserver -controller $mySecondaryController"
+                            $out=Set-NcCifsLocalUser -UserName $UserName -FullName $UserFullname -Description $UserDescription -IsAccountDisable $UserDisabled -VserverContext $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) { $Return = $False ;  ;throw "ERROR: Set-NcCifsLocalUser failed [$ErrorVar]" }
                         }catch{
-                            $ErrorVar = $_.Exception.Message
-                            Write-Warning "[$workOn] Impossible to create new CIFS local user [$UserName] on [$mySecondaryVserver] reason [$ErrorVar]"
-                            $addok=$false
+                            Write-Warning "[$workOn] Impossible to modify CIFS local user [$UserName] on [$mySecondaryVserver] reason [$_.Description]"
+                            if(-not $NoInteractive -and -not $Global:NonInteractive){
+                                $modok=$False
+                            }
                         }
-                    }else{
-                        try{
-                            Write-LogDebug "New-NcCifsLocalUser -UserName $UserName -Password XXXXXXXXXX -FullName $UserFullname -Description $UserDescription -VserverContext $mySecondaryVserver -controller $mySecondaryController"
-                            $out=New-NcCifsLocalUser -UserName $UserName -Password $password -FullName $UserFullname -Description $UserDescription -VserverContext $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar
+                    }while($modok -eq $False)
+                }else{
+                    do{
+                        $addok=$true
+                        $password=get_pwd_from_cli -workOn $workOn -for "CIFS Local User" -name $Username -asSecure
 
-                            if ( $? -ne $True ) { $Return = $False ;  ;throw "ERROR: New-NcCifsLocalUser failed [$ErrorVar]" }
-
-                        }catch{
-                            $ErrorVar = $_.Exception.Message
-                            Write-Warning "[$workOn] Impossible to create new CIFS local user [$UserName] on [$mySecondaryVserver] reason [$ErrorVar]"
-                            $addok=$false
+                        if($UserDisabled -eq $True){
+                            try{
+                                Write-LogDebug "Check if user [$UserName] already exist on [$mySecondaryVserver]"
+                                Write-LogDebug "Get-NcCifsLocalUser -Vserver $mySecondaryVserver -UserName $UserName -controller $mySecondaryController"
+                                $IsUserExist=Get-NcCifsLocalUser -Vserver $mySecondaryVserver -UserName $UserName -controller $mySecondaryController
+                                if($IsUserExist){
+                                    Write-LogDebug "New-NcCifsLocalUser -UserName $UserName -Password XXXXXXXXXX -FullName $UserFullname -Description $UserDescription -Disable -VserverContext $mySecondaryVserver -controller $mySecondaryController"
+                                    $out=New-NcCifsLocalUser -UserName $UserName -Password $password -FullName $UserFullname -Description $UserDescription -Disable -VserverContext $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar
+                                    if ( $? -ne $True ) { $Return = $False ;  ;throw "ERROR: New-NcCifsLocalUser failed [$ErrorVar]" }
+                                }
+                            }catch{
+                                $ErrorVar = $_.Exception.Message
+                                Write-Warning "[$workOn] Impossible to create new CIFS local user [$UserName] on [$mySecondaryVserver] reason [$ErrorVar]"
+                                $addok=$false
+                            }
+                        }else{
+                            try{
+                                Write-LogDebug "Check if user [$UserName] already exist on [$mySecondaryVserver]"
+                                Write-LogDebug "Get-NcCifsLocalUser -Vserver $mySecondaryVserver -UserName $UserName -controller $mySecondaryController"
+                                $IsUserExist=Get-NcCifsLocalUser -Vserver $mySecondaryVserver -UserName $UserName -controller $mySecondaryController
+                                if(-not $IsUserExist){
+                                    Write-LogDebug "New-NcCifsLocalUser -UserName $UserName -Password XXXXXXXXXX -FullName $UserFullname -Description $UserDescription -VserverContext $mySecondaryVserver -controller $mySecondaryController"
+                                    $out=New-NcCifsLocalUser -UserName $UserName -Password $password -FullName $UserFullname -Description $UserDescription -VserverContext $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar
+                                    if ( $? -ne $True ) { $Return = $False ;  ;throw "ERROR: New-NcCifsLocalUser failed [$ErrorVar]" }
+                                }
+                            }catch{
+                                $ErrorVar = $_.Exception.Message
+                                Write-Warning "[$workOn] Impossible to create new CIFS local user [$UserName] on [$mySecondaryVserver] reason [$ErrorVar]"
+                                $addok=$false
+                            }
                         }
-                    }
-                }while($addok -eq $false)
-
+                    }while($addok -eq $false)
+                }
             }
-
         }
     }
-    if($Backup -eq $False){
+    # Pre Empty or remove secondary LocalGroup
+    <# if($Backup -eq $False){
         Write-LogDebug "Get-NcCifsLocalGroup -VserverContext $mySecondaryVserver -controller $mySecondaryController"
         $SecondaryGroupList=Get-NcCifsLocalGroup -VserverContext $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsLocalGroup failed [$ErrorVar]" }
@@ -11785,7 +11917,7 @@ try{
                 $out=Remove-NcCifsLocalGroup -GroupName $SecondaryGroupName -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorAction SilentlyContinue -ErrorVariable ErrorVar -Confirm:$False
                 if ( $? -ne $True ) { 
                     Write-LogDebug "ERROR: Remove-NcCifsLocalGroup failed [$ErrorVar]" 
-                    if(($ErrorVar | Out-String) -match "Cannot delete the BUILTIN group"){$notremoved=$True}
+                    if(($ErrorVar | Out-String) -match "Cannot delete any BUILTIN group"){$notremoved=$True}
                 }
             }catch{
                 $ErrorVar = $_.Exception.Message
@@ -11809,7 +11941,7 @@ try{
                 }        
             }
         }
-    }
+    } #>
     if($Restore -eq $False){
         Write-LogDebug "Get-NcCifsLocalGroup -VserverContext $myPrimaryVserver -controller $myPrimaryController"
         $PrimaryGroupList=Get-NcCifsLocalGroup -VserverContext $myPrimaryVserver -controller $myPrimaryController  -ErrorVariable ErrorVar
@@ -11823,9 +11955,10 @@ try{
             Throw "ERROR: failed to read $filepath"
         }
     }
+    # Store Primary GroupList into JSON files only in backup mode
     if($Backup -eq $True){
         $PrimaryGroupList | ConvertTo-Json -Depth 5 | Out-File -FilePath $($Global:JsonPath+"Get-NcCifsLocalGroup.json") -Encoding ASCII -Width 65535
-        if( ($ret=get-item $($Global:JsonPath+"Get-NcCifsLocalGroup.json") -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcCifsLocalGroup.json") -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$($Global:JsonPath+"Get-NcCifsLocalGroup.json") saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcCifsLocalGroup.json")"
@@ -11838,7 +11971,7 @@ try{
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsLocalGroupMermber failed [$ErrorVar]" }
             $PrimaryGroupName_string=$PrimaryGroupName -replace "\\","_"
             $PrimaryMemberList | ConvertTo-Json -Depth 5 | Out-File -FilePath $($Global:JsonPath+"Get-NcCifsLocalGroupMember-"+$PrimaryGroupName_string+".json") -Encoding ASCII -Width 65535
-            if( ($ret=get-item $($Global:JsonPath+"Get-NcCifsLocalGroupMember-"+$PrimaryGroupName_string+".json") -ErrorAction SilentlyContinue) -ne $null ){
+            if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcCifsLocalGroupMember-"+$PrimaryGroupName_string+".json") -ErrorAction SilentlyContinue) ){
                 Write-LogDebug "$($Global:JsonPath+"Get-NcCifsLocalGroupMember-"+$PrimaryGroupName_string+".json") saved successfully"
             }else{
                 Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcCifsLocalGroupMember-"+$PrimaryGroupName_string+".json")"
@@ -11846,20 +11979,22 @@ try{
             }
         }
     }
+    # Update Group and Group Member
     if($Backup -eq $False){
         foreach($PrimaryGroup in $PrimaryGroupList | Skip-Null){
             $PrimaryGroupName=$PrimaryGroup.GroupName
             $PrimaryGroupDescription=$PrimaryGroup.Description
-
+            # Check CIFS LocalGroup on secondary
             if($PrimaryGroupName -notmatch "^BUILTIN\\"){
                 $PrimaryGroupNameWithoutDomain = ($PrimaryGroupName -replace "[^\\]*\\","")
                 $SecondaryGroupName = "$SecondaryCifsServer\$PrimaryGroupNameWithoutDomain"
                 Write-LogDebug "Get-NcCifsLocalGroup -Name $SecondaryGroupName -VserverContext $mySecondaryVserver -controller $mySecondaryController"
                 $SecondaryGroup=Get-NcCifsLocalGroup -Name $SecondaryGroupName -VserverContext $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsLocalGroup failed [$ErrorVar]" }
-                if($SecondaryGroup -eq $null){
-                            
+                if($null -eq $SecondaryGroup){
+                    # if localgroup is missing on secondary, create it
                     try{
+                        Write-Log "[$mySecondaryVserver] Add Local Group [$PrimaryGroupNameWithoutDomain]"
                         Write-LogDebug "New-NcCifsLocalGroup -Name $PrimaryGroupNameWithoutDomain -Description $PrimaryGroupDescription -VserverContext $mySecondaryVserver -controller $mySecondaryController" 
                         $out=New-NcCifsLocalGroup -Name $PrimaryGroupNameWithoutDomain -Description $PrimaryGroupDescription -VserverContext $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar
                         if ( $? -ne $True ) { Write-LogDebug "ERROR: New-NcCifsLocalGroup failed [$ErrorVar]" }
@@ -11872,7 +12007,7 @@ try{
                 $SecondaryGroupName = $PrimaryGroupName
                 $PrimaryGroupNameWithoutDomain = $PrimaryGroupName
             }
-
+            # Retreive LocalGroup member on Primary
             if($Restore -eq $False){
                 Write-LogDebug "Get-NcCifsLocalGroupMember -Name $PrimaryGroupName -VserverContext $myPrimaryVserver -controller $myPrimaryController"
                 $PrimaryMemberList=Get-NcCifsLocalGroupMember -Name $PrimaryGroupName -VserverContext $myPrimaryVserver -controller $myPrimaryController  -ErrorVariable ErrorVar
@@ -11887,29 +12022,44 @@ try{
                     Throw "ERROR: failed to read $filepath"
                 }    
             }
+            # Add LocalGroup member
             foreach($PrimaryMember in $PrimaryMemberList | Skip-Null){
                 $PrimaryMemberName=$PrimaryMember.Member
-                if($PrimaryMemberName -notmatch "^BUILTIN\\"){
+                $PrimaryMemberVserverName=$PrimaryMember.Vserver
+                # if it's a local machine user <VSERVER NAME>\<USER> we need to replace it with remote DR machine name <VSERVER DR NAME>\<USER>
+                # if it's a local machine user <CIFS NAME>\<USER> we need to replace it with remote DR machine name <CIFS DR NAME>\<USER>
+                #if(($PrimaryMemberName -notmatch "^BUILTIN\\") -and ($PrimaryMemberName -notmatch $("^"+$PrimaryCifs.DomainWorkgroup+"\\"))){
+                if(($PrimaryMemberName -match $("^"+$PrimaryCifsServer+"\\"))){
                     $PrimaryMemberNameWithoutDomain = ($PrimaryMemberName -replace "[^\\]*\\","")
                     $SecondaryMemberName = "$SecondaryCifsServer\$PrimaryMemberNameWithoutDomain"
                 }else{
                     $PrimaryMemberNameWithoutDomain = $PrimaryMemberName
                     $SecondaryMemberName = $PrimaryMemberName
                 }
-                
-                try{
-                    Write-LogDebug "Add-NcCifsLocalGroupMember -Name $SecondaryGroupName -Member $SecondaryMemberName -VserverContext $mySecondaryVserver -controller $mySecondaryController"
-                    $out=Add-NcCifsLocalGroupMember -Name $SecondaryGroupName -Member $SecondaryMemberName -VserverContext $mySecondaryVserver -controller $mySecondaryController -ErrorAction SilentlyContinue -ErrorVariable ErrorVar
-                    if ( $? -ne $True ) { Write-LogDebug "ERROR: Add-NcCifsLocalGroupMember failed [$ErrorVar]" }
-                }catch{
+                # Add new group member only if missing on secondary
+                if($null -eq (Get-NcCifsLocalGroupMember -Name $SecondaryGroupName -Member $SecondaryMemberName -VserverContext $mySecondaryVserver -controller $mySecondaryController))
+                {
+                    try{
+                        Write-Log "[$mySecondaryVserver] Add Local Group Member [$SecondaryMemberName] in Group [$SecondaryGroupName]"
+                        Write-LogDebug "Add-NcCifsLocalGroupMember -Name $SecondaryGroupName -Member $SecondaryMemberName -VserverContext $mySecondaryVserver -controller $mySecondaryController"
+                        $out=Add-NcCifsLocalGroupMember -Name $SecondaryGroupName -Member $SecondaryMemberName -VserverContext $mySecondaryVserver -controller $mySecondaryController -ErrorAction SilentlyContinue -ErrorVariable ErrorVar
+                        if ( $? -ne $True ) { Write-LogDebug "ERROR: Add-NcCifsLocalGroupMember failed [$ErrorVar]" }
+                    }catch{
 
-                    Write-LogDebug "Member [$PrimaryMemberName] already exists in [$PrimaryGroupName] on [$mySecondaryVserver]"
+                        Write-LogDebug "Member [$PrimaryMemberName] already exists in [$PrimaryGroupName] on [$mySecondaryVserver]"
 
+                    }
+                }else{
+                    Write-LogDebug "Group Member [$SecondaryMemberName] already exist in Group [$SecondaryGroupName]"
                 }
             }   
     
         }
     }
+    <# if (($ret=set_all_lif -mySecondaryVserver $mySecondaryVserver -myPrimaryVserver $myPrimaryVserver -mySecondaryController $mySecondaryController  -myPrimaryController $myPrimaryController -state down) -ne $True ) {
+        Write-LogError "ERROR: Failed to set all lif down on [$mySecondaryVserver]"
+        clean_and_exit 1
+    } #>
     Write-LogDebug "update_cifs_usergroup[$myPrimaryVserver]: end"
     return $True
 } Catch {
@@ -11930,6 +12080,9 @@ Function update_vserver_dr (
     [string]$aggrMatchRegEx,
     [string]$nodeMatchRegEx,
     [switch]$FromReactivate,
+    [string]$TemporarySecondaryCifsIp,
+    [string]$SecondaryCifsLifMaster,
+    [string]$SecondaryCifsLifCustomVlan,
     [bool] $NoSnapmirrorUpdate=$false,
     [bool] $NoSnapmirrorWait=$false) {
 	$Return = $True
@@ -11987,8 +12140,8 @@ Function update_vserver_dr (
 		$Return = $True
     } #>
 
-    if((-not $Global:NonInteractive) -or ($Global:DefaultLocalUserCredentials -ne $null)){
-
+    #if((-not $Global:NonInteractive) -or ($null -ne $Global:DefaultLocalUserCredentials)){
+    if ($null -ne $Global:DefaultLocalUserCredentials){
         Write-LogDebug "update_vserver_dr: Update local user dr"
         if ( ( create_update_localuser_dr  -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver ) -ne $True ) { 
             Write-LogError "ERROR: Failed to create all Local Users"
@@ -11996,29 +12149,37 @@ Function update_vserver_dr (
         }
        
     }else{
-        Write-LogWarn "SKIPPING local user create/update in NonInteractive Mode with no default credentials"
+        Write-LogWarn "SKIPPING local user create/update without default credentials"
     }
-
-    if((-not $Global:NonInteractive) -or ($Global:DefaultLocalUserCredentials -ne $null)){
-
-        Write-LogDebug "update_vserver_dr: Update local cifs user dr"
-        if ( ( update_cifs_usergroup  -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver ) -ne $True ) { 
-            Write-LogError "ERROR: Failed to create all Local Cifs Users"
-            $Return = $True 
+    # execute update_cifs_usergroup for each UpdateDR
+    # or if you provide DefaultLocalUserCredentials
+    #if((-not $Global:NonInteractive) -or ($null -ne $Global:DefaultLocalUserCredentials)){
+        if (($ret=set_all_lif -mySecondaryVserver $mySecondaryVserver -myPrimaryVserver $myPrimaryVserver -mySecondaryController $mySecondaryController  -myPrimaryController $myPrimaryController -state up) -ne $True ) {
+            Write-LogWarn "WARNING: Failed to set all lif up on [$mySecondaryVserver]"
+            $Return=$False
         }
-       
-    }else{
-        Write-LogWarn "SKIPPING local cifs user create/update in NonInteractive Mode with no default credentials"
-    }
+        Write-LogDebug "update_vserver_dr: Update local cifs user dr"
+        if ( ( update_cifs_usergroup  -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -TemporarySecondaryCifsIp $TemporarySecondaryCifsIp -SecondaryCifsLifMaster $SecondaryCifsLifMaster -SecondaryCifsLifCustomVlan $SecondaryCifsLifCustomVlan) -ne $True ) { 
+            Write-LogError "ERROR: Failed to create all Local Cifs Users & Group"
+            $Return = $False 
+        }
+        if (($ret=set_all_lif -mySecondaryVserver $mySecondaryVserver -myPrimaryVserver $myPrimaryVserver -mySecondaryController $mySecondaryController  -myPrimaryController $myPrimaryController -state down) -ne $True ) {
+            Write-LogWarn "WARNING: Failed to set all lif down on [$mySecondaryVserver]"
+            $Return=$False
+        } 
+    <# }else{
+        Write-LogWarn "SKIPPING local  user create/update in NonInteractive Mode or without default credentials or during UpdateDR"
+         Write-LogWarn "Use ConfigureDR if you need to update CIFS Local User and Group on Secondary"
+    } #>
 
     Write-LogDebug "update_vserver_dr: Update local Unix User & Group"
     if ( ( create_update_localunixgroupanduser_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver ) -ne $True ) { 
         Write-LogError "ERROR: Failed to create all Local Unix User and Group"
-        $Return = $True 
+        $Return = $False 
     }
     if ( ( create_update_usermapping_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver ) -ne $True ) { 
         Write-LogError "ERROR: Failed to create User Mapping"
-        $Return = $True
+        $Return = $False
     }
 	if(-not $Global:skipVscanFpolicy){						  
 		Write-LogDebug "update_vserver_dr: Update Vscan dr"
@@ -12083,6 +12244,18 @@ Function update_vserver_dr (
 		Write-LogError "ERROR: create_update_role_dr"
 	}
     if ( ( $ret=update_qtree_export_policy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver ) -ne $True ) {Write-Log "ERROR Failed to modify all Qtree Export Policy" ; $Return = $False}
+    
+    if($Global:SecondaryCifsLifCreated){
+        Write-Log "[$mySecondaryVserver] Removing Temporary LIF"
+        Write-LogDebug "Get-NcNetInterface -Vserver $mySecondaryVserver -Controller $mySecondaryController | Where-Object {$_.InterfaceName -match `"^tmp_lif_to_join_in_ad_`"}"
+        $TempCifsLif=Get-NcNetInterface -Vserver $mySecondaryVserver -Controller $mySecondaryController | Where-Object {$_.InterfaceName -match "^tmp_lif_to_join_in_ad_"}
+        Write-logDebug "Set-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController -ErrorVariable ErrorVar"
+        $out = Set-NcNetInterface -Name $TempCifsLif.InterfaceName -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController -ErrorVariable ErrorVar
+        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcNetInterface failed [$ErrorVar]" ; }
+        Write-LogDebug "Remove-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $mySecondaryVserver -Confirm:$false -Controller $mySecondaryController -ErrorVariable ErrorVar"
+        $out = Remove-NcNetInterface -Name $TempCifsLif.InterfaceName -Vserver $mySecondaryVserver -Confirm:$false -Controller $mySecondaryController -ErrorVariable ErrorVar
+        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Remove-NcNetInterface failed [$ErrorVar]" ; }
+    }
     Write-LogDebug "update_vserver_dr: end"
 	return $Return
 }

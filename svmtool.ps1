@@ -53,7 +53,7 @@
     -Instance <instance name> -Vserver <vserver source name> -ConfigureDR [-SelectVolume] -[PreserveIdentity <true|false>] [-RootAggr <aggr>] [-DataAggr <aggr>]
 
     -SelectVolume : (switch parameter) Allows to select volume one by one before creating a DR volume
-    -PreserveIdentity : (bool parameter) Allows to set PreserverIdentity Mode. Default is True
+    -PreserveIdentity : (bool parameter) Allows to set PreserveIdentity Mode. Default is True
     -RootAggr : (string parameter) Defines destination aggr name where to store SVM root volume
     -DataAggr : (string parameter) Defines destination aggr name where to store destination volumes 
 .PARAMETER ShowDR
@@ -289,7 +289,7 @@
     In this case, all destinations LIF will be created with APIPA addresses.
     A temporary LIF will be mandatory if a CIFS server must be registered in destination SVM.
     In case of Activation, IP addresses and CIFS server from source will be replicated on destination.
-    Default is PreserverIdentity = True
+    Default is PreserveIdentity = True
     If PreserveIdentity = False, then you must provide IP addresses and CIFS identity on destination SVM
 .INPUTS
     None. You cannot pipe objects to this script
@@ -313,7 +313,7 @@
     Request user to select which volume will be replicated and which not
     Ask for each volume on which destination aggregate it will be provisionned
 .EXAMPLE
-    svmtool.ps1 -Instance test -Vserver svm_source -ConfigureDR -RootAggr data -DataAggr data2 -PreserveIdentiy $True -DefaultLocalUserCredentials $cred 
+    svmtool.ps1 -Instance test -Vserver svm_source -ConfigureDR -RootAggr data -DataAggr data2 -PreserveIdentity $True -DefaultLocalUserCredentials $cred 
     -DefaultLDAPCredentials $cred -NonInteractive -TemporarySecondaryCifsIp 102.11.12.219 -SecondaryCifsLifMaster lif_data1
 
     Configure a SVM DR relationship for SVM svm_source in the instance test
@@ -432,7 +432,7 @@
 .NOTES
     Author  : Olivier Masson
     Author  : Mirko Van Colen
-    Version : November 11th, 2019
+    Version : March 17th, 2020
     Version History : 
         - 0.0.3 : 	Initial version 
         - 0.0.4 : 	Bugfix, typos and added ParameterSets
@@ -480,6 +480,8 @@
         - 0.3.0 :   Modify NonInteractive mode for ConfigureDR and for CloneDR with ForceOriginalClone
         - 0.3.1 :   Add PreserveIdentity Mode
         - 0.3.2 :   Correct Firewall Policy sync during UpdateDR
+		- 0.3.3 :   Change some behaviour around NonInteractive mode.
+					Fix Update_Cifs_usergroup function
 #>
 [CmdletBinding(HelpURI = "https://github.com/oliviermasson/svmtool", DefaultParameterSetName = "ListInstance")]
 Param (
@@ -964,16 +966,19 @@ Param (
 
     [Parameter(Mandatory = $false, ParameterSetName = 'ConfigureDR')]
     [Parameter(Mandatory = $false, ParameterSetName = 'CloneDR')]
-    [Parameter(Mandatory = $false, ParameterSetName = 'Restore')]    
+    [Parameter(Mandatory = $false, ParameterSetName = 'Restore')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'UpdateDR')]     
     [string]$TemporarySecondaryCifsIp = $null,
 
     [Parameter(Mandatory = $false, ParameterSetName = 'ConfigureDR')]
     [Parameter(Mandatory = $false, ParameterSetName = 'CloneDR')]
-    [Parameter(Mandatory = $false, ParameterSetName = 'Restore')]    
+    [Parameter(Mandatory = $false, ParameterSetName = 'Restore')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'UpdateDR')]     
     [string]$SecondaryCifsLifMaster = $null,
 
     [Parameter(Mandatory = $false, ParameterSetName = 'ConfigureDR')]
     [Parameter(Mandatory = $false, ParameterSetName = 'CloneDR')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'UpdateDR')] 
     [string]$SecondaryCifsLifCustomVlan = $null,
 
     [Parameter(Mandatory = $false, ParameterSetName = 'ConfigureDR')]
@@ -989,8 +994,8 @@ $Global:MIN_MINOR = 5
 $Global:MIN_BUILD = 0
 $Global:MIN_REVISION = 0
 #############################################################################################
-$Global:RELEASE = "0.3.2"
-$Global:SCRIPT_RELEASE = "0.1.15"
+$Global:RELEASE = "0.3.3"
+$Global:SCRIPT_RELEASE = "0.1.16"
 $Global:BASEDIR = 'C:\Scripts\SVMTOOL'
 $Global:SVMTOOL_DB_DEFAULT = $Global:BASEDIR
 $Global:CONFBASEDIR = $BASEDIR + '\etc\'
@@ -1087,6 +1092,7 @@ else {
 $LOGFILE = $LOGDIR + "svmtool.log"
 $Global:CRED_CONFDIR = $BASEDIR + "\cred\"
 $Global:MOUNT_RETRY_COUNT = 100
+$Global:TemporarySecondaryCifsIp=$TemporarySecondaryCifsIp
 
 #############################################################################################
 # MAIN
@@ -1183,6 +1189,8 @@ Write-LogOnly "SVMTOOL START $($Global:RELEASE)"
 if ( $Help ) {
     Write-Help 
 }
+####################################################################################################
+
 if ( $Version ) {
     $ModulesVersion = (Get-Module -Name svmtools).Version
     $ModulesVersion = $ModulesVersion.ToString()
@@ -1218,11 +1226,13 @@ Write-LogDebug "Vserver           [$Vserver]"
 Write-LogDebug "LogLevelConsole   [$LogLevelConsole]"
 Write-LogDebug "LogLevelLogFile   [$LogLevelLogFile]"
 Write-LogDebug "RW                [$RW]"
+####################################################################################################
 
 if ( $ListInstance ) {
     show_instance_list -ResetPassword:$ResetPassword
     clean_and_exit 0
 }
+####################################################################################################
 
 if ($ImportInstance) {
     if (($ret = import_instance_svmdr) -eq $True) {
@@ -1232,6 +1242,7 @@ if ($ImportInstance) {
         clean_and_exit 1	
     }
 }
+####################################################################################################
 
 if ( $RemoveInstance ) {
     if ( ( remove_configuration_instance $RemoveInstance ) -eq $True ) {
@@ -1241,6 +1252,7 @@ if ( $RemoveInstance ) {
         clean_and_exit 1
     }
 }
+####################################################################################################
 
 if ( $Setup ) {
     if ($Global:NonInteractive) {
@@ -1253,9 +1265,10 @@ if ( $Setup ) {
         clean_and_exit 1
     }
 }
+####################################################################################################
 
 if ( $Backup ) {
-    $Run_Mode = "Backup"
+    $Global:Run_Mode = "Backup"
     Write-Log "SVMTOOL Run Backup"
     if ((Test-Path $CONFFILE) -eq $True ) {
         Write-Log "use Config File [$CONFFILE]"s
@@ -1527,9 +1540,10 @@ if ( $Backup ) {
     Write-Log $("Finished - Script ran for {0}" -f $stopwatch.Elapsed.toString())
     clean_and_exit 0
 } #End Backup
+####################################################################################################
 
 if ( $Restore ) {
-    $Run_Mode = "Restore"
+    $Global:Run_Mode = "Restore"
     $Global:RESTORE_SRC_CLUSTER = $Restore
     $Global:RESTORE_DST_CLUSTER = $Destination
     if ($Global:RESTORE_SRC_CLUSTER -eq $Global:RESTORE_DST_CLUSTER) {
@@ -1849,10 +1863,11 @@ if ( $Restore ) {
     Write-Log $("Finished - Script ran for {0}" -f $stopwatch.Elapsed.toString())
     clean_and_exit 0
 } #End Restore
-
+########################################################################################################
 # RestoreObject  : Restore from JSON Backup specific objects into an SVM
+
 if ( $RestoreObject ){
-    $Run_Mode = "RestoreObject"
+    $Global:Run_Mode = "RestoreObject"
     Write-LogOnly "SVMTOOL Run RestoreObject"
     $RESTORE_SRC_CLUSTER = $RestoreObject
     if( $DestinationCluster ){
@@ -1973,6 +1988,7 @@ if ( $RestoreObject ){
     Write-Log "Finished restore object [$Objects] from [$RESTORE_SRC_CLUSTER]:[$Vserver] to [$RESTORE_DST_CLUSTER]:[$DestinationSVM]" -firstValueIsSpecial
     clean_and_exit 0  
 }
+####################################################################################################
 
 if ( ( Test-Path $CONFFILE ) -eq $False ) {
     Write-LogError "ERROR: instance [$instance] not found please run setup option" 
@@ -1987,7 +2003,7 @@ if ( ( $null -eq $Vserver ) -or ( $Vserver -eq "" ) ) {
 
 # Read configuration file
 $read_conf = read_config_file $CONFFILE ;
-if ( $read_conf -eq $null ) {
+if ( $null -eq $read_conf ) {
     Write-LogError "ERROR: read configuration file $CONFFILE failed" 
     clean_and_exit 1 ;
 }
@@ -2011,7 +2027,7 @@ if ($PRIMARY_CLUSTER -eq $SECONDARY_CLUSTER) {
 # Read Vserver configuration file
 $VCONFFILE = $CONFDIR + $Vserver + '.conf'
 if ($RemoveDRconf) {
-    $Run_Mode = "RemoveDRconf"
+    $Global:Run_Mode = "RemoveDRconf"
     Write-LogOnly "SVMTOOL RemoveDRconf"
     if ((Test-Path $VCONFFILE ) -eq $True ) {
         Remove-Item $VCONFFILE
@@ -2025,6 +2041,7 @@ if ($RemoveDRconf) {
 
 Write-LogDebug "VCONFFILE [$VCONFFILE]"
 $read_vconf = read_config_file $VCONFFILE
+####################################################################################################
 
 if ( ( $Setup ) -or ( $read_vconf -eq $null ) ) {
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
@@ -2098,9 +2115,10 @@ Write-LogDebug "OPTION ForceUpdateSnapPolicy         [$Global:ForceUpdateSnapPol
 Write-LogDebug "OPTION AlwaysChooseDataAggr 		 [$Global:AlwaysChooseDataAggr]"
 Write-LogDebug "OPTION SelectVolume         		 [$Global:SelectVolume]"
 Write-LogDebug "OPTION IgnoreQtreeExportPolicy       [$Global:IgnoreQtreeExportPolicy]"
+####################################################################################################
 
 if ( $ShowDR ) {
-    $Run_Mode = "ShowDR"
+    $Global:Run_Mode = "ShowDR"
     Write-LogOnly "SVMTOOL ShowDR"
     # Connect to the Cluster
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
@@ -2121,9 +2139,10 @@ if ( $ShowDR ) {
     $ret = show_vserver_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR -Lag:$Lag -Schedule:$Schedule
     clean_and_exit $ret
 }
+####################################################################################################
 
 if ( $ConfigureDR ) {
-    $Run_Mode = "ConfigureDR"
+    $Global:Run_Mode = "ConfigureDR"
     Write-LogOnly "SVMTOOL ConfigureDR"
     # Connect to the Cluster
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
@@ -2139,10 +2158,15 @@ if ( $ConfigureDR ) {
     if($null -ne $CIFSsource){
         Write-LogDebug "CIFS server exist on Source SVM"
         if( ($Global:PreserveIdentity -eq $True) -and ($TemporarySecondaryCifsIp.Length -eq 0) ){
-            Write-LogWarn "With PreserveIdentity = True, you must provide information to create a Temporary LIF on destination capable to register CIFS server"
+            Write-LogWarn "In PreserveIdentity mode (default for ConfigureDR), you must provide information to create a Temporary LIF on destination capable to register CIFS server"
             Write-LogWarn "use TemporarySecondaryCifsIp and SecondaryCifsLifMaster parameter to define this Temporay LIF on destination"
             clean_and_exit 1
         }
+		<# if( ($Global:PreserveIdentity -eq $False) -and ($Global:NonInteractive.IsPresent) ){
+			Write-LogWarn "In NonInteractive mode without PreserveIdentity, you must provide a Temporary LIF on destination capable to register CIFS server"
+            Write-LogWarn "use TemporarySecondaryCifsIp and SecondaryCifsLifMaster parameter to define this Temporay LIF on destination"
+            #clean_and_exit 1
+		} #>
     }
     $myCred = get_local_cDotcred ($SECONDARY_CLUSTER) 
     Write-LogDebug "connect_cluster -myController $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
@@ -2208,7 +2232,7 @@ if ( $ConfigureDR ) {
     if ( $? -ne $True ) {
         $Return = $False ; throw "ERROR: Get-NcCifsServer failed [$ErrorVar]" 
     }
-    if ( $CifService -eq $null ) {
+    if ( $null -eq $CifService ) {
         Write-Log "[$VserverDR] No CIFS services"
     }
     else {
@@ -2236,9 +2260,10 @@ if ( $ConfigureDR ) {
     }
     clean_and_exit 0
 }
+####################################################################################################
 
 if ( $DeleteDR ) {
-    $Run_Mode = "DeleteDR"
+    $Global:Run_Mode = "DeleteDR"
     Write-LogOnly "SVMTOOL DeleteDR"
     # Connect to the Cluster
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
@@ -2265,9 +2290,10 @@ if ( $DeleteDR ) {
     }
     clean_and_exit 0
 }
+####################################################################################################
 
 if ($Migrate) {
-    $Run_Mode = "Migrate"
+    $Global:Run_Mode = "Migrate"
     Write-LogOnly "SVMTOOL Migrate"
     # Connect to the Cluster
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
@@ -2486,9 +2512,10 @@ if ($Migrate) {
     }
     clean_and_exit 0
 }
+####################################################################################################
 
 if ( $DeleteSource ) {
-    $Run_Mode = "DeleteSrouce"
+    $Global:Run_Mode = "DeleteSrouce"
     Write-LogOnly "SVMTOOL DeleteSource"
     # Connect to the Cluster
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
@@ -2556,9 +2583,10 @@ if ( $DeleteSource ) {
         }
     }
 }
+####################################################################################################
 
 if ( $UpdateDR ) {
-    $Run_Mode = "UpdateDR"
+    $Global:Run_Mode = "UpdateDR"
     Write-LogOnly "SVMTOOL UpdateDR"
     # Connect to the Cluster
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
@@ -2618,7 +2646,7 @@ if ( $UpdateDR ) {
     # This will set $Global:NEED_CIFS_SERVER
     $ret=check_update_CIFS_server_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR
 
-    if ( ($ret = update_vserver_dr -myDataAggr $DataAggr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR -DDR ($DRfromDR.IsPresent) -aggrMatchRegEx $AggrMatchRegex -nodeMatchRegEx $NodeMatchRegex -NoSnapmirrorUpdate $NoSnapmirrorUpdate -NoSnapmirrorWait $NoSnapmirrorWait) -ne $True ) {
+    if ( ($ret = update_vserver_dr -myDataAggr $DataAggr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR -DDR ($DRfromDR.IsPresent) -aggrMatchRegEx $AggrMatchRegex -TemporarySecondaryCifsIp $TemporarySecondaryCifsIp -SecondaryCifsLifMaster $SecondaryCifsLifMaster -SecondaryCifsLifCustomVlan $SecondaryCifsLifCustomVlan -nodeMatchRegEx $NodeMatchRegex -NoSnapmirrorUpdate $NoSnapmirrorUpdate -NoSnapmirrorWait $NoSnapmirrorWait) -ne $True ) {
         Write-LogError "ERROR: update_vserver_dr failed" 
         clean_and_exit 1
 
@@ -2643,10 +2671,46 @@ if ( $UpdateDR ) {
     }
     clean_and_exit 0
 }
+####################################################################################################
 
 if ( $CloneDR ) {
-    $Run_Mode = "CloneDR"
+    $Global:Run_Mode = "CloneDR"
     Write-LogOnly "SVMTOOL CloneDR"
+    $Global:PreserveIdentity=$False
+
+    <# if ( ( ( $Global:NonInteractive.IsPresent ) -and ( -not $Global:ForceCloneOriginal.IsPresent ) ) -and ( ( $null -eq $Global:SecondaryCifsLifMaster ) -or ( $null -eq $Global:TemporarySecondaryCifsIp ) ) ){
+        Write-LogError "ERROR: With CloneDR in Interactive Mode you must provide a SecondaryCifsLifMaster and TemporarySecondaryCifsIp"
+        clean_and_exit 1
+    }
+    if( ( ( $Global:NonInteractive.IsPresent ) -and ( ( $null -eq $Global:SecondaryCifsLifMaster ) -or ( $null -eq $Global:TemporarySecondaryCifsIp ) ) ) ){
+        Write-LogError "ERROR: With CloneDR in NonInteractive Mode you must provide a SecondaryCifsLifMaster and TemporarySecondaryCifsIp"
+        clean_and_exit 1
+    } #>
+    if( ( $Global:NonInteractive.IsPresent ) `
+    -and ( -not ($Global:ForceCloneOriginal.IsPresent) ) `
+    -and ( ( $SecondaryCifsLifMaster.Length -eq 0 ) -or ( $TemporarySecondaryCifsIp.length -eq 0 ) ) `
+    ){
+        Write-LogError "ERROR: With CloneDR in NonInteractive Mode you must provide a SecondaryCifsLifMaster and TemporarySecondaryCifsIp"
+        # $globalinter=$Global:NonInteractive.IsPresent
+        # $globaloriginal=($Global:ForceCloneOriginal.IsPresent)
+        # $secondarymaster=( $SecondaryCifsLifMaster.Length -eq 0 )
+        # $secondaryip=( $TemporarySecondaryCifsIp.length -eq 0 )
+        # write-log "interactive : $globalinter"
+        # write-log "not original : $globaloriginal"
+        # write-log "master vide : $secondarymaster $SecondaryCifsLifMaster"
+        # write-log "secondaryip vide : $secondaryip $TemporarySecondaryCifsIp"
+        clean_and_exit 1
+    }<# else{
+        Write-host "ok to continue"
+        $globalinter=$Global:NonInteractive.IsPresent
+        $globaloriginal=($Global:ForceCloneOriginal.IsPresent)
+        $secondarymaster=( $SecondaryCifsLifMaster.Length -eq 0 )
+        $secondaryip=( $TemporarySecondaryCifsIp.length -eq 0 )
+        write-log "interactive : $globalinter"
+        write-log "not original : $globaloriginal"
+        write-log "master vide : $secondarymaster $SecondaryCifsLifMaster"
+        write-log "secondaryip vide : $secondaryip $TemporarySecondaryCifsIp"
+    } #>
     # Connect to the Cluster
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
     $tmp_str = $MyCred.UserName
@@ -2667,7 +2731,7 @@ if ( $CloneDR ) {
     if ( $? -ne $True ) {
         $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" 
     }
-    if ($ListCloneVserver -eq $null) {
+    if ($null -eq $ListCloneVserver) {
         $CloneVserverDR += ".0"	
     }
     else {
@@ -2702,15 +2766,17 @@ if ( $CloneDR ) {
     }
     clean_and_exit 0
 }
+####################################################################################################
 
 if ( $SplitCloneDR ) {
-    $Run_Mode = "SplitCloneDR"
+    $Global:Run_Mode = "SplitCloneDR"
     Write-LogOnly "SVMTOOL SplitCloneDR"
     # Connect to the Cluster
 }
+####################################################################################################
 
 if ( $DeleteCloneDR ) {
-    $Run_Mode = "DeleteCloneDR"
+    $Global:Run_Mode = "DeleteCloneDR"
     Write-LogOnly "SVMTOOL DeleteCloneDR"
     $myCred = get_local_cDotcred ($SECONDARY_CLUSTER) 
     Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
@@ -2736,9 +2802,10 @@ if ( $DeleteCloneDR ) {
     }
     clean_and_exit 0
 }
+####################################################################################################
 
 if ( $ActivateDR ) {
-    $Run_Mode = "ActivateDR"
+    $Global:Run_Mode = "ActivateDR"
     Write-LogOnly "SVMTOOL ActivateDR"
     if ( test_primary_alive -PrimaryCluster $PRIMARY_CLUSTER -SecondaryCluster $SECONDARY_CLUSTER -PrimaryVserver $Vserver -SecondaryVserver $VserverDR ) {
         $ForceActivate = $False
@@ -2754,9 +2821,10 @@ if ( $ActivateDR ) {
     }
     clean_and_exit 0
 }
+####################################################################################################
 
 if ( $CreateQuotaDR ) {
-    $Run_Mode = "CreateQuotaDR"
+    $Global:Run_Mode = "CreateQuotaDR"
     $myCred = get_local_cDotcred ($SECONDARY_CLUSTER) 
     Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
     if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
@@ -2770,9 +2838,10 @@ if ( $CreateQuotaDR ) {
     }
     clean_and_exit 0
 }
+####################################################################################################
 
 if ( $ReCreateQuota ) {
-    $Run_Mode = "ReCreateQuota"
+    $Global:Run_Mode = "ReCreateQuota"
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
     Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
     if ( ( $NcPrimaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
@@ -2786,9 +2855,10 @@ if ( $ReCreateQuota ) {
     }
     clean_and_exit 0
 }
+####################################################################################################
 
 if ( $ReActivate ) {
-    $Run_Mode = "ReActivate"
+    $Global:Run_Mode = "ReActivate"
     Write-LogOnly "SVMTOOL ReActivate"
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
     $tmp_str = $MyCred.UserName
@@ -2921,9 +2991,10 @@ if ( $ReActivate ) {
     }
     clean_and_exit 0
 }
+####################################################################################################
 
 if ( $CleanReverse ) {
-    $Run_Mode = "CleanReverse"
+    $Global:Run_Mode = "CleanReverse"
     Write-LogOnly "SVMTOOL CleanReverse"
     # Connect to the Cluster
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
@@ -2952,9 +3023,10 @@ if ( $CleanReverse ) {
     }
     clean_and_exit 0
 }
+####################################################################################################
 
 if ( $Resync ) {
-    $Run_Mode = "Resync"
+    $Global:Run_Mode = "Resync"
     Write-LogOnly "SVMTOOL Resync"
     # Connect to the Cluster
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
@@ -2996,9 +3068,10 @@ if ( $Resync ) {
     }
     clean_and_exit 0 
 }
+####################################################################################################
 
 if ( $ResyncReverse ) {
-    $Run_Mode = "ResyncReverse"
+    $Global:Run_Mode = "ResyncReverse"
     Write-LogOnly "SVMTOOL ResyncReverse"
     # Connect to the Cluster
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
@@ -3035,10 +3108,11 @@ if ( $ResyncReverse ) {
     }
     clean_and_exit 0 
 }
+####################################################################################################
 
 if ( $UpdateReverse ) {
     $Global:NonInteractive = $true
-    $Run_Mode = "UpdateReverse"
+    $Global:Run_Mode = "UpdateReverse"
     Write-LogOnly "SVMTOOL UpdateReverse"
     # Connect to the Cluster
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
@@ -3075,7 +3149,7 @@ if ( $UpdateReverse ) {
     # This will set $Global:NEED_CIFS_SERVER
     $ret=check_update_CIFS_server_dr -myPrimaryController $NcSecondaryCtrl -mySecondaryController $NcPrimaryCtrl -myPrimaryVserver $VserverDR -mySecondaryVserver $Vserver
 
-    if ( ( $ret = update_vserver_dr -myDataAggr $DataAggr -myPrimaryController $NcSecondaryCtrl -mySecondaryController $NcPrimaryCtrl -myPrimaryVserver $VserverDR -mySecondaryVserver $Vserver -DDR ($DRfromDR.IsPresent) -aggrMatchRegEx $AggrMatchRegex -nodeMatchRegEx $NodeMatchRegex -NoSnapmirrorUpdate $NoSnapmirrorUpdate -NoSnapmirrorWait $NoSnapmirrorWait) -ne $True ) { 
+    if ( ( $ret = update_vserver_dr -myDataAggr $DataAggr -myPrimaryController $NcSecondaryCtrl -mySecondaryController $NcPrimaryCtrl -myPrimaryVserver $VserverDR -mySecondaryVserver $Vserver -DDR ($DRfromDR.IsPresent) -TemporarySecondaryCifsIp $TemporarySecondaryCifsIp -SecondaryCifsLifMaster $SecondaryCifsLifMaster -SecondaryCifsLifCustomVlan $SecondaryCifsLifCustomVlan -aggrMatchRegEx $AggrMatchRegex -nodeMatchRegEx $NodeMatchRegex -NoSnapmirrorUpdate $NoSnapmirrorUpdate -NoSnapmirrorWait $NoSnapmirrorWait) -ne $True ) { 
         Write-LogError "ERROR: update_vserver_dr" 
         clean_and_exit 1 
 
@@ -3116,9 +3190,10 @@ if ( $UpdateReverse ) {
 	} #>
     clean_and_exit 0
 }
+####################################################################################################
 
 if ( $MirrorSchedule ) {
-    $Run_Mode = "MirrorSchedule"
+    $Global:Run_Mode = "MirrorSchedule"
     Write-LogOnly "SVMTOOL MirrorSchedule"
     # Connect to the Cluster
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
@@ -3151,9 +3226,10 @@ if ( $MirrorSchedule ) {
     }
     clean_and_exit 0
 }
+####################################################################################################
 
 if ( $MirrorScheduleReverse ) {
-    $Run_Mode = "MirrorScheduleReverse"
+    $Global:Run_Mode = "MirrorScheduleReverse"
     Write-LogOnly "SVMTOOL MirrorScheduleReverse"
     # Connect to the Cluster
     $myCred = get_local_cDotcred ($SECONDARY_CLUSTER) 
@@ -3186,6 +3262,7 @@ if ( $MirrorScheduleReverse ) {
     }
     clean_and_exit 0
 }
+####################################################################################################
 
 if ( $InternalTest ) {
     Write-LogOnly "SVM InternalTest"

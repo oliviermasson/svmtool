@@ -62,9 +62,9 @@ function invokeSvmtool{
     }
     $scriptPath = "$PSScriptRoot\svmtool.ps1"
 
-    write-verbose "Invoking svmtool"
+    <# write-verbose "Invoking svmtool"
     write-verbose "Scriptpath : $scriptPath"
-    write-verbose "Arguments : $arguments"
+    write-verbose "Arguments : $arguments" #>
 
     Invoke-Expression "& `"$scriptPath`" $arguments"
 }
@@ -845,6 +845,26 @@ function Update-SvmDr {
         # In Non-Interactive Mode, the script cannot create missing users
         # If you pass this parameter, the password will used to create missing users
         [pscredential]$DefaultLocalUserCredentials,
+
+        # Optional, when the vserver dr is created, all lifs are taken offline (duplicate ip conflicts)
+        # Hence if the vserver needs to be joined in AD, there is no lif available
+        # By passing an temporary ip-address and in combination with parameter "SecondaryCifsLifMaster"
+        # A temporary lif will be created to join the vserver dr in AD
+        [string]$TemporarySecondaryCifsIp,
+
+        # Optional, when the vserver dr is created, all lifs are taken offline (duplicate ip conflicts)
+        # Hence if the vserver needs to be joined in AD, there is no lif available
+        # So we will clone the lif that is passed in this parameter (using same port and options)
+        # Use this in combination with parameter "TemporarySecondaryCifsIp"
+        # A temporary lif will be created to join the vserver dr in AD
+        [string]$SecondaryCifsLifMaster,
+
+        # Optional, when the vserver dr is created, all lifs are taken offline (duplicate ip conflicts)
+        # Hence if the vserver needs to be joined in AD, there is no lif available
+        # So we will clone the lif used in the parameter SecondaryCifsLifMaster
+        # A temporary lif will be created to join the vserver dr in AD
+        # This parameter will override the vlan in which this temp lif is created
+        [string]$SecondaryCifsLifCustomVlan,
 
         # Loglevel of the console output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]

@@ -5,8 +5,8 @@
 #
 # Generated on: 2018-10-09
 #
-# Updated by : Mirko Van Colen
-# Updated on : 2019-05-07
+# Updated by : Olivier Masson
+# Updated on : 2020-03-17
 #
 # Version Control :
 #   1.0.0 : Initial version
@@ -18,13 +18,14 @@
 #   1.0.6 : Added skipVscanFpolicy
 #   1.0.7 : Added SnapmirrorType & ForceCloneOriginal option
 #   1.0.8 : Introduce PreserveIdentity Mode
+#   1.0.9 : Modify UpdateDR argument for PreserveIdentity mode and allow Update_CIFS_usergroup to works in this situation
 @{
 
     # Script module or binary module file associated with this manifest.
     RootModule        = '.\svmtool.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.0.8'
+    ModuleVersion     = '1.0.9'
 
     # Supported PSEditions
     # CompatiblePSEditions = @()
