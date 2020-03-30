@@ -41,12 +41,12 @@ function invokeSvmtool{
         }
     }
     $args += $strings | ?{$_.Value} | %{if($_.Value -match "\s"){("-{0} `"{1}`"" -f $_.name,$_.value)}else{("-{0} {1}" -f $_.name,$_.value)}}
-    $args += $regexs | ?{($_.Value -ne $null)} | ?{($_.Value.ToString())} | %{("-{0} `"{1}`"" -f $_.name,($_.value).ToString())}
+    $args += $regexs | ?{($null -ne $_.Value)} | ?{($_.Value.ToString())} | %{("-{0} `"{1}`"" -f $_.name,($_.value).ToString())}
     $args += $switches | ?{$_.Value} | %{("-{0}" -f $_.name)}
     $args += $bools | %{("-{0} `${1}" -f $_.name,$_.value)}
     $i=0
     foreach($c in $creds){
-        if($c.value -ne $null){
+        if($null -ne $c.value){
             new-variable -name "cred$i" -value ($c.value)
             $args += ("-{0} `${1}" -f $c.name,"cred$i")
             $i++
@@ -375,6 +375,9 @@ function New-SvmDr {
         [Parameter(Mandatory = $true)]
         [string]$Vserver,
 
+        # Destination Vserver Name
+        [string]$VserverDR,
+
         # Optional, makes an aggregate suggestion for the rootvolume
         [string]$RootAggr,
 
@@ -479,6 +482,11 @@ function New-SvmDr {
         [Parameter(Mandatory = $false)]
         [ValidateSet("DP", "XDP")]
         [string]$SnapmirrorType="XDP",
+		
+		# Allows to force a TieringPolicy on destination volume (when FabricPool available)
+        [Parameter(Mandatory = $false)]
+        [ValidateSet("auto", "snapshot-only", "all", "none")]
+        [string]$TieringPolicy = $null,
 
         # Define Network Identity preservation mode on Destination
         # Default = True
@@ -865,6 +873,11 @@ function Update-SvmDr {
         # A temporary lif will be created to join the vserver dr in AD
         # This parameter will override the vlan in which this temp lif is created
         [string]$SecondaryCifsLifCustomVlan,
+		
+		# Allows to force a TieringPolicy on destination volume (when FabricPool available)
+        [Parameter(Mandatory = $false)]
+        [ValidateSet("auto", "snapshot-only", "all", "none")]
+        [string]$TieringPolicy = $null,
 
         # Loglevel of the console output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]

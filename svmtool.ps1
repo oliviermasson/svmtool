@@ -291,6 +291,11 @@
     In case of Activation, IP addresses and CIFS server from source will be replicated on destination.
     Default is PreserveIdentity = True
     If PreserveIdentity = False, then you must provide IP addresses and CIFS identity on destination SVM
+.PARAMETER TieringPolicy
+	Allows to force a TieringPolicy on destination volume when FabricPool is available
+	If this option is present whith a valid TieringPolicy, destination volume will be created with this Policy
+	It not present, we will check if a TieringPolicy is used on Primary volume and use it on destination
+	And if no TieringPolicy is defined on source volume then we will use auto as default TieringPolicy for secondary volumes
 .INPUTS
     None. You cannot pipe objects to this script
 .OUTPUTS
@@ -429,10 +434,20 @@
     You can change existing Policy of all snapmirror relationships by running ConfigureDR or UpdateDR with XDPpolicy argument
     The chosen policy must already exist on destination Cluster.
     If not, switch to default Policy : DPDefault or MirrorAllSnapshot, depending on ONTAP version on both source and destination
+.EXAMPLE
+	New-SvmDr -Instance <instance name> -Vserver <vserver name> -NonInteractive -PreserveIdentity $true -DataAggr <aggr name> -RootAggr <aggr name>
+	-DefaultLocalUserCredentials $cred -DefaultLDAPCredentials $cred -TemporarySecondaryCifsIp <IP> -SecondaryCifsLifMaster <lif name> -TieringPolicy snapshot-only
+	
+	With all this options, you will create a DR SVM with Network Identity perserved on DR and one Temporary Secondary LIF to allow AD registration
+	All created user will get their password from the $cred argument
+	This $cred argument must be initialized before running this command, with the following cmdlet:
+	$cred=get-credential
+	All secondary volume will be created with a snapshot-only TieringPolicy
+	All this will be performed non-interactively
 .NOTES
     Author  : Olivier Masson
     Author  : Mirko Van Colen
-    Version : March 17th, 2020
+    Version : March 30th, 2020
     Version History : 
         - 0.0.3 : 	Initial version 
         - 0.0.4 : 	Bugfix, typos and added ParameterSets
@@ -482,6 +497,9 @@
         - 0.3.2 :   Correct Firewall Policy sync during UpdateDR
 		- 0.3.3 :   Change some behaviour around NonInteractive mode.
 					Fix Update_Cifs_usergroup function
+		- 0.3.4 :   Add TieringPolicy option to force Tiering Policy for FabricPool's created volume on destination
+					without this option, TieringPolicy of source volumes is used on destination.
+					And if there is no TieringPolicy on source volumes, then TieringPolicy auto is used on destination
 #>
 [CmdletBinding(HelpURI = "https://github.com/oliviermasson/svmtool", DefaultParameterSetName = "ListInstance")]
 Param (
@@ -623,6 +641,7 @@ Param (
     [string]$DestinationSVM,
 
     [Parameter(Mandatory = $false, ParameterSetName = 'Setup')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'ConfigureDR')]
     [string]$VserverDr,
 
     [Parameter(Mandatory = $false, ParameterSetName = 'Setup')]
@@ -983,7 +1002,12 @@ Param (
 
     [Parameter(Mandatory = $false, ParameterSetName = 'ConfigureDR')]
     [Parameter(Mandatory = $false, ParameterSetName = 'CloneDR')]
-    [string]$ActiveDirectoryCustomOU = $null
+    [string]$ActiveDirectoryCustomOU = $null,
+	
+	[Parameter(Mandatory = $false, ParameterSetName = 'ConfigureDR')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'UpdateDR')]
+	[ValidateSet("auto", "snapshot-only", "all", "none")]
+    [string]$TieringPolicy = $null
 )
 
 #############################################################################################
@@ -994,8 +1018,8 @@ $Global:MIN_MINOR = 5
 $Global:MIN_BUILD = 0
 $Global:MIN_REVISION = 0
 #############################################################################################
-$Global:RELEASE = "0.3.3"
-$Global:SCRIPT_RELEASE = "0.1.16"
+$Global:RELEASE = "0.3.4"
+$Global:SCRIPT_RELEASE = "0.1.17"
 $Global:BASEDIR = 'C:\Scripts\SVMTOOL'
 $Global:SVMTOOL_DB_DEFAULT = $Global:BASEDIR
 $Global:CONFBASEDIR = $BASEDIR + '\etc\'
@@ -1028,6 +1052,7 @@ $Global:SkipVscanFpolicy = $SkipVscanFpolicy
 $Global:ForceCloneOriginal = $ForceCloneOriginal
 $Global:BACKUPALLSVM = $False
 $Global:PreserveIdentity=$PreserveIdentity
+$Global:TieringPolicy=$TieringPolicy
 $Global:NumberOfLogicalProcessor = (Get-WmiObject Win32_Processor).NumberOfLogicalProcessors
 if ($Global:NumberOfLogicalProcessor -lt 4) {
     $Global:NumberOfLogicalProcessor = 4
@@ -2043,7 +2068,7 @@ Write-LogDebug "VCONFFILE [$VCONFFILE]"
 $read_vconf = read_config_file $VCONFFILE
 ####################################################################################################
 
-if ( ( $Setup ) -or ( $read_vconf -eq $null ) ) {
+if ( ( $Setup ) -or ( $null -eq $read_vconf ) ) {
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
     $tmp_str = $MyCred.UserName
     Write-LogDebug "Connect to cluster [$PRIMARY_CLUSTER] with login [$tmp_str]"
@@ -2067,7 +2092,7 @@ if ( ( $Setup ) -or ( $read_vconf -eq $null ) ) {
     }
     create_vserver_config_file_cli -Vserver $Vserver -ConfigFile $VCONFFILE -VserverDr $VserverDr -QuotaDr:$QuotaDR -NcSecondaryCtrl $NcSecondaryCtrl
     $read_vconf = read_config_file $VCONFFILE
-    if ( $read_vconf -eq $null ) {
+    if ( $null -eq $read_vconf ) {
         Write-LogError "ERROR: Failed to create $VCONFFILE "
         clean_and_exit 2
     }
@@ -2077,7 +2102,7 @@ if ( ( $Setup ) -or ( $read_vconf -eq $null ) ) {
 }
 
 $VserverDR = $read_vconf.Get_Item("VserverDR")
-if ( $Vserver -eq $Null ) {
+if ( $null -eq $Vserver ) {
     Write-LogError "ERROR: unable to find VserverDR in $VCONFFILE"
     clean_and_exit 1 ;
 }

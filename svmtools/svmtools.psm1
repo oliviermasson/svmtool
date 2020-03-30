@@ -5,7 +5,7 @@
     This module contains several functions to manage SVMDR, Backup and Restore Configuration...
 .NOTES
     Authors  : Olivier Masson, Jerome Blanchet, Mirko Van Colen
-    Release  : March 17th, 2020
+    Release  : March 30th, 2020
 
 #>
 
@@ -551,26 +551,30 @@ Function create_vserver_config_file_cli (
     [string]$ConfigFile,
     [NetApp.Ontapi.Filer.C.NcController]$NcSecondaryCtrl)  {
 
+    $ForceAskForVserverDR=$True
 	if ( $VserverDR ) {
-		$myVserverDR=$VserverDR
-	} 
+        $myVserverDR=$VserverDR
+        $ForceAskForVserverDR=$False
+	}else{
+        $myVserverDR=$($Vserver+"_DR")
+    } 
 
 	if ((Test-Path $ConfigFile) -eq $True ) {
 		$read_conf = read_config_file $ConfigFile
-		if ( $read_conf -eq $null ){
+		if ( $null -eq $read_conf ){
         		Write-Log "No configuration file for $Vserver "
 		}
         if(-not $myVserverDR){
 		    $myVserverDR=$read_conf.Get_Item("VserverDR")
         }
 	}
-    if($Global:NonInteractive -and -not $myVserverDr){
+    <# if($Global:NonInteractive -and -not $myVserverDr){
         Write-LogError "ERROR : Running in NonInteractiveMode and no VserverDr provided.  Use option -VserverDr."
         clean_and_exit 1
-    }
+    } #>
 	$ANS='n'
 	while ( $ANS -ne 'y' ) {
-        $myVserverDR = Read-HostDefault -question "Please Enter a Valid Vserver DR name for" -default $myVserverDR
+        $myVserverDR = Read-HostDefault -question "Please Enter a Valid Vserver DR name for source [$Vserver]" -default $myVserverDR -forceAsk $ForceAskForVserverDR
         $QuotaDefaultAns = if($QuotaDr){"y"}else{"n"}
         $AnsQuotaDR = Read-HostOptions -question "Do you want to Backup Quota for $Vserver [$myVserverDR] ?" -options "y/n" -default $QuotaDefaultAns
 		if ( $AnsQuotaDR -eq 'y' ) {
@@ -1807,7 +1811,7 @@ Function create_update_firewallpolicy_dr(
         }
         if($Backup -eq $True){
             $PrimaryFirewallPolicies | ConvertTo-Json -Depth 5 | Out-File -FilePath $($Global:JsonPath+"Get-NcNetFirewallPolicy.json") -Encoding ASCII -Width 65535
-            if( ($ret=get-item $($Global:JsonPath+"Get-NcNetFirewallPolicy.json") -ErrorAction SilentlyContinue) -ne $null ){
+            if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcNetFirewallPolicy.json") -ErrorAction SilentlyContinue) ){
                 Write-LogDebug "$($Global:JsonPath+"Get-NcNetFirewallPolicy.json") saved successfully"
             }else{
                 Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcNetFirewallPolicy.json")"
@@ -1815,11 +1819,15 @@ Function create_update_firewallpolicy_dr(
             }    
         }
         if($Backup -eq $False){
+            $ONTAP96orGreater=$False
+            $ONTAP95=$False
             $SecondaryVersionTuple=(Get-NcSystemVersionInfo -Controller $mySecondaryController | Select-Object VersionTuple).VersionTuple
             if($SecondaryVersionTuple.Generation -eq 9 -and $SecondaryVersionTuple.Major -le 4){
                 $ONTAP95=$False
-            }elseif($SecondaryVersionTuple.Generation -eq 9 -and $SecondaryVersionTuple.Major -ge 5){
+            }elseif( $SecondaryVersionTuple.Generation -eq 9 -and $SecondaryVersionTuple.Major -eq 5 ){
                 $ONTAP95=$True    
+            }elseif($SecondaryVersionTuple.Generation -eq 9 -and $SecondaryVersionTuple.Major -ge 6){
+                $ONTAP96orGreater=$True
             }
             $SecondaryFirewallPolices=Get-NcNetFirewallPolicy -Controller $mySecondaryController -Vserver $mySecondaryVserver  -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetFirewallPolicy failed [$ErrorVar]" }
@@ -1829,8 +1837,8 @@ Function create_update_firewallpolicy_dr(
                     $Policy=$diff.Policy
                     $Service=$diff.Service
                     $AllowList=$diff.AllowList
-                    if($ONTAP95 -eq $False -and $Service -eq "portmap"){
-                        Write-LogDebug "Ignore portmap service with destination lower than ONTAP 9.5"
+                    if(($ONTAP95 -eq $False -and $Service -eq "portmap") -or ($ONTAP96orGreater -eq $True -and $Service -eq "portmap")){
+                        Write-LogDebug "Ignore portmap service on destination"
                         continue
                     }
                     if($diff.SideIndicator -eq "=>"){
@@ -1849,8 +1857,8 @@ Function create_update_firewallpolicy_dr(
                     $Policy=$FirPol.Policy
                     $Service=$FirPol.Service
                     $AllowList=$FirPol.AllowList
-                    if($ONTAP95 -eq $False -and $Service -eq "portmap"){
-                        Write-LogDebug "Ignore portmap service with destination lower than ONTAP 9.5"
+                    if(($ONTAP95 -eq $False -and $Service -eq "portmap") -or ($ONTAP96orGreater -eq $True -and $Service -eq "portmap")){
+                        Write-LogDebug "Ignore portmap service on destination"
                         continue
                     }
                     Write-Log "[$workOn] Create Firewall Rule : [$Policy] [$Service] [$AllowList]"
@@ -5133,7 +5141,7 @@ Try {
     }
     if($Backup -eq $True){
         $PrimaryVolList | ConvertTo-Json -Depth 5 | Out-File -FilePath $($Global:JsonPath+"Get-NcVol.json") -Encoding ASCII -Width 65535
-        if( ($ret=get-item $($Global:JsonPath+"Get-NcVol.json") -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcVol.json") -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$($Global:JsonPath+"Get-NcVol.json") saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcVol.json")"
@@ -5142,7 +5150,7 @@ Try {
         $PrimarySisList = Get-NcSis -Controller $myPrimaryController -Vserver $myPrimaryVserver  -ErrorVariable ErrorVar  
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSis failed [$ErrorVar]" }
         $PrimarySisList | ConvertTo-Json -Depth 5 | Out-File -FilePath $($Global:JsonPath+"Get-NcSis.json") -Encoding ASCII -Width 65535
-        if( ($ret=get-item $($Global:JsonPath+"Get-NcSis.json") -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcSis.json") -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$($Global:JsonPath+"Get-NcSis.json") saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcSis.json")"
@@ -5151,7 +5159,7 @@ Try {
         $PrimarySisPolicyList = Get-NcSisPolicy -Controller $myPrimaryController -Vserver $myPrimaryVserver  -ErrorVariable ErrorVar  
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSisPolicy failed [$ErrorVar]" }
         $PrimarySisPolicyList | ConvertTo-Json -Depth 5 | Out-File -FilePath $($Global:JsonPath+"Get-NcSisPolicy.json") -Encoding ASCII -Width 65535
-        if( ($ret=get-item $($Global:JsonPath+"Get-NcSisPolicy.json") -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcSisPolicy.json") -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$($Global:JsonPath+"Get-NcSisPolicy.json") saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcSisPolicy.json")"
@@ -5203,7 +5211,7 @@ Try {
             $PrimaryVolJunctionPath=$PrimaryVol.VolumeIdAttributes.JunctionPath
             $PrimaryVolIsInfiniteVolume=$PrimaryVol.IsInfiniteVolume
             $PrimaryVolIsVserverRoot=$PrimaryVol.VolumeStateAttributes.IsVserverRoot
-            $PrimaryVolComment=$PrimaryVol.Comment
+            $PrimaryVolComment=$PrimaryVol.VolumeIdAttributes.Comment
             if ( ( $PrimaryVolState -eq "online" ) -and ($PrimaryVolType -eq "rw" ) -and ($PrimaryVolIsVserverRoot -eq $False ) -and ( $PrimaryVolIsInfiniteVolume -eq $False ) ) {
                 if($Restore -eq $False -and $Backup -eq $False){
                     if( $Global:SelectVolume -eq $True -and $Global:NonInteractive -eq $False )
@@ -5237,6 +5245,9 @@ Try {
                     #  THIS NOW WORKS DIFFERENTLY
                     #  WE ALWAYS TRY TO FIND A MATCH IN NON INTERACTIVE MODE
 
+					$PrimaryVersion=(Get-NcSystemVersionInfo -Controller $myPrimaryController).VersionTupleV
+					$SecondaryVersion=(Get-NcSystemVersionInfo -Controller $mySecondaryController).VersionTupleV
+	
                     if($Global:NonInteractive){
                         Write-LogDebug "create_volume_voldr with `$Global:NonInteractive enabled, auto selecting aggregate for volume [$PrimaryVolName]"
                         $Question = "[$mySecondaryVserver] Please Select a destination DATA aggregate for [$PrimaryVolName] on Cluster [$MySecondaryController]:"
@@ -5269,7 +5280,25 @@ Try {
                         $UsedSpace=(Get-NcAggrObjectStoreConfig -Controller $mySecondaryController -ObjectStoreName $ObjectStore).UsedSpace
                         Write-Log "[$Workon] Aggr [$AggrName] is a FabricPool [$ObjectStore] [$CompositeServer] [$S3Name] [$ProviderType] [$UsedSpace]"
                         $SpaceReserve="none"
-                        $option=@{"TieringPolicy"="auto"}
+						# if Global argument TieringPolicy as been set during svmtool call, then we will use this TieringPolicy for destination volume
+						# else
+						# Get sourceVolume TieringPolicy Information
+						# If TieringPolicy is set on source Volume, we will use the same Tiering Policy on destination volume
+						# It not set, we will use Tiering Policy auto on secondary volume
+						if($Global:TieringPolicy.Length -gt 0){
+							$option=@{"TieringPolicy"=$Global:TieringPolicy}
+							Write-Log "[$Workon] Global TieringPolicy is set to [$Global:TieringPolicy]. So, volume [$PrimaryVolName] will get this policy"
+						}else{
+							$PrimaryAggr=Get-NcAggr -Controller $myPrimaryController -Name $PrimaryVolAggr  -ErrorVariable ErrorVar
+							if($PrimaryAggr.AggrRaidAttributes.IsComposite -eq $True){
+								$PrimaryVolumeTieringPolicy=$PrimaryVol.VolumeCompAggrAttributes.TieringPolicy
+								Write-Log "[$Workon] volume [$PrimaryVolName] gets its TieringPolicy from primary volume [$PrimaryVolumeTieringPolicy]"
+								$option=@{"TieringPolicy"=$PrimaryVolumeTieringPolicy}
+							}else{
+								Write-Log "[$Workon] no TieringPolicy defined on source volume. So, volume [$PrimaryVolName] will be set with Policy [auto]"
+								$option=@{"TieringPolicy"="auto"}
+							}
+						}
                     }else{
                         $SpaceReserve=$PrimaryVolSpaceGuarantee
                         $option=@{}
@@ -5308,7 +5337,24 @@ Try {
                                 $UsedSpace=(Get-NcAggrObjectStoreConfig -Controller $mySecondaryController -ObjectStoreName $ObjectStore).UsedSpace
                                 Write-Log "[$Workon] Aggr [$AggrName] is a FabricPool [$ObjectStore] [$CompositeServer] [$S3Name] [$ProviderType] [$UsedSpace]"
                                 $SpaceReserve="none"
-                                $option=@{"TieringPolicy"="auto"}
+								# Get sourceVolume TieringPolicy Information
+								# If TieringPolicy is set on source Volume, we will use the same Tiering Policy on destination volume
+								# It not set, we will use Tiering Policy auto on secondary volume
+								# But if Global argument TieringPolicy as been set during svmtool call, then we will use this TieringPolicy for destination volume
+                                if($Global:TieringPolicy.Length -gt 0){
+									$option=@{"TieringPolicy"=$Global:TieringPolicy}
+									Write-Log "[$Workon] Global TieringPolicy is set to [$Global:TieringPolicy]. So, volume [$PrimaryVolName] will get this policy"
+								}else{
+									$PrimaryAggr=Get-NcAggr -Controller $myPrimaryController -Name $PrimaryVolAggr  -ErrorVariable ErrorVar
+									if($PrimaryAggr.AggrRaidAttributes.IsComposite -eq $True){
+										$PrimaryVolumeTieringPolicy=$PrimaryVol.VolumeCompAggrAttributes.TieringPolicy
+										Write-Log "[$Workon] volume [$PrimaryVolName] gets its TieringPolicy from primary volume [$PrimaryVolumeTieringPolicy]"
+										$option=@{"TieringPolicy"=$PrimaryVolumeTieringPolicy}
+									}else{
+										Write-Log "[$Workon] no TieringPolicy defined on source volume. So, volume [$PrimaryVolName] will be set with Policy [auto]"
+										$option=@{"TieringPolicy"="auto"}
+									}
+								}
                             }else{
                                 $SpaceReserve=$PrimaryVolSpaceGuarantee
                                 $option=@{}
@@ -7422,10 +7468,10 @@ Try {
             $PrimaryAttempts=$PrimaryDNS.Attempts
             $SecondaryDNS=Get-NcNetDns -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetDns failed [$ErrorVar]" }
-            if ( $SecondaryDNS -eq $null ) {
-                if($Run_Mode -eq "ConfigureDR" -or $Run_Mode -eq "Migrate"){
+            if ( $null -eq $SecondaryDNS ) {
+                if($Global:Run_Mode -eq "ConfigureDR" -or $Global:Run_Mode -eq "Migrate"){
                     Write-LogDebug "New-NcNetDns -Domains $PrimaryDomains -NameServers $PrimaryNameServers -State $PrimaryDnsState -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                    $out=New-NcNetDns -Domains $PrimaryDomains -NameServers $PrimaryNameServers -State $PrimaryDnsState -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                    $out=New-NcNetDns -Domains $PrimaryDomains -NameServers $PrimaryNameServers -State $PrimaryDnsState -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ErrorAction SilentlyContinue
                     if ( $? -ne $True ) {
                         if($ErrorVar[0].ToString() -match "skip-config-validation"){
 

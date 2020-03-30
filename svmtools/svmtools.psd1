@@ -6,7 +6,7 @@
 # Generated on: 2018-06-07
 #
 # Update by : Olivier MASSON
-# Updated on : 2020-03-17
+# Updated on : 2020-03-30
 #
 # Version Control :
 #   1.0.4 : Initial version
@@ -60,13 +60,14 @@
 #   1.2.10: Correct Firewall Policy sync during UpdateDR
 #   1.3.0 : Change some behaviour around NonInteractive mode
 #           Fix update_cifs_usergroup
+#   1.3.1 : Add TieringPolicy option to allows to choose TieringPolicy (when available) that will be set on DR volumes
 @{
 
     # Script module or binary module file associated with this manifest.
     RootModule        = '.\svmtools.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.3.0'
+    ModuleVersion     = '1.3.1'
 
     # Supported PSEditions
     # CompatiblePSEditions = @()
