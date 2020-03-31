@@ -242,7 +242,7 @@
     Optional argument to set the level of logging for logging to file
     Values are Debug,Info,Warn,Error,Fatal,Off
 .PARAMETER SnapmirrorType
-    Optional argument to force (is possible, lees then 9.6) snapmirror relationships to be created as DP instead of XDP
+    Optional argument to force (is possible, less then 9.6) snapmirror relationships to be created as DP instead of XDP
     Used with ConfigureDr, UpdateDr, ClondeDr, UpdateReverse, Migrate, Backup and Restore
     NB: Note that since ONTAP 9.6 all DP relationships are automaticaly transformed as XDP relationships
 .PARAMETER DefaultLocalUserCredentials
@@ -500,6 +500,7 @@
 		- 0.3.4 :   Add TieringPolicy option to force Tiering Policy for FabricPool's created volume on destination
 					without this option, TieringPolicy of source volumes is used on destination.
 					And if there is no TieringPolicy on source volumes, then TieringPolicy auto is used on destination
+        - 0.3.5 :   Fix UpdateDR when CIFS server does not already exists on DR
 #>
 [CmdletBinding(HelpURI = "https://github.com/oliviermasson/svmtool", DefaultParameterSetName = "ListInstance")]
 Param (
@@ -1018,7 +1019,7 @@ $Global:MIN_MINOR = 5
 $Global:MIN_BUILD = 0
 $Global:MIN_REVISION = 0
 #############################################################################################
-$Global:RELEASE = "0.3.4"
+$Global:RELEASE = "0.3.5"
 $Global:SCRIPT_RELEASE = "0.1.17"
 $Global:BASEDIR = 'C:\Scripts\SVMTOOL'
 $Global:SVMTOOL_DB_DEFAULT = $Global:BASEDIR
@@ -1057,14 +1058,14 @@ $Global:NumberOfLogicalProcessor = (Get-WmiObject Win32_Processor).NumberOfLogic
 if ($Global:NumberOfLogicalProcessor -lt 4) {
     $Global:NumberOfLogicalProcessor = 4
 }
-$Global:maxJobs = 100
+#$Global:maxJobs = 100
 $Global:XDPPolicy = $XDPPolicy
 $Global:MirrorSchedule = $MirrorSchedule
 $Global:DefaultPass = $DefaultPass
 $Global:Schedule = $Schedule
 $Global:SnapmirrorType = $SnapmirrorType
 
-if ( ( $Instance -eq $null ) -or ( $Instance -eq "" ) ) {
+if ( ( $null -eq $Instance ) -or ( $Instance -eq "" ) ) {
     if ($Backup.Length -eq 0 -and $Restore.Length -eq 0 -and $RestoreObject.Length -eq 0) {
         $Global:CONFDIR = $Global:CONFBASEDIR + 'default\'
     }

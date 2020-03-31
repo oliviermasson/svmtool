@@ -5,7 +5,7 @@
     This module contains several functions to manage SVMDR, Backup and Restore Configuration...
 .NOTES
     Authors  : Olivier Masson, Jerome Blanchet, Mirko Van Colen
-    Release  : March 30th, 2020
+    Release  : March 31th, 2020
 
 #>
 
@@ -7961,7 +7961,7 @@ Function check_update_CIFS_server_dr (
         if($Restore -ne $True){
             $PrimaryCifsServerInfos = Get-NcCifsServer  -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsServer failed [$ErrorVar]" }
-            if ( $PrimaryCifsServerInfos -eq $null ) {
+            if ( $null -eq $PrimaryCifsServerInfos ) {
                 Write-LogDebug "[$workOn] No CIFS Server in Vserver [$myPrimaryVserver]:[$myPrimaryController]"
                 $cifsServerSource=$False
                 if($Backup -eq $True){$Global:NEED_CIFS_SERVER=$False;return $False}
@@ -7970,17 +7970,17 @@ Function check_update_CIFS_server_dr (
         if($Backup -ne $True){
             $SecondaryCifsServerInfos = Get-NcCifsServer -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsServer failed [$ErrorVar]" }
-            if ( $SecondaryCifsServerInfos -eq $null ) {
+            if ( $null -eq $SecondaryCifsServerInfos ) {
                 if($cifsServerSource -eq $True){
                     Write-LogWarn "[$workOn] No CIFS Server in Vserver [$mySecondaryVserver]:[$mySecondaryController]"
                     Write-LogWarn "[$workOn] You need make sure the ConfigureDR runs successfully first."
                 }
                 $cifsServerDest=$False
-                if($Restore -eq $True){$Global:NEED_CIFS_SERVER=$False;return $False}
+                if($Restore -eq $True){Write-LogDebug "mode Restore. No need CIFS on dest";$Global:NEED_CIFS_SERVER=$False;return $False}
             }
             else{
                 $cifsServerDest=$True
-                if($Restore -eq $True){$Global:NEED_CIFS_SERVER=$True;return $True}
+                if($Restore -eq $True){Write-LogDebug "mode Restore. Need CIFS on dest";$Global:NEED_CIFS_SERVER=$True;return $True}
             }
 
         }else{
@@ -7989,16 +7989,19 @@ Function check_update_CIFS_server_dr (
 
         if($cifsServerSource -eq $False){
             $Global:NEED_CIFS_SERVER=$False
+            Write-LogDebug "No CIFS on source. No need CIFS on dest"
             return $False
         }
         if($cifsServerSource -ne $cifsServerDest)
         {
-            $Global:NEED_CIFS_SERVER=$False
-            return $False
-        }else{
             $Global:NEED_CIFS_SERVER=$True
+            Write-LogDebug "source [$cifsServerSource] dest [$cifsServerDest]. NEED_CIFS_SERVER=True"
             return $True
-        }
+        }<# else{
+            $Global:NEED_CIFS_SERVER=$True
+            Write-LogDebug "source [$cifsServerSource] dest [$cifsServerDest]. NEED_CIFS_SERVER=True"
+            return $True
+        } #>
     }
     Catch {
         handle_error $_ $myPrimaryVserver
@@ -11711,6 +11714,7 @@ try{
         return $True
     } #>
     if($Global:NEED_CIFS_SERVER -eq $False){
+        Write-LogDebug "Global:NEED_CIFS_SERVER = [False]"
         Write-LogDebug "update_cifs_usergroup: end"
         return $Return  
     }
@@ -11823,6 +11827,11 @@ try{
         Write-LogDebug "Get-NcCifsServer -VserverContext $mySecondaryVserver -controller $mySecondaryController"
         $SecondaryCifs=Get-NcCifsServer -VserverContext $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsServer failed [$ErrorVar]" }
+        if($null -eq $SecondaryCifs){
+            Write-LogWarn "You must first create your CIFS server on Secondary through ConfigureDR, before running other steps"
+            Write-LogDebug "update_cifs_usergroup: end"
+            return $False
+        }
         $SecondaryCifsServer=$SecondaryCifs.CifsServer
         # Pre Remove LocalUser only if we have a DefaultLocalUserCredential
         <# if(($null -ne $Global:DefaultLocalUserCredentials) -or ($Global:DefaultLocalUserCredentials.length -gt 0)){
@@ -11890,7 +11899,9 @@ try{
                     write-logdebug "Get-NcCifsLocalUser -VserverContext $mySecondaryVserver -controller $mySecondaryController"
                     $SecondaryBuiltin=Get-NcCifsLocalUser -VserverContext $mySecondaryVserver -controller $mySecondaryController -ErrorVariable ErrorVar | Where-Object {$_.Description -match "Built-in"}
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsLocalUser failed [$ErrorVar]" }
-                    $UserName=$SecondaryBuiltin.UserName
+                    if($null -ne $SecondaryBuiltin){
+                        $UserName=$SecondaryBuiltin.UserName
+                    }
                     Write-LogDebug "Work on [$UserName] from Secondary "
                     do{
                         $modok=$True

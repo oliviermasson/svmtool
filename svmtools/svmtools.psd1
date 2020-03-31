@@ -6,7 +6,7 @@
 # Generated on: 2018-06-07
 #
 # Update by : Olivier MASSON
-# Updated on : 2020-03-30
+# Updated on : 2020-03-31
 #
 # Version Control :
 #   1.0.4 : Initial version
@@ -61,6 +61,7 @@
 #   1.3.0 : Change some behaviour around NonInteractive mode
 #           Fix update_cifs_usergroup
 #   1.3.1 : Add TieringPolicy option to allows to choose TieringPolicy (when available) that will be set on DR volumes
+#   1.3.2 : Fix UpdateDR when CIFS server does not already exist on Secondary
 @{
 
     # Script module or binary module file associated with this manifest.
