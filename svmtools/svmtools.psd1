@@ -6,7 +6,7 @@
 # Generated on: 2018-06-07
 #
 # Update by : Olivier MASSON
-# Updated on : 2020-03-31
+# Updated on : 2020-04-06
 #
 # Version Control :
 #   1.0.4 : Initial version
@@ -62,13 +62,21 @@
 #           Fix update_cifs_usergroup
 #   1.3.1 : Add TieringPolicy option to allows to choose TieringPolicy (when available) that will be set on DR volumes
 #   1.3.2 : Fix UpdateDR when CIFS server does not already exist on Secondary
+#   1.3.3 : Change behaviour with settings CIFS parameters when distant AD is not available
+#           Change behaviour with settings CIFS parameters with requested AD credential
+#           Add CredName to Show-SvmdrConfiguration/ListInstance in RestPassword mode, to allows reset password only for this credential
+#           Add argument ActiveDirectoryCredential to UpdateDR
+#           Change behaviour when ActiveDirectoryCredential is used. Now, this credential will be used instead of the one previously saved by svmtool
+#           Fix subfolder for Backup and Restore. When you choose a backup folder, svmtool automaticaly add a subfolder with the name of the cluster backed up
+#           Change output display during MirrorSchedule/Set-SvmDrSchedule
+#           Fix management of Temporary Secondary CIFS Lif
 @{
 
     # Script module or binary module file associated with this manifest.
     RootModule        = '.\svmtools.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.3.1'
+    ModuleVersion     = '1.3.3'
 
     # Supported PSEditions
     # CompatiblePSEditions = @()

@@ -26,6 +26,8 @@
     Allow to set a SnapMirror automatic update schedule for DR to Source relationship 
 .PARAMETER ListInstance
 	Display all Instance available and configured
+.PARAMETER CredName
+    Provide a Credential name that will have its password reseted through ListInstance -ResetPassword -CredName <Credential Name>
 .PARAMETER ImportInstance
 	Import previous generation SVMDR script's instances
 .PARAMETER RemoveInstance
@@ -243,7 +245,7 @@
     Values are Debug,Info,Warn,Error,Fatal,Off
 .PARAMETER SnapmirrorType
     Optional argument to force (is possible, less then 9.6) snapmirror relationships to be created as DP instead of XDP
-    Used with ConfigureDr, UpdateDr, ClondeDr, UpdateReverse, Migrate, Backup and Restore
+    Used with ConfigureDr, UpdateDr, CloneDr, UpdateReverse, Migrate, Backup and Restore
     NB: Note that since ONTAP 9.6 all DP relationships are automaticaly transformed as XDP relationships
 .PARAMETER DefaultLocalUserCredentials
     Optional argument to pass the credentials for local user create/update
@@ -447,7 +449,7 @@
 .NOTES
     Author  : Olivier Masson
     Author  : Mirko Van Colen
-    Version : March 30th, 2020
+    Version : April 6th, 2020
     Version History : 
         - 0.0.3 : 	Initial version 
         - 0.0.4 : 	Bugfix, typos and added ParameterSets
@@ -501,6 +503,15 @@
 					without this option, TieringPolicy of source volumes is used on destination.
 					And if there is no TieringPolicy on source volumes, then TieringPolicy auto is used on destination
         - 0.3.5 :   Fix UpdateDR when CIFS server does not already exists on DR
+        - 0.3.6 :   Change behaviour with settings CIFS parameters when distant AD is not available
+                    Change behaviour with settings CIFS parameters with requested AD credential
+                    Add CredName to Show-SvmdrConfiguration/ListInstance in RestPassword mode, to allows reset password only for this credential
+                    Add argument ActiveDirectoryCredential to UpdateDR
+                    Change behaviour when ActiveDirectoryCredential is used. Now, this credential will be used instead of the one previously saved by svmtool
+                    Fix subfolder for Backup and Restore. When you choose a backup folder, svmtool automaticaly add a subfolder with the name of the cluster backed up
+                    Add Remove-SvmdrInstance wrapper for RemoveInstance operation
+                    Change output display during MirrorSchedule/Set-SvmDrSchedule
+                    Fix management of Temporary Secondary CIFS Lif
 #>
 [CmdletBinding(HelpURI = "https://github.com/oliviermasson/svmtool", DefaultParameterSetName = "ListInstance")]
 Param (
@@ -787,6 +798,9 @@ Param (
     [Parameter(Mandatory = $false, ParameterSetName = 'ListInstance')]
     [switch]$ResetPassword,
 
+    [Parameter(Mandatory = $false, ParameterSetName = 'ListInstance')]
+    [string]$CredName=$null,
+
     [Parameter(Mandatory = $false, ParameterSetName = 'ReActivate')]
     [Parameter(Mandatory = $false, ParameterSetName = 'Resync')]
     [Parameter(Mandatory = $false, ParameterSetName = 'ResyncReverse')]
@@ -874,6 +888,7 @@ Param (
     [Parameter(Mandatory = $false, ParameterSetName = 'CloneDR')]
     [Parameter(Mandatory = $false, ParameterSetName = 'SplitCloneDR')]
     [Parameter(Mandatory = $false, ParameterSetName = 'DeleteCloneDR')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'RemoveInstance')]
     [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
     [string]$LogLevelConsole = "Info",
 
@@ -904,6 +919,7 @@ Param (
     [Parameter(Mandatory = $false, ParameterSetName = 'CloneDR')]
     [Parameter(Mandatory = $false, ParameterSetName = 'SplitCloneDR')]
     [Parameter(Mandatory = $false, ParameterSetName = 'DeleteCloneDR')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'RemoveInstance')]
     [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
     [string]$LogLevelLogFile = "Info",
 
@@ -975,7 +991,8 @@ Param (
 
     [Parameter(Mandatory = $false, ParameterSetName = 'ConfigureDR')]
     [Parameter(Mandatory = $false, ParameterSetName = 'CloneDR')]
-    [Parameter(Mandatory = $false, ParameterSetName = 'Restore')]    
+    [Parameter(Mandatory = $false, ParameterSetName = 'Restore')] 
+    [Parameter(Mandatory = $false, ParameterSetName = 'UpdateDR')] 
     [pscredential]$ActiveDirectoryCredentials = $null,
 	
     [Parameter(Mandatory = $false, ParameterSetName = 'ConfigureDR')]
@@ -1020,7 +1037,7 @@ $Global:MIN_BUILD = 0
 $Global:MIN_REVISION = 0
 #############################################################################################
 $Global:RELEASE = "0.3.5"
-$Global:SCRIPT_RELEASE = "0.1.17"
+$Global:SCRIPT_RELEASE = "0.1.18"
 $Global:BASEDIR = 'C:\Scripts\SVMTOOL'
 $Global:SVMTOOL_DB_DEFAULT = $Global:BASEDIR
 $Global:CONFBASEDIR = $BASEDIR + '\etc\'
@@ -1242,11 +1259,11 @@ if ( $Version ) {
     Clean_and_exit 0 
 }
 Write-LogDebug "BASEDIR           [$BASEDIR]"
-Write-LogDebug "CONFDIR           [$CONFDIR]"
+Write-LogDebug "CONFDIR           [$Global:CONFDIR]"
 Write-LogDebug "LOGDIR            [$LOGDIR]"
 Write-LogDebug "LOGFILE           [$LOGFILE]"
 Write-LogDebug "CRED_CONFDIR      [$CRED_CONFDIR]"
-Write-LogDebug "CONFFILE          [$CONFFILE]"
+Write-LogDebug "CONFFILE          [$Global:CONFFILE]"
 Write-LogDebug "VERSION           [$RELEASE]"
 Write-LogDebug "Vserver           [$Vserver]"
 Write-LogDebug "LogLevelConsole   [$LogLevelConsole]"
@@ -1255,7 +1272,7 @@ Write-LogDebug "RW                [$RW]"
 ####################################################################################################
 
 if ( $ListInstance ) {
-    show_instance_list -ResetPassword:$ResetPassword
+    show_instance_list -ResetPassword:$ResetPassword -CredName $CredName
     clean_and_exit 0
 }
 ####################################################################################################
@@ -1296,11 +1313,11 @@ if ( $Setup ) {
 if ( $Backup ) {
     $Global:Run_Mode = "Backup"
     Write-Log "SVMTOOL Run Backup"
-    if ((Test-Path $CONFFILE) -eq $True ) {
-        Write-Log "use Config File [$CONFFILE]"s
-        $read_conf = read_config_file $CONFFILE ;
+    if ((Test-Path $Global:CONFFILE) -eq $True ) {
+        Write-Log "use Config File [$Global:CONFFILE]"s
+        $read_conf = read_config_file $Global:CONFFILE ;
         if ( $read_conf -eq $null ) {
-            Write-LogError "ERROR: read configuration file $CONFFILE failed"
+            Write-LogError "ERROR: read configuration file $Global:CONFFILE failed"
             clean_and_exit 1 ;
         }
         $SVMTOOL_DB = $read_conf.Get_Item("SVMTOOL_DB")
@@ -1311,21 +1328,27 @@ if ( $Backup ) {
             }
         }
     }
-    if ($RecreateConf -eq $True -or (Test-Path $CONFFILE) -eq $False) {
-        Write-Log "Create new Config File"
+    if ($RecreateConf -eq $True -or (Test-Path $Global:CONFFILE) -eq $False) {
+        Write-Log "[$Backup] Create new Config File"
         $ANS = 'n'
         while ( $ANS -ne 'y' ) {
             $SVMTOOL_DB = Read-HostDefault -question  "Please enter Backup directory where configuration will be backup" -default $Global:SVMTOOL_DB_DEFAULT
+            if($SVMTOOL_DB -notmatch $("\\"+$Backup+"$")){
+                Write-LogDebug "Backup directory [$SVMTOOL_DB] does not contains subfolder with Cluster name [$Backup]"
+                $SVMTOOL_DB+=$("\"+$Backup)
+            }else{
+                Write-LogDebug "Backup directory [$SVMTOOL_DB] already contains subfolder with Cluster name [$Backup]"    
+            }
             Write-Log "SVMTOOL Backup directory:  [$SVMTOOL_DB]"
             Write-Log ""
             $ANS = Read-HostOptions -question "Apply new configuration ?" -options "y/n/q" -default "y"
             if ( $ANS -eq 'q' ) {
                 clean_and_exit 1 
             }
-            Write-Output "#" | Out-File -FilePath $CONFFILE  
-            Write-Output "SVMTOOL_DB=$SVMTOOL_DB\$Backup" | Out-File -FilePath $CONFFILE -Append 
-            Write-Output "INSTANCE_MODE=BACKUP_RESTORE" | Out-File -FilePath $CONFFILE -Append
-            Write-Output "BACKUP_CLUSTER=$Backup" | Out-File -FilePath $CONFFILE -Append  
+            Write-Output "#" | Out-File -FilePath $Global:CONFFILE  
+            Write-Output "SVMTOOL_DB=$SVMTOOL_DB" | Out-File -FilePath $Global:CONFFILE -Append 
+            Write-Output "INSTANCE_MODE=BACKUP_RESTORE" | Out-File -FilePath $Global:CONFFILE -Append
+            Write-Output "BACKUP_CLUSTER=$Backup" | Out-File -FilePath $Global:CONFFILE -Append  
         }
     }
     elseif ($SVMTOOL_DB.Length -gt 0) {
@@ -1580,10 +1603,10 @@ if ( $Restore ) {
         $Global:RESTORE_ORIGINAL = $False	
     }
     Write-LogOnly "SVMTOOL Run Restore"
-    if ((Test-Path $CONFFILE) -eq $True ) {
-        $read_conf = read_config_file $CONFFILE
+    if ((Test-Path $Global:CONFFILE) -eq $True ) {
+        $read_conf = read_config_file $Global:CONFFILE
         if ( $read_conf -eq $null ) {
-            Write-LogError "ERROR: read configuration file $CONFFILE failed"
+            Write-LogError "ERROR: read configuration file $Global:CONFFILE failed"
             clean_and_exit 1
         }
         $SVMTOOL_DB = $read_conf.Get_Item("SVMTOOL_DB")
@@ -1592,7 +1615,7 @@ if ( $Restore ) {
         Write-Log "Restore from Cluster [$Restore] from Backup Folder [$SVMTOOL_DB]"
     }
     else {
-        Write-Error "ERROR: No Backup Folder configured, check configuration file [$CONFFILE] for item [SVMTOOL_DB]"
+        Write-Error "ERROR: No Backup Folder configured, check configuration file [$Global:CONFFILE] for item [SVMTOOL_DB]"
         clean_and_exit 1
     }
     $RESTOREALLSVM = $False
@@ -1911,10 +1934,10 @@ if ( $RestoreObject ){
     else {
         $Global:RESTORE_ORIGINAL = $False	
     }
-    if ((Test-Path $CONFFILE) -eq $True ) {
-        $read_conf = read_config_file $CONFFILE
+    if ((Test-Path $Global:CONFFILE) -eq $True ) {
+        $read_conf = read_config_file $Global:CONFFILE
         if ( $read_conf -eq $null ) {
-            Write-LogError "ERROR: read configuration file $CONFFILE failed"
+            Write-LogError "ERROR: read configuration file $Global:CONFFILE failed"
             clean_and_exit 1
         }
         $SVMTOOL_DB = $read_conf.Get_Item("SVMTOOL_DB")
@@ -1923,7 +1946,7 @@ if ( $RestoreObject ){
         Write-Log "Restore from Cluster [$RESTORE_SRC_CLUSTER] from Backup Folder [$SVMTOOL_DB]"
     }
     else {
-        Write-Error "ERROR: No Backup Folder configured, check configuration file [$CONFFILE] for item [SVMTOOL_DB]"
+        Write-Error "ERROR: No Backup Folder configured, check configuration file [$Global:CONFFILE] for item [SVMTOOL_DB]"
         clean_and_exit 1
     }
     if ((Test-Path $SVMTOOL_DB) -eq $null) {
@@ -2016,32 +2039,32 @@ if ( $RestoreObject ){
 }
 ####################################################################################################
 
-if ( ( Test-Path $CONFFILE ) -eq $False ) {
+if ( ( Test-Path $Global:CONFFILE ) -eq $False ) {
     Write-LogError "ERROR: instance [$instance] not found please run setup option" 
     clean_and_exit 1
 }
 
 if ( ( $null -eq $Vserver ) -or ( $Vserver -eq "" ) ) { 
     Write-LogError "ERROR: Missing an argument for parameter 'Vserver'" 
-    Write-LogError "ERROR: Please run get-help svmtools.pS1 for more information" 
+    Write-LogError "ERROR: Please run get-help .\svmtools.ps1 for more information" 
     Clean_and_exit 1 
 }
 
 # Read configuration file
-$read_conf = read_config_file $CONFFILE ;
+$read_conf = read_config_file $Global:CONFFILE ;
 if ( $null -eq $read_conf ) {
-    Write-LogError "ERROR: read configuration file $CONFFILE failed" 
+    Write-LogError "ERROR: read configuration file $Global:CONFFILE failed" 
     clean_and_exit 1 ;
 }
 
 $PRIMARY_CLUSTER = $read_conf.Get_Item("PRIMARY_CLUSTER") ;
 if ( $PRIMARY_CLUSTER -eq $Null ) {
-    Write-LogError "ERROR: unable to find PRIMARY_CLUSTER in $CONFFILE"
+    Write-LogError "ERROR: unable to find PRIMARY_CLUSTER in $Global:CONFFILE"
     clean_and_exit 1 ;
 }
 $SECONDARY_CLUSTER = $read_conf.Get_Item("SECONDARY_CLUSTER") ;
 if ( $SECONDARY_CLUSTER -eq $Null ) {
-    Write-LogError "ERROR: unable to find SECONDARY_CLUSTER in $CONFFILE"
+    Write-LogError "ERROR: unable to find SECONDARY_CLUSTER in $Global:CONFFILE"
     clean_and_exit 1 ;
 }
 
@@ -2051,7 +2074,7 @@ if ($PRIMARY_CLUSTER -eq $SECONDARY_CLUSTER) {
 }
 
 # Read Vserver configuration file
-$VCONFFILE = $CONFDIR + $Vserver + '.conf'
+$VCONFFILE = $Global:CONFDIR + $Vserver + '.conf'
 if ($RemoveDRconf) {
     $Global:Run_Mode = "RemoveDRconf"
     Write-LogOnly "SVMTOOL RemoveDRconf"
@@ -2841,6 +2864,7 @@ if ( $ActivateDR ) {
         $ForceActivate = $True
         Write-Warning "[$PRIMARY_CLUSTER] is not alive"
     }
+    #$ForceActivate = $True
     if ( ( $ret = activate_vserver_dr -currentActiveController $PRIMARY_CLUSTER -currentPassiveController $SECONDARY_CLUSTER -currentActiveVserver $Vserver -currentPassiveVserver $VserverDR -ForceActivate $ForceActivate) -ne $True ) {
         Write-LogError "ERROR: activate_vserver_dr failed"
         clean_and_exit 1

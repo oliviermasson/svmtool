@@ -561,6 +561,11 @@ function Show-SvmDrConfiguration {
         # If WfaIntegration is enabled, passwords will come from WFA server
         [switch]$ResetPassword,
 
+        # Optional Credential Name
+        # If provided, only this credential will be reseted
+        [Parameter(Mandatory = $true)]
+        [string]$CredName=$null,
+
         # Loglevel of the console output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
         [string]$LogLevelConsole = "Info",
@@ -853,6 +858,10 @@ function Update-SvmDr {
         # In Non-Interactive Mode, the script cannot create missing users
         # If you pass this parameter, the password will used to create missing users
         [pscredential]$DefaultLocalUserCredentials,
+
+        # Optional, when running in Non-Interactive mode, this script cannot prompt for AD credentials
+        # Use this parameter to join the dr vserver in AD without interaction
+        [pscredential]$ActiveDirectoryCredentials,
 
         # Optional, when the vserver dr is created, all lifs are taken offline (duplicate ip conflicts)
         # Hence if the vserver needs to be joined in AD, there is no lif available
@@ -1510,6 +1519,44 @@ function Remove-SvmDrConfiguration {
     $ParameterList = (Get-Command -Name $CommandName).Parameters;
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "RemoveDRConf"
+}
+<#
+.Synopsis
+    Removes Instance configuration between two Clusters
+.DESCRIPTION
+	Completely remove an Instance between two Clusters
+
+.EXAMPLE
+
+    Remove-SvmDrInstance -Instance SOURCE-DEST
+
+    Do you really want to remove this configuration instance [test] [y/n] : y
+    [test] Removed
+
+#>
+function Remove-SvmDrInstance {
+    [CmdletBinding()]
+    param(
+        # The name of the Instance to remove
+        [Parameter(Mandatory = $true)]
+        [string]$Instance,
+
+        # Loglevel of the console output
+        [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
+        [string]$LogLevelConsole = "Info",
+
+        # Loglevel of the logfile output
+        [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
+        [string]$LogLevelLogFile = "Info",
+
+        # Enables OnCommand Workflow Automation (WFA) Integration
+        [switch]$WfaIntegration
+    )
+
+    $CommandName = $PSCmdlet.MyInvocation.InvocationName;
+    $ParameterList = (Get-Command -Name $CommandName).Parameters;
+
+    invokeSvmtool -ParameterList ([ref]$ParameterList) -Add "-RemoveInstance $Instance" -Drop "Instance"
 }
 <#
 .Synopsis
@@ -2606,7 +2653,7 @@ function Restore-SvmDr {
         [string]$Destination,
 
         # Optional, the vserver to be restored
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory = $false)]
         [string]$Vserver,
 
         # Enables the volumes to be restored as type RW (instead of DP)
