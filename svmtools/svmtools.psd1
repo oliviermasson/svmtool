@@ -70,13 +70,14 @@
 #           Fix subfolder for Backup and Restore. When you choose a backup folder, svmtool automaticaly add a subfolder with the name of the cluster backed up
 #           Change output display during MirrorSchedule/Set-SvmDrSchedule
 #           Fix management of Temporary Secondary CIFS Lif
+#   1.3.4 : Some improvements to implement RestoreObject NonInteractively (when restoring LIF)
 @{
 
     # Script module or binary module file associated with this manifest.
     RootModule        = '.\svmtools.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.3.3'
+    ModuleVersion     = '1.3.4'
 
     # Supported PSEditions
     # CompatiblePSEditions = @()

@@ -20,8 +20,10 @@ function invokeSvmtool{
                     "String" {
                         $strings += Get-Variable -Name $v.Name -ErrorAction SilentlyContinue;
                     }
+                    # "String[]" {
+                    #     $strings += $PSCmdlet.MyInvocation.BoundParameters.($v.Name)
+                    # }
                     "Regex" {
-                    
                         $regexs += Get-Variable -Name $v.Name -ErrorAction SilentlyContinue;
                     }
                     "SwitchParameter"{
@@ -52,7 +54,7 @@ function invokeSvmtool{
             $i++
         }
     }
-    $args += $others | ?{$_.Value} | %{("-{0} {1}" -f $_.name,$_.value)}
+    $args += $others | ?{$_.Value} | %{("-{0} {1}" -f $_.name,($_.value -join ","))}
     $arguments = ($args -join " ")
     if($Add){
         $arguments = $Add + " " + $arguments
@@ -562,8 +564,8 @@ function Show-SvmDrConfiguration {
         [switch]$ResetPassword,
 
         # Optional Credential Name
-        # If provided, only this credential will be reseted
-        [Parameter(Mandatory = $true)]
+        # If provided, only this credential will be reseted if associated with ResetPassword switch parameter
+        [Parameter(Mandatory = $false)]
         [string]$CredName=$null,
 
         # Loglevel of the console output
@@ -2621,6 +2623,129 @@ function Remove-SvmDrClone {
 
 <#
 .Synopsis
+    Restores Vserver particular Objects configuration from previously created Json-files from a Backup
+.DESCRIPTION
+	Restores Cluster and Vserver information from previously created Json-files
+    The vserver is optional, if not provided all vservers will be restored
+.NOTES
+    
+RestoreObject can be used to restore on source a list of mandatory CIFS shares, volumes or Lifs
+    But it can also beeing used to replicate a configuration (Volumes list, Cifs Shares, etc) to a newly deployed SVM on another Cluster
+
+
+.EXAMPLE 
+
+    Restore-ObjectSvmDr -Cluster r2d2 -Vserver PSLAB -Objects Shares -Destination c3po -Vserver cifs
+
+#>
+function Restore-ObjectSvmDr {
+    [CmdletBinding()]
+    param(
+        # The name of the cluster to restore
+        [Parameter(Mandatory = $true)]
+        [string]$Cluster,
+
+        # Optional, the vserver to be restored
+        [Parameter(Mandatory = $True)]
+        [string]$Vserver,
+
+        # Object to restore
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("Lifs", "Volumes", "Exports", "Shares", "Quotas", "Users")]
+        [string[]]$Objects=@(""),
+
+        # The name of the destination cluster, if not provided, will restore on source cluster
+        [Parameter(Mandatory = $false)]
+        [string]$DestinationCluster,
+
+        # The name of the destination vserver, if not provided, will restore on source vserver
+        [Parameter(Mandatory = $false)]
+        [string]$DestinationVserver,
+
+        # When restoring volumes allow to choose hosting aggregate for each volume
+        [Parameter(Mandatory = $false)]
+        [switch]$AlwaysChooseDataAggr,
+        
+        # Enables the volumes to be restored as type RW (instead of DP)
+        # Use this if you don't plan on using snapmirror technology to restore the data 
+        # (host based copy for example)
+        [switch]$RW,
+
+        # Enables interactive choice of backup date
+        # Does not work in Non-Interactive mode
+        # If ommited, the last backup is used.
+        [switch]$SelectBackupDate,
+
+        # Optional, makes an aggregate suggestion for the rootvolume
+        [string]$RootAggr,
+
+        # Optional, makes an aggregate suggestion for the datavolumes
+        [string]$DataAggr,
+
+        # Optional, A regular expression to map source aggregate to destination aggregate
+        # Use regex-groups (wrap in brackets) to create wildcards
+        #   - 1 on 1 match : ".*" => (src = * ; dst = src)
+        #   - string replace : "ep(.*)snas[0-9]*_aggr[0-9]*" => (src = ep*snas54_aggr1 ; dst = ep*snas54_aggr1)
+        #   - node number match : "(.*)-[0-9]{2}" => (src = *-03 ; dst = *-03)
+        [regex]$AggrMatchRegex,
+
+        # Optional, A regular expression to map source node to destination node (for lif-port selection)
+        # Use regex-groups (wrap in brackets) to create wildcards
+        #   - node number match : "(.*)-[0-9]{2}" => (src = *-03 ; dst = *-03)
+        [regex]$NodeMatchRegex,
+
+        # Optional, this SvmDr solution cannot transfer the passwords of local users (cifs, cluster)
+        # In Non-Interactive Mode, the script cannot create missing users
+        # If you pass this parameter, the password will used to create missing users
+        [pscredential]$DefaultLocalUserCredentials,
+
+        # Optional, this SvmDr solution cannot transfer the passwords for LDAP Binding
+        # In Non-Interactive Mode, the script cannot bind to new LDAP server
+        # If you pass this parameter, the password will be used to Bind LDAP server
+        [pscredential]$DefaultLDAPCredentials,
+
+        # Optional, when running in Non-Interactive mode, this script cannot prompt for AD credentials
+        # Use this parameter to join the dr vserver in AD without interaction
+        [pscredential]$ActiveDirectoryCredentials,
+
+        <# # Optional, when the vserver dr is created, all lifs are taken offline (duplicate ip conflicts)
+        # Hence if the vserver needs to be joined in AD, there is no lif available
+        # By passing an temporary ip-address and in combination with parameter "SecondaryCifsLifMaster"
+        # A temporary lif will be created to join the vserver dr in AD
+        [string]$TemporarySecondaryCifsIp,
+
+        # Optional, when the vserver dr is created, all lifs are taken offline (duplicate ip conflicts)
+        # Hence if the vserver needs to be joined in AD, there is no lif available
+        # So we will clone the lif that is passed in this parameter (using same port and options)
+        # Use this in combination with parameter "TemporarySecondaryCifsIp"
+        # A temporary lif will be created to join the vserver dr in AD
+        [string]$SecondaryCifsLifMaster, #>
+
+        # Loglevel of the console output
+        [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
+        [string]$LogLevelConsole = "Info",
+
+        # Loglevel of the logfile output
+        [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
+        [string]$LogLevelLogFile = "Info",
+
+        # Enables OnCommand Workflow Automation (WFA) Integration
+        [switch]$WfaIntegration,
+
+        # Enables HTTP mode (default HTTPS)
+        [switch]$HTTP,
+        [Int32]$Timeout = 60
+    )
+
+
+    $CommandName = $PSCmdlet.MyInvocation.InvocationName;
+    $ParameterList = (Get-Command -Name $CommandName).Parameters;
+
+    invokeSvmtool -ParameterList ([ref]$ParameterList) -Add "-RestoreObject $Cluster" -Drop "Cluster"
+}
+
+<#
+.Synopsis
     Restores Cluster and Vserver information from previously created Json-files
 .DESCRIPTION
 	Restores Cluster and Vserver information from previously created Json-files
@@ -2733,6 +2858,7 @@ function Restore-SvmDr {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Add "-Restore $Cluster" -Drop "Cluster"
 }
+
 <#
 .Synopsis
     Imports instances from previous generations

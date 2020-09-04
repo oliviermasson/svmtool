@@ -1,2 +1,5 @@
 .vscode/
 *.docx
+Get-NcCifsShareAcl.json
+Get-NcCifsShare.json
+Get-NcCifsHomeDirectorySearchPath.json

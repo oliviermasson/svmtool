@@ -111,7 +111,7 @@
     [-DestinationSVM] : Name of destination SVM where to restore object
                         If not specified, restore to source SVM
     -Object : List of available object for restore operation
-              Lif, Volumes, Exports, Shares, Quotas
+              Lif, Volumes, Exports, Shares, Quotas, Users
     [-SelectBackupDate] : Ask script to display all dates available and prompt user to choose a date to restore. 
                           By default select last data available in backup folder
     [-RW] : When restoring volumes, chose to restore them as Read/Write volumes
@@ -244,9 +244,8 @@
     Optional argument to set the level of logging for logging to file
     Values are Debug,Info,Warn,Error,Fatal,Off
 .PARAMETER SnapmirrorType
-    Optional argument to force (is possible, less then 9.6) snapmirror relationships to be created as DP instead of XDP
+    Optional argument to force (if possible, less then 9.6) snapmirror relationships to be created as DP instead of XDP
     Used with ConfigureDr, UpdateDr, CloneDr, UpdateReverse, Migrate, Backup and Restore
-    NB: Note that since ONTAP 9.6 all DP relationships are automaticaly transformed as XDP relationships
 .PARAMETER DefaultLocalUserCredentials
     Optional argument to pass the credentials for local user create/update
 	In NonInteractive Mode, we cannot prompt for user password.  If you want users to be created, the password from these credentials is used.
@@ -445,11 +444,27 @@
 	This $cred argument must be initialized before running this command, with the following cmdlet:
 	$cred=get-credential
 	All secondary volume will be created with a snapshot-only TieringPolicy
-	All this will be performed non-interactively
+    All this will be performed non-interactively
+.EXAMPLE
+    Restore a specific Object configuration from JSON files to one destination SVM
+    You must specify the SourceCluster & SourceSVM from which object will be restored
+    You should specify DestinationCluster & DestinationSVM to which object will be retored, by default it will restore into SourceCluster and SourceSVM
+    
+    .\svmtool.ps1 -RestoreObject <Source Cluster name> -Vserver <source SVM name> [-DestinationCluster <Dest Cluster name>] [-DestinationSVM <dest SVM name>] -Object <Exports|Lifs|Quotas|Shares|Users|Volumes> [-SelectBackupDate] [-RW]
+
+    You can choose to restore several type of objects, like :
+        . Exports : NFS exports
+        . Lifs    : Network Data LIF
+        . Quotas  : Quotas
+        . Shares  : CIFS shares
+        . Users   : CIFS users
+        . Volumes : Data Volume
+
+
 .NOTES
     Author  : Olivier Masson
     Author  : Mirko Van Colen
-    Version : April 6th, 2020
+    Version : September 4th, 2020
     Version History : 
         - 0.0.3 : 	Initial version 
         - 0.0.4 : 	Bugfix, typos and added ParameterSets
@@ -512,6 +527,8 @@
                     Add Remove-SvmdrInstance wrapper for RemoveInstance operation
                     Change output display during MirrorSchedule/Set-SvmDrSchedule
                     Fix management of Temporary Secondary CIFS Lif
+        - 0.3.7 :   Fix Restore job creation
+                    Add Restore-ObjectSvmDr wrapper for RestoreObject operation
 #>
 [CmdletBinding(HelpURI = "https://github.com/oliviermasson/svmtool", DefaultParameterSetName = "ListInstance")]
 Param (
@@ -1036,8 +1053,8 @@ $Global:MIN_MINOR = 5
 $Global:MIN_BUILD = 0
 $Global:MIN_REVISION = 0
 #############################################################################################
-$Global:RELEASE = "0.3.5"
-$Global:SCRIPT_RELEASE = "0.1.18"
+$Global:RELEASE = "0.3.7"
+$Global:SCRIPT_RELEASE = "0.1.19"
 $Global:BASEDIR = 'C:\Scripts\SVMTOOL'
 $Global:SVMTOOL_DB_DEFAULT = $Global:BASEDIR
 $Global:CONFBASEDIR = $BASEDIR + '\etc\'
@@ -1411,8 +1428,8 @@ if ( $Backup ) {
                     [Parameter(Mandatory = $True)][string]$SVMTOOL_DB,
                     [Parameter(Mandatory = $True)][String]$BackupDate,
                     [Parameter(Mandatory = $True)][String]$LOGFILE,
-                    [Parameter(Mandatory = $True)][string]$LogLevelConsole,
-                    [Parameter(Mandatory = $True)][string]$LogLevelLogFile,
+                    [Parameter(Mandatory = $False)][string]$LogLevelConsole,
+                    [Parameter(Mandatory = $False)][string]$LogLevelLogFile,
                     [boolean]$NonInteractive
                 )
                 $ConsoleThreadingRequired = $true
@@ -1434,7 +1451,8 @@ if ( $Backup ) {
                 $LOGFILE = ($dir + '\' + $myPrimaryVserver + '\' + $file)
 
                 # appenders (logfile, eventviewer & console)
-
+                if($LogLevelConsole -eq ""){$LogLevelConsole="Info"}
+                if($LogLevelLogFile -eq ""){$LogLevelLogFile="Info"}
                 $guid = ([guid]::NewGuid()).Guid
                 $masterLogFileAppender = create_rolling_log_appender -name "svmtool.log_$guid"  -file $LOGFILE -threshold $LogLevelLogFile
                 $consoleAppender = create_console_appender -name "console_$guid" -threshold $LogLevelConsole
@@ -1624,14 +1642,14 @@ if ( $Restore ) {
         $RESTOREALLSVM = $True
     }
     else {
-        Write-LogDebug "Restore SVM [$Vserver] from Backup for Cluster [$Restore]"
+        Write-Log "Restore SVM [$Vserver] from Backup for Cluster [$Restore]"
     }
     if ($Destination.length -lt 1) {
         $Destination = $Restore
-        Write-LogDebug "No Destination specified. Will restore on source Cluster [$Destination]"
+        Write-Log "No Destination specified. Will restore on source Cluster [$Destination]"
     }
     else {
-        Write-LogDebug "Will restore on new Cluster [$Destination]"	
+        Write-Log "Will restore on new Cluster [$Destination]"	
     }
     $myCred = get_local_cDotcred ($Destination)
     $tmp_str = $MyCred.UserName
@@ -1718,12 +1736,12 @@ if ( $Restore ) {
                     [Parameter(Mandatory = $False)][pscredential]$DefaultLocalUserCredentials,
                     [Parameter(Mandatory = $False)][pscredential]$ActiveDirectoryCredentials,
                     [Parameter(Mandatory = $False)][pscredential]$DefaultLDAPCredentials,
-                    [Parameter(Mandatory = $False)][string]$TemporarySecondaryCifsIp,
-                    [Parameter(Mandatory = $False)][string]$SecondaryCifsLifMaster,
-                    [Parameter(Mandatory = $False)][string]$RootAggr,
-                    [Parameter(Mandatory = $False)][string]$DataAggr,        
-                    [Parameter(Mandatory = $True)][string]$LogLevelConsole,
-                    [Parameter(Mandatory = $True)][string]$LogLevelLogFile,
+                    [Parameter(Mandatory = $False)][string]$TemporarySecondaryCifsIp="",
+                    [Parameter(Mandatory = $False)][string]$SecondaryCifsLifMaster="",
+                    [Parameter(Mandatory = $False)][string]$RootAggr="",
+                    [Parameter(Mandatory = $False)][string]$DataAggr="",        
+                    [Parameter(Mandatory = $False)][string]$LogLevelConsole="Info",
+                    [Parameter(Mandatory = $False)][string]$LogLevelLogFile="Info",
                     [Parameter(Mandatory = $True)][string]$RESTORE_ORIGINAL,
                     [boolean]$NonInteractive
                 )
@@ -1759,7 +1777,7 @@ if ( $Restore ) {
                 $LOGFILE = ($dir + '\' + $SourceVserver + '\' + $file)
 
                 # appenders (logfile, eventviewer & console)
-
+                
                 $guid = ([guid]::NewGuid()).Guid
                 $masterLogFileAppender = create_rolling_log_appender -name "svmtool.log_$guid"  -file $LOGFILE -threshold $LogLevelLogFile
                 $consoleAppender = create_console_appender -name "console_$guid" -threshold $LogLevelConsole
@@ -1857,7 +1875,7 @@ if ( $Restore ) {
         $file = Split-Path -Path $LOGFILE -Leaf
         $LOGJOB = ($dir + '\' + $svm + '\' + $file)
         $JobRestore.Log = $LOGJOB
-        if ($JobRestore.Thread.InvocationStateInfo.State -eq "Failed") {
+        <# if ($JobRestore.Thread.InvocationStateInfo.State -eq "Failed") {
             $reason = $JobRestore.Thread.InvocationStateInfo.Reason
             Write-LogDebug "ERROR: Failed to invoke Restore Job [$svm] Reason: [$reason]"
             clean_and_exit 1
@@ -1866,7 +1884,7 @@ if ( $Restore ) {
             $reason = $JobRestore.Thread.Stream.Error
             Write-LogDebug "ERROR: Failed to invoke Restore Job [$svm] Reason: [$reason]"
             clean_and_exit 1
-        }
+        } #>
         $Jobs_Restore += $JobRestore
         $numJobRestore++
     }
@@ -2207,7 +2225,7 @@ if ( $ConfigureDR ) {
     if($null -ne $CIFSsource){
         Write-LogDebug "CIFS server exist on Source SVM"
         if( ($Global:PreserveIdentity -eq $True) -and ($TemporarySecondaryCifsIp.Length -eq 0) ){
-            Write-LogWarn "In PreserveIdentity mode (default for ConfigureDR), you must provide information to create a Temporary LIF on destination capable to register CIFS server"
+            Write-LogWarn "In PreserveIdentity mode (default for ConfigureDR/New-SvmDr), you must provide information to create a Temporary LIF on destination capable to register CIFS server"
             Write-LogWarn "use TemporarySecondaryCifsIp and SecondaryCifsLifMaster parameter to define this Temporay LIF on destination"
             clean_and_exit 1
         }

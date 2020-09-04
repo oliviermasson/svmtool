@@ -6,7 +6,7 @@
 # Generated on: 2018-10-09
 #
 # Updated by : Olivier Masson
-# Updated on : 2020-04-06
+# Updated on : 2020-09-04
 #
 # Version Control :
 #   1.0.0 : Initial version
@@ -21,13 +21,14 @@
 #   1.0.9 : Modify UpdateDR argument for PreserveIdentity mode and allow Update_CIFS_usergroup to works in this situation
 #   1.1.0 : Add TieringPolicy option for ConfigureDR and UpdateDR wrapper
 #   1.1.1 : Add wrapper for RemoveInstance
+#   1.1.2 : Add wrapper for RestoreObject
 @{
 
     # Script module or binary module file associated with this manifest.
     RootModule        = '.\svmtool.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.1.1'
+    ModuleVersion     = '1.1.2'
 
     # Supported PSEditions
     # CompatiblePSEditions = @()
@@ -84,7 +85,7 @@
     # NestedModules = @()
 
     # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-    FunctionsToExport = '*-SvmDr*'
+    FunctionsToExport = '*-*SvmDr*'
 
     # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
     CmdletsToExport   = '*'

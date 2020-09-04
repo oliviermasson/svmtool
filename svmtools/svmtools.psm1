@@ -414,6 +414,7 @@ function Write-Log ([string]$mess, $color,[switch]$colorvalues=$true,[switch]$fi
 function Write-LogOnly ([string]$mess, $type) {
     if($mess){
         $Global:MasterLog.Info($mess)
+        #$Global:ConsoleLog.Info($mess)
     }
 }
 
@@ -2271,7 +2272,7 @@ Function create_update_localunixgroupanduser_dr(
         
         Write-Log "[$workOn] Check Local Unix User"
         if($Restore -eq $False){
-            Write-LogOnly "Get-NcNameMappingUnixUser -VserverContext $myPrimaryVserver -Controller $myPrimaryController"
+            Write-LogDebug "Get-NcNameMappingUnixUser -VserverContext $myPrimaryVserver -Controller $myPrimaryController"
             $PrimaryUserList=Get-NcNameMappingUnixUser -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
         }else{
             if(Test-Path $($Global:JsonPath+"Get-NcNameMappingUnixUser.json")){
@@ -2320,7 +2321,7 @@ Function create_update_localunixgroupanduser_dr(
         }
         Write-Log "[$workOn] Check Local Unix Group"
         if($Restore -eq $False){
-            Write-LogOnly "Get-NcNameMappingUnixGroup -VserverContext $myPrimaryVserver -Controller $myPrimaryController"
+            Write-LogDebug "Get-NcNameMappingUnixGroup -VserverContext $myPrimaryVserver -Controller $myPrimaryController"
             $PrimaryGroupList=Get-NcNameMappingUnixGroup -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
         }else{
             if(Test-Path $($Global:JsonPath+"Get-NcNameMappingUnixGroup.json")){
@@ -4734,6 +4735,7 @@ Catch {
     [string] $state,
     [bool] $Backup,
     [bool] $Restore,
+    [string[]] $lifRestored=@(),
     [switch] $AfterMigrate) {
 
     $Return=$True
@@ -4771,6 +4773,10 @@ Catch {
     $SameIP=@()
 	foreach($lif in $lifsdest){
         $lif_name=$lif.InterfaceName
+        if($Restore -eq $True -and $lif_name -notin $lifRestored){
+            # if in Restore mode and this LIF is not part of LIF previously restored, so do nothing and go to next LIF
+            continue
+        }
         $lif_ip=$lif.Address
         if( $lif_ip -match "^169\.254" ){
             Write-LogDebug "Ignore this APIPA lif [$lif_name]"
@@ -7066,7 +7072,7 @@ Try {
     Write-Log "[$workOn] Check SVM LIF"
     Write-LogDebug "create_lif_dr[$myPrimaryVserver]: start"
     if($Backup -eq $True){Write-LogDebug "run in Backup mode [$myPrimaryVserver]"}
-    if($Restore -eq $True){Write-LogDebug "run in Restore mode [$myPrimaryVserver]"}
+    if($Restore -eq $True){Write-LogDebug "run in Restore mode [$myPrimaryVserver]";$lifRestored=@()}
     #backup or restore NetInterface List
     if($Restore -eq $False){
         $PrimaryInterfaceList = Get-NcNetInterface -Role DATA -VserverContext $myPrimaryVserver -DataProtocols cifs,nfs,none,iscsi -Controller $myPrimaryController  -ErrorVariable ErrorVar 
@@ -7213,18 +7219,28 @@ Try {
                     $ANS1 = Read-HostOptions -question "[$mySecondaryVserver] Do you want to create the DRP LIF $LIF on cluster [$mySecondaryController] ?" -options "y/n" -default "y" -autoSelect:$autoselect
                     if ( $ANS1 -eq 'y' ) 
                     {
-                        $BackupOfGateway=""
-                        $APIPA_Mode=$False
-                        #if( ($Global:PreserveIdentity -eq $True) -and (-not $Global:ForceCloneOriginal.IsPresent) ){
-                        if( ( ($Global:PreserveIdentity -eq $True) -or ( ($Global:Run_Mode -eq "CloneDR") -and ($Global:NonInteractive.IsPresent) ) ) -and ( -not $Global:ForceCloneOriginal.IsPresent ) ){
-                            $tmp1 = (Get-Random -minimum 0 -maximum 255)
-                            $tmp2 = (Get-Random -minimum 1 -maximum 254)
-                            $BackupOfGateway=$PrimaryGateway
-                            $PrimaryAddress = "169.254.$tmp1.$tmp2"
-                            $PrimaryNetMask = "255.255.0.0"
-                            $PrimaryGateway = ""
-                            Write-LogWarn "[$workOn] Working in PreserveIdentity or NonInteractive CloneDR Mode - creating APIPA address [$PrimaryAddress]"
-                            $APIPA_Mode=$True
+                        $forceAsk=$True
+                        if($Restore -eq $False){
+                            $BackupOfGateway=""
+                            $APIPA_Mode=$False
+                            #if( ($Global:PreserveIdentity -eq $True) -and (-not $Global:ForceCloneOriginal.IsPresent) ){
+                            if( ( ($Global:PreserveIdentity -eq $True) -or ( ($Global:Run_Mode -eq "CloneDR") -and ($Global:NonInteractive.IsPresent) ) ) -and ( -not $Global:ForceCloneOriginal.IsPresent ) ){
+                                $tmp1 = (Get-Random -minimum 0 -maximum 255)
+                                $tmp2 = (Get-Random -minimum 1 -maximum 254)
+                                $BackupOfGateway=$PrimaryGateway
+                                $PrimaryAddress = "169.254.$tmp1.$tmp2"
+                                $PrimaryNetMask = "255.255.0.0"
+                                $PrimaryGateway = ""
+                                Write-LogWarn "[$workOn] Working in PreserveIdentity or NonInteractive CloneDR Mode - creating APIPA address [$PrimaryAddress]"
+                                $APIPA_Mode=$True
+                            }
+                        }else{
+                            if($Global:RESTORE_ORIGINAL -eq $True)
+                            {
+                                $forceAsk=$False
+                                $Global:NonInteractive=$True
+                            }
+                            $lifRestored+=$PrimaryInterfaceName
                         }
                         #if((-not ($Global:ForceCloneOriginal.IsPresent) -and ($Global:Run_Mode -eq "CloneDR")) -or (($Global:PreserveIdentity -eq $False) -and ($Global:Run_Mode -eq "ConfigureDR"))){
                         <# if( (($APIPA_Mode -eq $False) -and (-not $Global:NonInteractive.IsPresent)) -or ($Global:NonInteractive.IsPresent -and ($Global:PreserveIdentity -eq $False) ) ){
@@ -7241,9 +7257,9 @@ Try {
                             $myNetMask = $PrimaryNetMask
                             $myGateway = $PrimaryGateway    
                         }else{
-                            $myIpAddr=ask_IpAddr_from_cli -myIpAddr $PrimaryAddress -workOn $workOn -forceAsk $True
-                            $myNetMask=ask_NetMask_from_cli -myNetMask $PrimaryNetMask -workOn $workOn -forceAsk $True
-                            $myGateway=ask_gateway_from_cli -myGateway $PrimaryGateway -workOn $workOn -forceAsk $True    
+                            $myIpAddr=ask_IpAddr_from_cli -myIpAddr $PrimaryAddress -workOn $workOn -forceAsk $forceAsk
+                            $myNetMask=ask_NetMask_from_cli -myNetMask $PrimaryNetMask -workOn $workOn -forceAsk $forceAsk
+                            $myGateway=ask_gateway_from_cli -myGateway $PrimaryGateway -workOn $workOn -forceAsk $forceAsk    
                         }
                         if($nodeMatchRegEx -ne ""){
                             $nodeRegEx=replace_regex_groupmatches -string $PrimaryCurrentNode -regex $nodeMatchRegEx -replacewith "(.*)"
@@ -7467,7 +7483,12 @@ Try {
         }
     }
     Write-LogDebug "create_lif_dr[$myPrimaryVserver]: end"
-	return $Return 
+    if($Restore -eq $True)
+    {
+        return $Return,$lifRestored
+    }else{
+        return $Return
+    }
 }
     Catch 
     {
@@ -9487,6 +9508,7 @@ Try {
             -Property Acl,AttributeCacheTtl,Comment,DirUmask,FileUmask,ForceGroupForCreate,MaxConnectionPerShare,OfflineFilesMode,Path,ShareName,ShareProperties,SymlinkProperties,Volume,VscanFileopProfile `
             -SyncWindow 20000 -CaseSensitive -PassThru | Sort-Object -Property SideIndicator -Descending
             if($diff -ne $null){Write-LogDebug "Check CIFS shares differences [$diff]"}
+            else{Write-LogDebug "There is no CIFS shares differences"}
             foreach($sharediff in $diff){
                 $secshare=$SharesListDest | Where-Object {$_.ShareName -eq $sharediff.ShareName}
                 if($sharediff.SideIndicator -eq "=>"){
@@ -9756,13 +9778,14 @@ $request=@"
                 }
             }
         }
-        
-        if( -not ($FromReactivate.IsPresent) ){
-            Write-LogDebug "Not in a ReActivate process, so disable LIF on [$MySecondaryVserver]"
-            if ( -not $Global:SecondaryCifsLifCreated ){
-                if (($ret=set_all_lif -mySecondaryVserver $mySecondaryVserver -myPrimaryVserver $myPrimaryVserver -mySecondaryController $mySecondaryController  -myPrimaryController $myPrimaryController -state down) -ne $True ) {
-                    Write-LogError "ERROR: Failed to set all lif up on [$mySecondaryVserver]"
-                    clean_and_exit 1
+        if($Backup -eq $False -and $Restore -eq $False){
+            if( -not ($FromReactivate.IsPresent) ){
+                Write-LogDebug "Not in a ReActivate process, so disable LIF on [$MySecondaryVserver]"
+                if ( -not $Global:SecondaryCifsLifCreated ){
+                    if (($ret=set_all_lif -mySecondaryVserver $mySecondaryVserver -myPrimaryVserver $myPrimaryVserver -mySecondaryController $mySecondaryController  -myPrimaryController $myPrimaryController -state down) -ne $True ) {
+                        Write-LogError "ERROR: Failed to set all lif up on [$mySecondaryVserver]"
+                        clean_and_exit 1
+                    }
                 }
             }
         }
@@ -10760,7 +10783,7 @@ Try {
     if ( ( $ret=create_lif_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore -nodeMatchRegEx $nodeMatchRegEx) -ne $True ) { Write-LogError "ERROR: Failed to create all LIF" ; $Return = $True }
     
     #if((-not $Global:NonInteractive) -or ($null -ne $Global:DefaultLocalUserCredentials)){
-    if($null -ne $Global:DefaultLocalUserCredentials){
+    if( $null -ne $Global:DefaultLocalUserCredentials -or $True -eq $runBackup ){
         if ( ( $ret=create_update_localuser_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all local user"}
     }else{
         Write-LogWarn "SKIPPING local user create/update in NonInteractive Mode with no default credentials"
@@ -10802,13 +10825,14 @@ Try {
     if ( ( $ret=create_update_qospolicy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore -ForClone) -ne $True ) { Write-LogError "ERROR: create_update_qospolicy_dr" ; $Return = $False }
 	if ( ( $ret=create_snapmirror_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn -DDR $DDR -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all snapmirror relations " ; $Return = $False }
 	if ( ( $ret=create_update_snap_policy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) {Write-LogError "ERROR: create_update_snap_policy_dr"}
-	if($Backup -eq $False -and $Restore -eq $False){
+	<# if($Backup -eq $False -and $Restore -eq $False){
         $ASK_WAIT=Read-HostOptions -question "[$mySecondaryVserver] Do you want to wait the end of snapmirror transfers and mount all volumes and map LUNs on [$mySecondaryVserver] now ?" -options "y/n" -default "y"
     }else{
         $ASK_WAIT='y'
     }
-    if ( $ASK_WAIT -eq 'y' ) {
+    if ( $ASK_WAIT -eq 'y' ) { #>
         if($Backup -eq $False -and $Restore -eq $False){
+            # All Snapmirror relationship must be Snapmirrored/Idle or Insync before continue
             if ( ( $ret=wait_snapmirror_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver) -ne $True ) { Write-LogError "ERROR: Failed snapmirror relations bad status " ; $Return = $False }
         }
         if($Restore -eq $True -and $Global:VOLUME_TYPE -eq "DP"){
@@ -10856,18 +10880,20 @@ Try {
             $out = Remove-NcNetInterface -Name $TempCifsLif.InterfaceName -Vserver $mySecondaryVserver -Confirm:$false -Controller $mySecondaryController -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Remove-NcNetInterface failed [$ErrorVar]" ; }
         } #>
-        Write-LogDebug "[$workOn] Removing Temporary LIF"
-        Write-LogDebug "Get-NcNetInterface -Vserver $mySecondaryVserver -Controller $mySecondaryController | Where-Object {$_.InterfaceName -match `"^tmp_lif_to_join_in_ad_`"}"
-        $TempCifsLif=Get-NcNetInterface -Vserver $mySecondaryVserver -Controller $mySecondaryController | Where-Object {$_.InterfaceName -match "^tmp_lif_to_join_in_ad_"}
-        if($null -ne $TempCifsLif){
-            Write-logDebug "Set-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController -ErrorVariable ErrorVar"
-            $out = Set-NcNetInterface -Name $TempCifsLif.InterfaceName -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController -ErrorVariable ErrorVar
-            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcNetInterface failed [$ErrorVar]" ; }
-            Write-LogDebug "Remove-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $mySecondaryVserver -Confirm:$false -Controller $mySecondaryController -ErrorVariable ErrorVar"
-            $out = Remove-NcNetInterface -Name $TempCifsLif.InterfaceName -Vserver $mySecondaryVserver -Confirm:$false -Controller $mySecondaryController -ErrorVariable ErrorVar
-            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Remove-NcNetInterface failed [$ErrorVar]" ; }
+        if($Backup -eq $False -and $Restore -eq $False){
+            Write-LogDebug "[$workOn] Removing Temporary LIF"
+            Write-LogDebug "Get-NcNetInterface -Vserver $mySecondaryVserver -Controller $mySecondaryController | Where-Object {$_.InterfaceName -match `"^tmp_lif_to_join_in_ad_`"}"
+            $TempCifsLif=Get-NcNetInterface -Vserver $mySecondaryVserver -Controller $mySecondaryController | Where-Object {$_.InterfaceName -match "^tmp_lif_to_join_in_ad_"}
+            if($null -ne $TempCifsLif){
+                Write-logDebug "Set-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController -ErrorVariable ErrorVar"
+                $out = Set-NcNetInterface -Name $TempCifsLif.InterfaceName -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController -ErrorVariable ErrorVar
+                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcNetInterface failed [$ErrorVar]" ; }
+                Write-LogDebug "Remove-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $mySecondaryVserver -Confirm:$false -Controller $mySecondaryController -ErrorVariable ErrorVar"
+                $out = Remove-NcNetInterface -Name $TempCifsLif.InterfaceName -Vserver $mySecondaryVserver -Confirm:$false -Controller $mySecondaryController -ErrorVariable ErrorVar
+                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Remove-NcNetInterface failed [$ErrorVar]" ; }
+            }
         }
-    }
+    #}
     if($Backup -eq $True -or $Restore -eq $True){
         #wait-debugger
         if(($ret=update_qtree -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True) {Write-Log "ERROR Failed to update all Qtree"; $Return = $False}
@@ -16305,16 +16331,19 @@ Try {
     Write-LogDebug "restore_object: start"
 
     if("Lifs" -in $objects){
-        if ( ( $ret=create_lif_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $mySecondaryVserver  -Backup $False -Restore $True -nodeMatchRegEx $nodeMatchRegEx ) -ne $True ) {
+        Write-Log "[$mySecondaryVserver] Restore Object Lifs"*
+        $ret=create_lif_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $mySecondaryVserver  -Backup $False -Restore $True -nodeMatchRegEx $nodeMatchRegEx
+        if ( $ret[0]  -ne $True )  {
             $Return=$False
             Write-LogError "ERROR: Failed to create all LIF on [$mySecondaryVserver]"
         }
-        if ( ( $ret=set_all_lif -mySecondaryVserver $mySecondaryVserver -myPrimaryVserver $myPrimaryVserver -mySecondaryController $mySecondaryController  -myPrimaryController $myPrimaryController -workOn $mySecondaryVserver  -state up -Backup $False -Restore $True ) -ne $True ) {
+        if ( ( $ret=set_all_lif -mySecondaryVserver $mySecondaryVserver -myPrimaryVserver $myPrimaryVserver -mySecondaryController $mySecondaryController  -myPrimaryController $myPrimaryController -workOn $mySecondaryVserver  -state up -Backup $False -Restore $True -lifRestored $ret[1]) -ne $True ) {
             $Return=$False
             Write-LogError "ERROR: Failed to set all lif up on [$mySecondaryVserver]"
         }
     }
     if("Volumes" -in $objects){
+        Write-Log "[$mySecondaryVserver] Restore Object Volumes & QOS PolicyGroup & Namespace"
         #add code here to restore Volumes & QOS PolicyGroup
         $ret=create_volume_voldr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver  -workOn $mySecondaryVserver  -Backup $False -Restore $True -aggrMatchRegEx $aggrMatchRegEx -myDataAggr $myDataAggr 
         if ( $ret.count -gt 0 ) {
@@ -16341,6 +16370,7 @@ Try {
         }
     }
     if("Exports" -in $objects){
+        Write-Log "[$mySecondaryVserver] Restore Object Exports Policy and Rules"
         #add code here to restore Exports Policy and Rules
         if ( ( $ret=create_update_exportpolicy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn -Backup $False -Restore $True ) -ne $True ) { 
             Write-LogError "ERROR: Failed to create all policy"
@@ -16352,6 +16382,7 @@ Try {
         }
     }
     if("Shares" -in $objects){
+        Write-Log "[$mySecondaryVserver] Restore Object CIFS Shares & Symlinks"
         #add code here to restore CIFS Shares & Symlink?
         <# if ( ( $ret=update_cifs_usergroup -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $False -Restore $True) -ne $True ) {
             Write-LogError "ERROR: update_cifs_usergroup failed" 
@@ -16367,6 +16398,7 @@ Try {
         }
     }
     if("Quotas" -in $objects){
+        Write-Log "[$mySecondaryVserver] Restore Object Quotas"
         #add code here to restore Quotas
         <# if ( ( $ret = create_quota_rules_from_quotadb -myController $mySecondaryController -myVserver $mySecondaryVserver -NoCheck ) -ne $True ) {
             Write-LogError "ERROR: create_quota_rules_from_quotadb failed"
