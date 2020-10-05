@@ -2,7 +2,7 @@
 ### Powershell tools to manage NetApp Storage Virtual Machine (aka SVM)
 
 
-This script use [NetApp PowerShell Toolkit](https://mysupport.netapp.com/tools/info/ECMLP2310788I.html?productID=61926)
+This script use [NetApp PowerShell Toolkit](https://mysupport.netapp.com/site/tools/tool-eula/powershell-toolkit)
 
 If you need to Encrypt your destination volumes you will need at least the version 4.7 of the PowerShell ToolKit (PSTK)
 
