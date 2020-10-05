@@ -49,7 +49,7 @@ CIFS Symlink | Yes
 Name Mapping | Yes
 Local Unix User & Group | Yes
 Vserver User & Role | Yes
-Flexgroup<br>Due to current Flexgroup limitation, any SVM with Flexgroup will not be compatible with<br>Double DR and Synchronous Data replication | Yes
+Flexgroup<br>Due to current Flexgroup limitations, any SVM with Flexgroup will not be compatible with<br>Double DR and Synchronous Data replication | Yes
 
 (*)Require a Local SVMDB flat files database to replicate Quota and Snapshot-Policy
 
