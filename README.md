@@ -49,6 +49,7 @@ CIFS Symlink | Yes
 Name Mapping | Yes
 Local Unix User & Group | Yes
 Vserver User & Role | Yes
+Flexgroup<br>Due to current Flexgroup limitation, any SVM with Flexgroup will not be compatible with<br>Double DR and Synchronous Data replication | Yes
 
 (*)Require a Local SVMDB flat files database to replicate Quota and Snapshot-Policy
 
@@ -99,6 +100,6 @@ Currently compatible with following Objects:
 - Shares (CIFS shares)
 
 ### Documentation
-For more information download [Manual](https://github.com/oliviermasson/svmtool/blob/master/SVMTOOL_Manual_v2.0.pdf)
+For more information download [Manual](https://github.com/oliviermasson/svmtool/blob/master/SVMTOOL_Manual_v2.1.pdf)
 
 HTH

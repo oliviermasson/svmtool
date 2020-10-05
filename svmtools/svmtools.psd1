@@ -6,7 +6,7 @@
 # Generated on: 2018-06-07
 #
 # Update by : Olivier MASSON
-# Updated on : 2020-04-06
+# Updated on : 2020-10-05
 #
 # Version Control :
 #   1.0.4 : Initial version
@@ -71,13 +71,18 @@
 #           Change output display during MirrorSchedule/Set-SvmDrSchedule
 #           Fix management of Temporary Secondary CIFS Lif
 #   1.3.4 : Some improvements to implement RestoreObject NonInteractively (when restoring LIF)
+#   1.3.5 : Add Flexgroup support (due to flexgroup limitation, if you SVM contains flexgroup you will not be able to use Double DR and Synchronous replication)
+#           Fix Temporary LIF management
+#           Fix NFS only replication
+#           Fix onAccessPolicy management
+#           Change test source alive with only SSh and HTTPS (no more ping) 
 @{
 
     # Script module or binary module file associated with this manifest.
     RootModule        = '.\svmtools.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.3.4'
+    ModuleVersion     = '1.3.5'
 
     # Supported PSEditions
     # CompatiblePSEditions = @()

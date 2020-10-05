@@ -6,7 +6,7 @@
 # Generated on: 2018-10-09
 #
 # Updated by : Olivier Masson
-# Updated on : 2020-09-04
+# Updated on : 2020-10-05
 #
 # Version Control :
 #   1.0.0 : Initial version
@@ -22,6 +22,7 @@
 #   1.1.0 : Add TieringPolicy option for ConfigureDR and UpdateDR wrapper
 #   1.1.1 : Add wrapper for RemoveInstance
 #   1.1.2 : Add wrapper for RestoreObject
+#   1.1.3 : Fix some function's parameter
 @{
 
     # Script module or binary module file associated with this manifest.

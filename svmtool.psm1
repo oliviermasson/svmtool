@@ -378,13 +378,16 @@ function New-SvmDr {
         [string]$Vserver,
 
         # Destination Vserver Name
-        [string]$VserverDR,
+        [Parameter(Mandatory = $false)]
+        [string]$VserverDR=$null,
 
         # Optional, makes an aggregate suggestion for the rootvolume
-        [string]$RootAggr,
+        [Parameter(Mandatory = $false)]
+        [string]$RootAggr=$null,
 
         # Optional, makes an aggregate suggestion for the datavolumes
-        [string]$DataAggr,
+        [Parameter(Mandatory = $false)]
+        [string]$DataAggr=$null,
 
         # Enables individual aggregate selection for each individual volume
         # Is default enabled in Non-Interactive Mode
@@ -509,7 +512,6 @@ function New-SvmDr {
         [switch]$HTTP,
         [Int32]$Timeout = 60
     )
-
 
     $CommandName = $PSCmdlet.MyInvocation.InvocationName;
     $ParameterList = (Get-Command -Name $CommandName).Parameters;
@@ -665,6 +667,9 @@ function Show-SvmDr {
 
         # Enables display of schedule information
         [switch]$Schedule,
+
+        # Display only SVM informations
+        [switch]$NoVolumeDetail,
 
         # Loglevel of the console output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
@@ -1043,6 +1048,9 @@ function Invoke-SvmDrActivate {
         # Enables OnCommand Workflow Automation (WFA) Integration
         [switch]$WfaIntegration,
 
+        # Force to use CIFS modify method, instead of delete/recreate when CIFS server name need to be changed
+        [switch]$NoCifsDeleteMethod,
+
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
         [Int32]$Timeout = 60
@@ -1179,10 +1187,10 @@ function Invoke-SvmDrResyncReverse {
         [Parameter(Mandatory = $false)]
         [string]$XDPPolicy,
         
-        # Force creation of DP Snapmirror relationship instead of default XDP
+        <# # Force creation of DP Snapmirror relationship instead of default XDP
         [Parameter(Mandatory = $false)]
         [ValidateSet("DP", "XDP")]
-        [string]$SnapmirrorType="XDP",
+        [string]$SnapmirrorType="XDP", #>
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
@@ -1460,6 +1468,14 @@ function Invoke-SvmDrRecoverFromDr {
 
         # Enables OnCommand Workflow Automation (WFA) Integration
         [switch]$WfaIntegration,
+
+        # Force to use CIFS modify method, instead of delete/recreate when CIFS server name need to be changed
+        [switch]$NoCifsDeleteMethod,
+
+        # Optional, this SvmDr solution cannot transfer the passwords of local users (cifs, cluster)
+        # In Non-Interactive Mode, the script cannot create missing users
+        # If you pass this parameter, the password will used to create missing users
+        [pscredential]$DefaultLocalUserCredentials,
 
         # Snapmirror Policy to use
         [Parameter(Mandatory = $false)]
@@ -1883,12 +1899,35 @@ function Invoke-SvmDrMigrate {
         # Is default enabled in Wfa-Integration Mode
         [switch]$NonInteractive,
 
+        # Optional, when the vserver dr is created, all lifs are taken offline (duplicate ip conflicts)
+        # Hence if the vserver needs to be joined in AD, there is no lif available
+        # By passing an temporary ip-address and in combination with parameter "SecondaryCifsLifMaster"
+        # A temporary lif will be created to join the vserver dr in AD
+        [string]$TemporarySecondaryCifsIp,
+
+        # Optional, when the vserver dr is created, all lifs are taken offline (duplicate ip conflicts)
+        # Hence if the vserver needs to be joined in AD, there is no lif available
+        # So we will clone the lif that is passed in this parameter (using same port and options)
+        # Use this in combination with parameter "TemporarySecondaryCifsIp"
+        # A temporary lif will be created to join the vserver dr in AD
+        [string]$SecondaryCifsLifMaster,
+
+        # Optional, when the vserver dr is created, all lifs are taken offline (duplicate ip conflicts)
+        # Hence if the vserver needs to be joined in AD, there is no lif available
+        # So we will clone the lif used in the parameter SecondaryCifsLifMaster
+        # A temporary lif will be created to join the vserver dr in AD
+        # This parameter will override the vlan in which this temp lif is created
+        [string]$SecondaryCifsLifCustomVlan,
+
         # Preserve or not Network Identity (IP addresses and CIFS server name) of Source on Destination
         [Parameter(Mandatory = $false)]
         [bool]$PreserveIdentity=$True,
 
         # Enables OnCommand Workflow Automation (WFA) Integration
         [switch]$WfaIntegration,
+
+        # Force to use CIFS modify method, instead of delete/recreate when CIFS server name need to be changed
+        [switch]$NoCifsDeleteMethod,
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
@@ -2629,8 +2668,8 @@ function Remove-SvmDrClone {
     The vserver is optional, if not provided all vservers will be restored
 .NOTES
     
-RestoreObject can be used to restore on source a list of mandatory CIFS shares, volumes or Lifs
-    But it can also beeing used to replicate a configuration (Volumes list, Cifs Shares, etc) to a newly deployed SVM on another Cluster
+    RestoreObject can be used to restore on source a list of mandatory CIFS Server, CIFS shares, volumes or Lifs
+    But it can also beeing used to replicate a configuration (Volumes list, Cifs Server, Cifs Shares, etc) to a newly deployed SVM on another Cluster
 
 
 .EXAMPLE 
@@ -2651,7 +2690,7 @@ function Restore-ObjectSvmDr {
 
         # Object to restore
         [Parameter(Mandatory = $true)]
-        [ValidateSet("Lifs", "Volumes", "Exports", "Shares", "Quotas", "Users")]
+        [ValidateSet("Lifs", "Volumes", "Exports", "CifsServer", "Shares", "Symlinks", "Quotas", "Users")]
         [string[]]$Objects=@(""),
 
         # The name of the destination cluster, if not provided, will restore on source cluster
@@ -2660,7 +2699,7 @@ function Restore-ObjectSvmDr {
 
         # The name of the destination vserver, if not provided, will restore on source vserver
         [Parameter(Mandatory = $false)]
-        [string]$DestinationVserver,
+        [string]$DestinationSVM,
 
         # When restoring volumes allow to choose hosting aggregate for each volume
         [Parameter(Mandatory = $false)]
