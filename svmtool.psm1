@@ -148,7 +148,7 @@ function New-SvmDrConfiguration {
 
         # Loglevel of the logfile output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
-        [string]$LogLevelLogFile = "Info",
+        [string]$LogLevelLogFile = "Debug",
 
         # Enables Non-Interactive Mode
         # Is default enabled in Wfa-Integration Mode
@@ -481,7 +481,7 @@ function New-SvmDr {
 
         # Loglevel of the logfile output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
-        [string]$LogLevelLogFile = "Info",
+        [string]$LogLevelLogFile = "Debug",
 
         # Force creation of DP Snapmirror relationship instead of default XDP
         [Parameter(Mandatory = $false)]
@@ -576,7 +576,7 @@ function Show-SvmDrConfiguration {
 
         # Loglevel of the logfile output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
-        [string]$LogLevelLogFile = "Info",
+        [string]$LogLevelLogFile = "Debug",
 
         # Enables OnCommand Workflow Automation (WFA) Integration
         [switch]$WfaIntegration
@@ -677,7 +677,7 @@ function Show-SvmDr {
 
         # Loglevel of the logfile output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
-        [string]$LogLevelLogFile = "Info",
+        [string]$LogLevelLogFile = "Debug",
 
         # Enables Non-Interactive Mode
         # Is default enabled in Wfa-Integration Mode
@@ -901,7 +901,7 @@ function Update-SvmDr {
 
         # Loglevel of the logfile output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
-        [string]$LogLevelLogFile = "Info",
+        [string]$LogLevelLogFile = "Debug",
 
         # Enables OnCommand Workflow Automation (WFA) Integration
         [switch]$WfaIntegration,
@@ -957,7 +957,7 @@ function Remove-SvmDr {
 
         # Loglevel of the logfile output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
-        [string]$LogLevelLogFile = "Info",
+        [string]$LogLevelLogFile = "Debug",
 
         # Enables Non-Interactive Mode
         # Is default enabled in Wfa-Integration Mode
@@ -1035,7 +1035,7 @@ function Invoke-SvmDrActivate {
 
         # Loglevel of the logfile output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
-        [string]$LogLevelLogFile = "Info",
+        [string]$LogLevelLogFile = "Debug",
 
         # Enables Non-Interactive Mode
         # Is default enabled in Wfa-Integration Mode
@@ -1106,7 +1106,7 @@ function Invoke-SvmDrResync {
 
         # Loglevel of the logfile output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
-        [string]$LogLevelLogFile = "Info",
+        [string]$LogLevelLogFile = "Debug",
 
         # Optional, sets the XDP Policy
         # Defaults to MirrorAllSnapshots
@@ -1174,7 +1174,7 @@ function Invoke-SvmDrResyncReverse {
 
         # Loglevel of the logfile output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
-        [string]$LogLevelLogFile = "Info",
+        [string]$LogLevelLogFile = "Debug",
 
         # Enables Non-Interactive Mode
         # Is default enabled in Wfa-Integration Mode
@@ -1372,7 +1372,7 @@ function Update-SvmDrReverse {
 
         # Loglevel of the logfile output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
-        [string]$LogLevelLogFile = "Info",
+        [string]$LogLevelLogFile = "Debug",
 
         # Enables OnCommand Workflow Automation (WFA) Integration
         [switch]$WfaIntegration,
@@ -1460,7 +1460,7 @@ function Invoke-SvmDrRecoverFromDr {
 
         # Loglevel of the logfile output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
-        [string]$LogLevelLogFile = "Info",
+        [string]$LogLevelLogFile = "Debug",
 
         # Enables Non-Interactive Mode
         # Is default enabled in Wfa-Integration Mode
@@ -1523,7 +1523,7 @@ function Remove-SvmDrConfiguration {
 
         # Loglevel of the logfile output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
-        [string]$LogLevelLogFile = "Info",
+        [string]$LogLevelLogFile = "Debug",
 
         # Enables OnCommand Workflow Automation (WFA) Integration
         [switch]$WfaIntegration,
@@ -1565,7 +1565,7 @@ function Remove-SvmDrInstance {
 
         # Loglevel of the logfile output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
-        [string]$LogLevelLogFile = "Info",
+        [string]$LogLevelLogFile = "Debug",
 
         # Enables OnCommand Workflow Automation (WFA) Integration
         [switch]$WfaIntegration
@@ -1613,7 +1613,7 @@ function Set-SvmDrSchedule {
 
         # Loglevel of the logfile output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
-        [string]$LogLevelLogFile = "Info",
+        [string]$LogLevelLogFile = "Debug",
 
         # Enables Non-Interactive Mode
         # Is default enabled in Wfa-Integration Mode
@@ -1668,7 +1668,7 @@ function Set-SvmDrScheduleReverse {
 
         # Loglevel of the logfile output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
-        [string]$LogLevelLogFile = "Info",
+        [string]$LogLevelLogFile = "Debug",
 
         # Enables Non-Interactive Mode
         # Is default enabled in Wfa-Integration Mode
@@ -1893,7 +1893,7 @@ function Invoke-SvmDrMigrate {
 
         # Loglevel of the logfile output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
-        [string]$LogLevelLogFile = "Info",
+        [string]$LogLevelLogFile = "Debug",
 
         # Enables Non-Interactive Mode
         # Is default enabled in Wfa-Integration Mode
@@ -1996,7 +1996,7 @@ function Remove-SvmDrSource {
 
         # Loglevel of the logfile output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
-        [string]$LogLevelLogFile = "Info",
+        [string]$LogLevelLogFile = "Debug",
 
         # Enables Non-Interactive Mode
         # Is default enabled in Wfa-Integration Mode
@@ -2058,7 +2058,7 @@ function Set-SvmDrQuota {
 
         # Loglevel of the logfile output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
-        [string]$LogLevelLogFile = "Info",
+        [string]$LogLevelLogFile = "Debug",
 
         # Enables Non-Interactive Mode
         # Is default enabled in Wfa-Integration Mode
@@ -2122,7 +2122,7 @@ function Set-SvmDrQuotaReverse {
 
         # Loglevel of the logfile output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
-        [string]$LogLevelLogFile = "Info",
+        [string]$LogLevelLogFile = "Debug",
 
         # Enables Non-Interactive Mode
         # Is default enabled in Wfa-Integration Mode
@@ -2183,7 +2183,7 @@ function Test-SvmDrConnection {
 
         # Loglevel of the logfile output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
-        [string]$LogLevelLogFile = "Info",
+        [string]$LogLevelLogFile = "Debug",
 
         # Enables Non-Interactive Mode
         # Is default enabled in Wfa-Integration Mode
@@ -2234,7 +2234,7 @@ function Clear-SvmDrReverse {
 
         # Loglevel of the logfile output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
-        [string]$LogLevelLogFile = "Info",
+        [string]$LogLevelLogFile = "Debug",
 
         # Enables Non-Interactive Mode
         # Is default enabled in Wfa-Integration Mode
@@ -2343,7 +2343,7 @@ function Backup-SvmDr {
 
         # Loglevel of the logfile output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
-        [string]$LogLevelLogFile = "Info",
+        [string]$LogLevelLogFile = "Debug",
 
         # Enables OnCommand Workflow Automation (WFA) Integration
         [switch]$WfaIntegration,
@@ -2570,7 +2570,7 @@ function New-SvmDrClone {
 
         # Loglevel of the logfile output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
-        [string]$LogLevelLogFile = "Info",
+        [string]$LogLevelLogFile = "Debug",
 
         # Enables Non-Interactive Mode
         # Is default enabled in Wfa-Integration Mode
@@ -2639,7 +2639,7 @@ function Remove-SvmDrClone {
 
         # Loglevel of the logfile output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
-        [string]$LogLevelLogFile = "Info",
+        [string]$LogLevelLogFile = "Debug",
 
         # Enables Non-Interactive Mode
         # Is default enabled in Wfa-Integration Mode
@@ -2766,7 +2766,7 @@ function Restore-ObjectSvmDr {
 
         # Loglevel of the logfile output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
-        [string]$LogLevelLogFile = "Info",
+        [string]$LogLevelLogFile = "Debug",
 
         # Enables OnCommand Workflow Automation (WFA) Integration
         [switch]$WfaIntegration,
@@ -2881,7 +2881,7 @@ function Restore-SvmDr {
 
         # Loglevel of the logfile output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
-        [string]$LogLevelLogFile = "Info",
+        [string]$LogLevelLogFile = "Debug",
 
         # Enables OnCommand Workflow Automation (WFA) Integration
         [switch]$WfaIntegration,
@@ -2913,7 +2913,7 @@ function Import-SvmDrConfiguration {
 
         # Loglevel of the logfile output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
-        [string]$LogLevelLogFile = "Info"
+        [string]$LogLevelLogFile = "Debug"
     )
 
 

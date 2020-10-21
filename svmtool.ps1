@@ -245,9 +245,11 @@
 .PARAMETER LogLevelConsole
     Optional argument to set the level of logging for the console
     Values are Debug,Info,Warn,Error,Fatal,Off
+    Default = Info
 .PARAMETER LogLevelLogFile
     Optional argument to set the level of logging for logging to file
     Values are Debug,Info,Warn,Error,Fatal,Off
+    Default = Debug
 .PARAMETER SnapmirrorType
     Optional argument to force (if possible, less then 9.6) snapmirror relationships to be created as DP instead of XDP
     Used with ConfigureDr, UpdateDr, CloneDr, UpdateReverse, Migrate, Backup and Restore
@@ -543,6 +545,8 @@
                     Fix NFS only replication
                     Fix onAccessPolicy management
                     Change test source alive with only SSh and HTTPS (no more ping)
+        - 0.4.1 :   Change default Log level for logfile to Debug
+                    Update user guide
 #>
 [CmdletBinding(HelpURI = "https://github.com/oliviermasson/svmtool", DefaultParameterSetName = "ListInstance")]
 Param (
@@ -956,7 +960,7 @@ Param (
     [Parameter(Mandatory = $false, ParameterSetName = 'DeleteCloneDR')]
     [Parameter(Mandatory = $false, ParameterSetName = 'RemoveInstance')]
     [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
-    [string]$LogLevelLogFile = "Info",
+    [string]$LogLevelLogFile = "Debug",
 
     [Parameter(Mandatory = $false, ParameterSetName = 'Setup')]
     [Parameter(Mandatory = $false, ParameterSetName = 'ConfigureDR')]
@@ -1079,8 +1083,8 @@ $Global:MIN_MINOR = 5
 $Global:MIN_BUILD = 0
 $Global:MIN_REVISION = 0
 #############################################################################################
-$Global:RELEASE = "0.34.0"
-$Global:SCRIPT_RELEASE = "0.1.20"
+$Global:RELEASE = "0.4.1"
+$Global:SCRIPT_RELEASE = "0.1.21"
 $Global:BASEDIR = 'C:\Scripts\SVMTOOL'
 $Global:SVMTOOL_DB_DEFAULT = $Global:BASEDIR
 $Global:CONFBASEDIR = $BASEDIR + '\etc\'
@@ -1102,6 +1106,7 @@ if ($NonInteractive) {
     $AlwaysChooseDataAggr = $true
 }
 $Global:LogLevelConsole = $LogLevelConsole
+$Global:LogLevelLogFile = $LogLevelLogFile
 $Global:AlwaysChooseDataAggr = $AlwaysChooseDataAggr
 $Global:WfaIntegration = $WfaIntegration
 $Global:SkipVscanFpolicy = $SkipVscanFpolicy
@@ -1482,7 +1487,7 @@ if ( $Backup ) {
 
                 # appenders (logfile, eventviewer & console)
                 if($LogLevelConsole -eq ""){$LogLevelConsole="Info"}
-                if($LogLevelLogFile -eq ""){$LogLevelLogFile="Info"}
+                if($LogLevelLogFile -eq ""){$LogLevelLogFile="Debug"}
                 $guid = ([guid]::NewGuid()).Guid
                 $masterLogFileAppender = create_rolling_log_appender -name "svmtool.log_$guid"  -file $LOGFILE -threshold $LogLevelLogFile
                 $consoleAppender = create_console_appender -name "console_$guid" -threshold $LogLevelConsole
@@ -1771,7 +1776,7 @@ if ( $Restore ) {
                     [Parameter(Mandatory = $False)][string]$RootAggr="",
                     [Parameter(Mandatory = $False)][string]$DataAggr="",        
                     [Parameter(Mandatory = $False)][string]$LogLevelConsole="Info",
-                    [Parameter(Mandatory = $False)][string]$LogLevelLogFile="Info",
+                    [Parameter(Mandatory = $False)][string]$LogLevelLogFile="Debug",
                     [Parameter(Mandatory = $True)][string]$RESTORE_ORIGINAL,
                     [boolean]$NonInteractive
                 )
