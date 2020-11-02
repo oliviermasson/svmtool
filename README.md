@@ -100,6 +100,6 @@ Currently compatible with following Objects:
 - Shares (CIFS shares)
 
 ### Documentation
-For more information download [Manual](https://github.com/oliviermasson/svmtool/blob/master/SVMTOOL_Manual_v2.2.pdf)
+For more information download [Manual](https://github.com/oliviermasson/svmtool/blob/master/SVMTOOL_Manual_v2.3.pdf)
 
 HTH
