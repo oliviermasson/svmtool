@@ -5097,7 +5097,7 @@ Try {
                 
                 if ( $PrimaryVolPercentSnapReserved -ne $SecondaryVolPercentSnapReserved  )
                 {
-                    Write-Log "Secondary Volume [$PrimaryVolName] have a different Percentage for Snapshot Reserved Space: modify PercentSnapshotReserve" 
+                    Write-Log "[$workOn] Secondary Volume [$PrimaryVolName] have a different Percentage for Snapshot Reserved Space. Modify PercentSnapshotReserve" 
                     $attributes = Get-NcVol -Template -Controller $mySecondaryController
                     $attributes.VolumeSpaceAttributes=$PrimaryVol.VolumeSpaceAttributes
                     $query=Get-NcVol -Template -Controller $mySecondaryController
