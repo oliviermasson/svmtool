@@ -5,7 +5,7 @@
     This module contains several functions to manage SVMDR, Backup and Restore Configuration...
 .NOTES
     Authors  : Olivier Masson, Jerome Blanchet, Mirko Van Colen
-    Release  : April 6th, 2020
+    Release  : November 14 2020
 
 #>
 
@@ -4989,8 +4989,8 @@ Try {
     if($Backup -eq $False){
         $ListFlexgroup=@()
         foreach ( $PrimaryVol in ( $PrimaryVolList | Skip-Null ) ) {
-            Write-LogDebug "check_update_voldr: PrimaryVol [$PrimaryVol]"
             $PrimaryVolName=$PrimaryVol.Name
+            Write-LogDebug "check_update_voldr: PrimaryVol [$PrimaryVolName]"
             $PrimaryVolStyle=$PrimaryVol.VolumeSecurityAttributes.Style
             $PrimaryVolExportPolicy=$PrimaryVol.VolumeExportAttributes.Policy
             $PrimaryVolType=$PrimaryVol.VolumeIdAttributes.Type
@@ -5007,25 +5007,38 @@ Try {
             if ( ( $PrimaryVolState -eq "online" ) -and ($PrimaryVolType -eq "rw" ) -and ($PrimaryVolIsVserverRoot -eq $False ) -and ( $PrimaryVolIsInfiniteVolume -eq $False ) ) 
             {
                 if($PrimaryVolExtendStyle -match "flexgroup"){
-                    $PrimaryFlexgroupUuid=$PrimaryVol.VolumeIdAttributes.FlexgroupUuid
-                    Write-LogDebug "Get-NcVol -VserverContext $PrimaryVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended=`"flexgroup`"`}`} -Controller $myPrimaryController"
-                    $PrimaryFlexgroupMaster=Get-NcVol -VserverContext $PrimaryVserver -Query @{Vserver=$PrimaryVserver;VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
-                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup master informations [$PrimaryVolName] [$ErrorVar]" }
-                    if($InReverse -eq $False){
-                        Write-LogDebug "Work in normal mode with flexgroup, so add _dst ad the end of volume name"
-                        $SecondaryName=$($PrimaryFlexgroupMaster.Name+'_dst')
+                    if($Restore -eq $False){
+                        $PrimaryFlexgroupUuid=$PrimaryVol.VolumeIdAttributes.FlexgroupUuid
+                        Write-LogDebug "Get-NcVol -VserverContext $PrimaryVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended=`"flexgroup`"`}`} -Controller $myPrimaryController"
+                        $PrimaryFlexgroupMaster=Get-NcVol -VserverContext $PrimaryVserver -Query @{Vserver=$PrimaryVserver;VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
+                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup master informations [$PrimaryVolName] [$ErrorVar]" }
+                        if($InReverse -eq $False){
+                            Write-LogDebug "Work in normal mode with flexgroup, so add _dst ad the end of volume name"
+                            $SecondaryName=$($PrimaryFlexgroupMaster.Name+'_dst')
+                        }else{
+                            Write-LogDebug "Work in reverse mode with flexgroup, so remove _dst at the end of volume name"
+                            $SecondaryName=$PrimaryFlexgroupMaster.Name -Replace "_dst$",""
+                        }
+                        Write-logDebug "Secondary Name [$SecondaryName]"
+                        if($SecondaryName -notin $ListFlexgroup){
+                            $ListFlexgroup+=$SecondaryName
+                        }else {
+                            # if this flexgroup is already present in the ListFlexgroup, it means operations are already performed
+                            # so we can skip this flexgroup_constituent and continue to next volume
+                            Write-LogDebug "skip volume [$SecondaryName] because it was already processed"
+                            continue
+                        }
                     }else{
-                        Write-LogDebug "Work in reverse mode with flexgroup, so remove _dst at the end of volume name"
-                        $SecondaryName=$PrimaryFlexgroupMaster.Name -Replace "_dst$",""
-                    }
-                    Write-logDebug "Secondary Name [$SecondaryName]"
-                    if($SecondaryName -notin $ListFlexgroup){
-                        $ListFlexgroup+=$SecondaryName
-                    }else {
-                        # if this flexgroup is already present in the ListFlexgroup, it means operations are already performed
-                        # so we can skip this flexgroup_constituent and continue to next volume
-                        Write-LogDebug "skip volume [$SecondaryName] because it was already processed"
-                        continue
+                        if($Global:RESTORE_ORIGINAL -eq $True){
+                            Write-LogDebug "[$workOn] In RESTORE_ORIGINAL mode Flexgroup volume name [$PrimaryVolName] is not changed"
+                        }else{
+                            # Destination Flexgroup name must be changed only if name not already in format <name>_dst which is the name format created by snapmirror protect on flexgroup destination
+                            if($PrimaryVolName -notmatch "_dst$"){
+                                $NewVolumeName=$($PrimaryVolName+"_dst")
+                                Write-LogDebug "[$workOn] In Restore without RESTORE_ORIGINAL mode Flexgroup volume name [$PrimaryVolName] must be changed to [$NewVolumeName]"
+                                $PrimaryVolName=$NewVolumeName
+                            }
+                        }    
                     }
                 }else{
                     $SecondaryName=$PrimaryVolName    
@@ -5606,75 +5619,79 @@ Try {
             elseif($PrimaryVolExtendStyle -match "flexgroup|flexgroup_constituent"){
                 # create a flexgroup and all its constituent
 
-                Write-LogDebug "[$workon] Process a Flexgroup volume and all its constituent [$PrimaryVolName]"
-                # get all constituent informations
-                $PrimaryFlexgroupUuid=$PrimaryVol.VolumeIdAttributes.FlexgroupUuid
-                Write-LogDebug "Get-NcVol -VserverContext $PrimaryVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended=`"flexgroup_constituent`"`}`} -Controller $myPrimaryController"
-                $PrimaryFlexgroupConstituent=Get-NcVol -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup_constituent"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
-                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup constituent informations [$PrimaryVolName] [$ErrorVar]" }
-                $NumberFlexgroupConstituent=($PrimaryFlexgroupConstituent | Measure-Object).Count
-                $ConstituentSizeByte=$PrimaryFlexgroupConstituent[0].TotalSize
-                Write-LogDebug "Get-NcVol -VserverContext $PrimaryVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended=`"flexgroup`"`}`} -Controller $myPrimaryController"
-                $PrimaryFlexgroupMaster=Get-NcVol -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
-                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup master informations [$PrimaryVolName] [$ErrorVar]" }
-                $SecondaryFlexgroupMasterName=$($PrimaryFlexgroupMaster.Name+'_dst')
-                $PrimaryFlexgroupMasterName=$PrimaryFlexgroupMaster.Name
-                $PrimaryFlexgroupMasterState=$PrimaryFlexgroupMaster.State
-                $PrimaryFlexgroupMasterType=$PrimaryFlexgroupMaster.VolumeIdAttributes.Type
+                if($Restore -eq $False){
+                    Write-LogDebug "[$workon] Process a Flexgroup volume and all its constituent [$PrimaryVolName]"
+                    # get all constituent informations
+                    $PrimaryFlexgroupUuid=$PrimaryVol.VolumeIdAttributes.FlexgroupUuid
+                    Write-LogDebug "Get-NcVol -VserverContext $PrimaryVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended=`"flexgroup_constituent`"`}`} -Controller $myPrimaryController"
+                    $PrimaryFlexgroupConstituent=Get-NcVol -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup_constituent"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup constituent informations [$PrimaryVolName] [$ErrorVar]" }
+                    $NumberFlexgroupConstituent=($PrimaryFlexgroupConstituent | Measure-Object).Count
+                    $ConstituentSizeByte=$PrimaryFlexgroupConstituent[0].TotalSize
+                    Write-LogDebug "Get-NcVol -VserverContext $PrimaryVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended=`"flexgroup`"`}`} -Controller $myPrimaryController"
+                    $PrimaryFlexgroupMaster=Get-NcVol -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup master informations [$PrimaryVolName] [$ErrorVar]" }
+                    $SecondaryFlexgroupMasterName=$($PrimaryFlexgroupMaster.Name+'_dst')
+                    $PrimaryFlexgroupMasterName=$PrimaryFlexgroupMaster.Name
+                    $PrimaryFlexgroupMasterState=$PrimaryFlexgroupMaster.State
+                    $PrimaryFlexgroupMasterType=$PrimaryFlexgroupMaster.VolumeIdAttributes.Type
 
-                if( $Global:SelectVolume -eq $True -and $Global:NonInteractive -eq $False )
-                {
-                    # if we run with SelectVolume option in Interactive mode, we must confirm if this volume must be included on Secondary SVM or not
-                    $volsizeGB=[math]::round($PrimaryVolSize/1024/1024,2)
-                    $ANS=Read-HostOptions -question "[$workOn] Does volume [$PrimaryFlexgroupMasterName  $($volsizeGB) GB  $PrimaryVolJunctionPath] need to be replicated on destination ?" -options "y/n"
+                    if( $Global:SelectVolume -eq $True -and $Global:NonInteractive -eq $False )
+                    {
+                        # if we run with SelectVolume option in Interactive mode, we must confirm if this volume must be included on Secondary SVM or not
+                        $volsizeGB=[math]::round($PrimaryVolSize/1024/1024,2)
+                        $ANS=Read-HostOptions -question "[$workOn] Does volume [$PrimaryFlexgroupMasterName  $($volsizeGB) GB  $PrimaryVolJunctionPath] need to be replicated on destination ?" -options "y/n"
 
-                    if ( $ANS -eq 'n' ) {
-                        Write-LogDebug "SelectVolume volume [$PrimaryFlexgroupMasterName] excluded"
-                        if($PreviousSelectVolumes.where({$_ -match $PrimaryFlexgroupMasterName},'First').Count -as [bool]){
-                            Write-Log "[$workOn] [$PrimaryFlexgroupMasterName] was previously selected for replication"
-                            $ANS=Read-HostOptions -question "[$mySecondaryVserver] Do you want to remove destination volume [$SecondaryFlexgroupMasterName] and associated Snapmirror Relationship ?" -options "y/n"
-                            if($ANS -eq 'y'){
-                                if((delete_snapmirror_relationship -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -PrimaryVolumeName $PrimaryFlexgroupMasterName -IsFlexgroup $True) -ne $True){Write-LogError "ERROR: delete_snapmirror_relationship failed";return $false}
-                                if((umount_volume $mySecondaryController $mySecondaryVserver $SecondaryFlexgroupMasterName) -ne $True){Write-LogError "ERROR: umount_volume failed";return $false}
-                                if((remove_volume $mySecondaryController $mySecondaryVserver $SecondaryFlexgroupMasterName ) -ne $True){Write-LogError "ERROR: remove_volume failed";return $false}  
+                        if ( $ANS -eq 'n' ) {
+                            Write-LogDebug "SelectVolume volume [$PrimaryFlexgroupMasterName] excluded"
+                            if($PreviousSelectVolumes.where({$_ -match $PrimaryFlexgroupMasterName},'First').Count -as [bool]){
+                                Write-Log "[$workOn] [$PrimaryFlexgroupMasterName] was previously selected for replication"
+                                $ANS=Read-HostOptions -question "[$mySecondaryVserver] Do you want to remove destination volume [$SecondaryFlexgroupMasterName] and associated Snapmirror Relationship ?" -options "y/n"
+                                if($ANS -eq 'y'){
+                                    if((delete_snapmirror_relationship -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -PrimaryVolumeName $PrimaryFlexgroupMasterName -IsFlexgroup $True) -ne $True){Write-LogError "ERROR: delete_snapmirror_relationship failed";return $false}
+                                    if((umount_volume $mySecondaryController $mySecondaryVserver $SecondaryFlexgroupMasterName) -ne $True){Write-LogError "ERROR: umount_volume failed";return $false}
+                                    if((remove_volume $mySecondaryController $mySecondaryVserver $SecondaryFlexgroupMasterName ) -ne $True){Write-LogError "ERROR: remove_volume failed";return $false}  
+                                }
                             }
+                            continue 
                         }
-                        continue 
+                        if ( $ANS -eq 'y' ){
+                            Write-LogDebug "SelectVolume volume [$SecondaryFlexgroupMasterName] included" 
+                            Save_Volume_To_Selectvolumedb -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -SourceVserver $myPrimaryVserver -DestinationVserver $mySecondaryVserver -PrimaryVolumeName $PrimaryFlexgroupMasterName -SecondaryVolumeName $SecondaryFlexgroupMasterName  
+                        }
                     }
-                    if ( $ANS -eq 'y' ){
-                        Write-LogDebug "SelectVolume volume [$SecondaryFlexgroupMasterName] included" 
-                        Save_Volume_To_Selectvolumedb -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -SourceVserver $myPrimaryVserver -DestinationVserver $mySecondaryVserver -PrimaryVolumeName $PrimaryFlexgroupMasterName -SecondaryVolumeName $SecondaryFlexgroupMasterName  
-                    }
-                }
 
-                if ( ( $PrimaryFlexgroupMasterState -eq "online" ) -and ( $PrimaryFlexgroupMasterType -eq "rw" ) ) {
-                    # check this volume Name on secondary SVM
-                    Write-LogDebug "Check if [$SecondaryFlexgroupMasterName] volume exists on destination"
-                    Write-LogDebug "Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $SecondaryFlexgroupMasterName"
-                    $SecondaryFlexgroup = Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $SecondaryFlexgroupMasterName  -ErrorVariable ErrorVar 
-                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
-                    if ( $null -eq $SecondaryFlexgroup )  {
-                        # Create this Flexgroup if it does not exist on secondary
-                        Write-Log "[$workOn] Create Flexgroup [$SecondaryFlexgroupMasterName] on [$mySecondaryVserver]"
-                        if($Global:XDPPolicy -eq ""){$Policy="MirrorAllSnapshots"}
-                        else{$Policy=$Global:XDPPolicy}
-                        if( ( $Global:MirrorSchedule -eq "none" ) -or ( $Global:MirrorSchedule.Length -eq 0 ) ){$Schedule="hourly"}
-                        else{$Schedule=$Global:MirrorSchedule}
-                        $PathList=$($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName)
-                        Write-LogDebug "Enable-NcSnapmirrorProtect -Policy $Policy -PathList $PathList -Schedule $Schedule -DestinationVserver $mySecondaryVserver -AutoInitialize $False -Controller $mySecondaryController"
-                        $ret=Enable-NcSnapmirrorProtect -Policy $Policy -PathList $PathList -Schedule $Schedule -DestinationVserver $mySecondaryVserver -AutoInitialize $False -Controller $mySecondaryController -ErrorVariable ErrorVar
-                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Enable-NcSnapmirrorProtect failed [$ErrorVar]" } 
-                        Write-LogDebug "wait_snapmirror_dr_status -DestinationVserver $mySecondaryVserver -PrimaryVolume $PrimaryFlexgroupMasterName -SecondaryVolumeName $SecondaryFlexgroupMasterName -Status idle -MirrorState uninitialized -mySecondaryController $mySecondaryController" 
-                        $ret=wait_snapmirror_dr_status -DestinationVserver $mySecondaryVserver -PrimaryVolume $PrimaryFlexgroupMasterName -SecondaryVolumeName $SecondaryFlexgroupMasterName -Status "idle" -MirrorState "uninitialized" -mySecondaryController $mySecondaryController
-                        if( ($Global:Run_Mode -eq "ConfigureDR") -and ($Global:SelectVolume -eq $True)){
-                            Write-LogDebug "Invoke-NcSnapmirrorInitialize -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Controller $mySecondaryController"
-                            $ret=Invoke-NcSnapmirrorInitialize -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                            if ( $? -ne $True ) {$Return=$False;Throw "ERROR: Failed to Initialize Snapmirror Relationship [$ErrorVar]"}
-                        }  
-                    }elseif($PrimaryFlexgroupMasterName -notin $ListFlexgroup){
-                        Write-LogDebug "[$workOn] Volume [$PrimaryFlexgroupMasterName] already exists" 
-                        $ListFlexgroup+=$PrimaryFlexgroupMasterName
+                    if ( ( $PrimaryFlexgroupMasterState -eq "online" ) -and ( $PrimaryFlexgroupMasterType -eq "rw" ) ) {
+                        # check this volume Name on secondary SVM
+                        Write-LogDebug "Check if [$SecondaryFlexgroupMasterName] volume exists on destination"
+                        Write-LogDebug "Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $SecondaryFlexgroupMasterName"
+                        $SecondaryFlexgroup = Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $SecondaryFlexgroupMasterName  -ErrorVariable ErrorVar 
+                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+                        if ( $null -eq $SecondaryFlexgroup )  {
+                            # Create this Flexgroup if it does not exist on secondary
+                            Write-Log "[$workOn] Create Flexgroup [$SecondaryFlexgroupMasterName] on [$mySecondaryVserver]"
+                            if($Global:XDPPolicy -eq ""){$Policy="MirrorAllSnapshots"}
+                            else{$Policy=$Global:XDPPolicy}
+                            if( ( $Global:MirrorSchedule -eq "none" ) -or ( $Global:MirrorSchedule.Length -eq 0 ) ){$Schedule="hourly"}
+                            else{$Schedule=$Global:MirrorSchedule}
+                            $PathList=$($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName)
+                            Write-LogDebug "Enable-NcSnapmirrorProtect -Policy $Policy -PathList $PathList -Schedule $Schedule -DestinationVserver $mySecondaryVserver -AutoInitialize $False -Controller $mySecondaryController"
+                            $ret=Enable-NcSnapmirrorProtect -Policy $Policy -PathList $PathList -Schedule $Schedule -DestinationVserver $mySecondaryVserver -AutoInitialize $False -Controller $mySecondaryController -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Enable-NcSnapmirrorProtect failed [$ErrorVar]" } 
+                            Write-LogDebug "wait_snapmirror_dr_status -DestinationVserver $mySecondaryVserver -PrimaryVolume $PrimaryFlexgroupMasterName -SecondaryVolumeName $SecondaryFlexgroupMasterName -Status idle -MirrorState uninitialized -mySecondaryController $mySecondaryController" 
+                            $ret=wait_snapmirror_dr_status -DestinationVserver $mySecondaryVserver -PrimaryVolume $PrimaryFlexgroupMasterName -SecondaryVolumeName $SecondaryFlexgroupMasterName -Status "idle" -MirrorState "uninitialized" -mySecondaryController $mySecondaryController
+                            if( ($Global:Run_Mode -eq "ConfigureDR") -and ($Global:SelectVolume -eq $True)){
+                                Write-LogDebug "Invoke-NcSnapmirrorInitialize -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Controller $mySecondaryController"
+                                $ret=Invoke-NcSnapmirrorInitialize -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) {$Return=$False;Throw "ERROR: Failed to Initialize Snapmirror Relationship [$ErrorVar]"}
+                            }  
+                        }elseif($PrimaryFlexgroupMasterName -notin $ListFlexgroup){
+                            Write-LogDebug "[$workOn] Volume [$PrimaryFlexgroupMasterName] already exists" 
+                            $ListFlexgroup+=$PrimaryFlexgroupMasterName
+                        }
                     }
+                }else{
+                    Write-Warning "[$workOn] Ignore Flexgroup [$PrimaryVolName] verification in Restore Mode. If missing, currently you must recreate Flexgroup manualy"
                 }
             }
             else {
@@ -7425,7 +7442,6 @@ Function create_lif_dr(
     [string]$nodeMatchRegEx)
  {
 Try {
-
     $Return = $True 
     Write-Log "[$workOn] Check SVM LIF"
     Write-LogDebug "create_lif_dr[$myPrimaryVserver]: start"
@@ -8729,6 +8745,13 @@ Try {
             $filepath=$($Global:JsonPath+"Get-NcQtree.json")
             Throw "ERROR: failed to read $filepath"
         }
+        if(Test-Path $($Global:JsonPath+"Get-NcVol.json")){
+            $PrimaryVolsDetails=Get-Content $($Global:JsonPath+"Get-NcVol.json") -Raw | ConvertFrom-Json
+        }else{
+            $Return=$False
+            $filepath=$($Global:JsonPath+"Get-NcVole.json")
+            Throw "ERROR: failed to read $filepath"
+        }
     }
     if($Backup -eq $True){
         $PrimaryQtrees | ConvertTo-Json -Depth 5 | Out-File -FilePath $($Global:JsonPath+"Get-NcQtree.json") -Encoding ASCII -Width 65535
@@ -8749,11 +8772,26 @@ Try {
             $QName=$qtree.Qtree
             $ExportPolicy=$qtree.ExportPolicy
             $Volume=$qtree.Volume
-            $VolumeDetails=Get-NcVol -Name $Volume -Vserver $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
-            if($VolumeDetails.VolumeIdAttributes.StyleExtended -eq "flexgroup"){
-                $Volume=$($Volume+"_dst")
-                Write-LogDebug "Flexgroup on source so volume name on secondary is [$Volume] "
+            
+            if($Restore -eq $False){
+                $VolumeDetails=Get-NcVol -Name $Volume -Vserver $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
+                if($VolumeDetails.VolumeIdAttributes.StyleExtended -eq "flexgroup"){
+                    $Volume=$($Volume+"_dst")
+                    Write-LogDebug "Flexgroup on source so volume name on secondary is [$Volume] "
+                }
+            }else{
+                if($Global:RESTORE_ORIGINAL -eq $True){
+                    Write-LogDebug "[$workOn] In RESTORE_ORIGINAL mode Flexgroup volume name [$Volume] is not changed"
+                }else{
+                    # Destination Flexgroup name must be changed only if name not already in format <name>_dst which is the name format created by snapmirror protect on flexgroup destination
+                    if($Volume -notmatch "_dst$"){
+                        $NewVolumeName=$($Volume+"_dst")
+                        Write-LogDebug "[$workOn] In Restore without RESTORE_ORIGINAL mode Flexgroup volume name [$Volume] must be changed to [$NewVolumeName]"
+                        $Volume=$NewVolumeName
+                    }
+                }
             }
+
             $SecStyle=$qtree.SecurityStyle
             $Mode=$qtree.Mode
             $Oplocks=$qtree.Oplocks
@@ -9405,7 +9443,15 @@ Try {
         {
             Write-Log "[$workOn] Add CIFS Server in Vserver DR : [$mySecondaryVserver] [$mySecondaryController]"
             $SecondaryAuthStyle = $PrimaryCifsServerInfos.AuthStyle
-            $SecondaryCifsServer = $PrimaryCifsServerInfos.CifsServer + "-DR"
+            if($Restore -eq $False){
+                $SecondaryCifsServer = $PrimaryCifsServerInfos.CifsServer + "-DR"
+            }else{
+                if( $Global:ForceRestoreOriginal -eq $True ){
+                    $SecondaryCifsServer = $PrimaryCifsServerInfos.CifsServer  
+                }else{
+                    $SecondaryCifsServer = $PrimaryCifsServerInfos.CifsServer + "-DR"    
+                }  
+            }
             $SecondaryDefaultSite = $PrimaryCifsServerInfos.DefaultSite
             $SecondaryDomain = $PrimaryCifsServerInfos.Domain
             $SecondaryDomainWorkgroup = $PrimaryCifsServerInfos.DomainWorkgroup
@@ -9803,11 +9849,13 @@ Try {
                 }
                 foreach ( $NetBiosAliase in ( $PrimaryNetbiosAliases | Skip-Null ) ) {
                     Write-Log "[$mySecondaryVserver] Change NetBiosAlias to [$NetBiosAliase]"
-                    Write-LogDebug "set_all_lif -mySecondaryVserver $mySecondaryVserver -myPrimaryVserver $myPrimaryVserver -mySecondaryController $mySecondaryController  -myPrimaryController $myPrimaryController -state up"
-                    if ( (-not $Global:SecondaryCifsLifCreated) -and ($null -eq $NcCifsServerInfos) ){
-                        if (($ret=set_all_lif -mySecondaryVserver $mySecondaryVserver -myPrimaryVserver $myPrimaryVserver -mySecondaryController $mySecondaryController  -myPrimaryController $myPrimaryController -state up) -ne $True ) {
-                            Write-LogError "ERROR: Failed to set all lif up on [$mySecondaryVserver]"
-                            clean_and_exit 1
+                    if($Restore -eq $False){
+                        Write-LogDebug "set_all_lif -mySecondaryVserver $mySecondaryVserver -myPrimaryVserver $myPrimaryVserver -mySecondaryController $mySecondaryController  -myPrimaryController $myPrimaryController -state up"
+                        if ( (-not $Global:SecondaryCifsLifCreated) -and ($null -eq $NcCifsServerInfos) ){
+                            if (($ret=set_all_lif -mySecondaryVserver $mySecondaryVserver -myPrimaryVserver $myPrimaryVserver -mySecondaryController $mySecondaryController  -myPrimaryController $myPrimaryController -state up) -ne $True ) {
+                                Write-LogError "ERROR: Failed to set all lif up on [$mySecondaryVserver]"
+                                clean_and_exit 1
+                            }
                         }
                     }
                     Write-LogDebug "Set-NcCifsServer -VserverContext $mySecondaryVserver -Domain $SecondaryDomain -AdminCredential $ADcred -Controller $mySecondaryController -AddNetbiosAlias $NetBiosAliase"
@@ -11085,7 +11133,12 @@ Try {
     if ( ( $ret=create_update_efficiency_policy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all Efficiency policy" ; $Return = $False }
     if ( ( $ret=create_update_firewallpolicy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all Firewall policy" ; $Return = $False }
     if ( ( $ret=create_update_role_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all Role"}
-    if ( ( $ret=create_lif_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore -ForClone -nodeMatchRegEx $nodeMatchRegEx) -ne $True ) { Write-LogError "ERROR: Failed to create all LIF" ; $Return = $True }
+    $ret=create_lif_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore -ForClone -nodeMatchRegEx $nodeMatchRegEx
+    if ($ret.count -gt 0){
+        if ($ret[0] -ne $True){ Write-LogError "ERROR: Failed to create all LIF" ; $Return = $True }
+    }else{
+        if ($ret -ne $True){ Write-LogError "ERROR: Failed to create all LIF" ; $Return = $True }
+    }
     if ( ( $ret=create_update_localuser_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all local user"}
     if ( ( $ret=create_update_localunixgroupanduser_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all Local Unix User and Group"}
     if ( ( $ret=create_update_usermapping_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create User Mapping"}
@@ -11282,7 +11335,12 @@ Try {
     if ( ( $ret=create_update_efficiency_policy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all Efficiency policy" ; $Return = $False }
     if ( ( $ret=create_update_firewallpolicy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all Firewall policy" ; $Return = $False }
     if ( ( $ret=create_update_role_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all Role"}
-    if ( ( $ret=create_lif_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore -nodeMatchRegEx $nodeMatchRegEx) -ne $True ) { Write-LogError "ERROR: Failed to create all LIF" ; $Return = $True }
+    $ret=create_lif_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore -nodeMatchRegEx $nodeMatchRegEx
+    if ($ret.count -gt 0){
+        if ($ret[0] -ne $True){ Write-LogError "ERROR: Failed to create all LIF" ; $Return = $True }
+    }else{
+        if ($ret -ne $True){ Write-LogError "ERROR: Failed to create all LIF" ; $Return = $True }
+    }
     
     #if((-not $Global:NonInteractive) -or ($null -ne $Global:DefaultLocalUserCredentials)){
     if( $null -ne $Global:DefaultLocalUserCredentials -or $True -eq $runBackup ){
@@ -12393,7 +12451,7 @@ try{
         return $Return  
     }
     #Write-LogDebug "[$workOn] Set Lif up to authenticate in AD user on DR"^
-    # This could be done only if secondaryu LIF are presents. Which means works in non-preserve identity mode
+    # This could be done only if secondary LIF are presents. Which means works in non-preserve identity mode
     if( ($Backup -ne $True) -and ($Restore -ne $True) ){ 
         $SecondaryCifsLifCreated=$true
         if (-not (Is_One_LIF_Ready -myVserver $mySecondaryVserver -myController $mySecondaryController) ){
@@ -12478,20 +12536,23 @@ try{
         }
         Write-LogOnly "[OK] One LIF is Up & Ready on Secondary Vserver to allow AD authentication"
         Write-LogDebug "[$workOn] Get-NcCifsLocalUser -VserverContext $mySecondaryVserver -controller $mySecondaryController"
-        if($Restore -eq $False){
-            Write-LogDebug "Get-NcCifsServer -VserverContext $myPrimaryVserver -controller $myPrimaryController"
-            $PrimaryCifs=Get-NcCifsServer -VserverContext $myPrimaryVserver -controller $myPrimaryController  -ErrorVariable ErrorVar
-            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsServer failed [$ErrorVar]" }
+        
+    }
+
+    if($Restore -eq $False){
+        Write-LogDebug "Get-NcCifsServer -VserverContext $myPrimaryVserver -controller $myPrimaryController"
+        $PrimaryCifs=Get-NcCifsServer -VserverContext $myPrimaryVserver -controller $myPrimaryController  -ErrorVariable ErrorVar
+        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsServer failed [$ErrorVar]" }
+    }else{
+        if(Test-Path $($Global:JsonPath+"Get-NcCifsServer.json")){
+            $PrimaryCifs=Get-Content $($Global:JsonPath+"Get-NcCifsServer.json") -Raw | ConvertFrom-Json
         }else{
-            if(Test-Path $($Global:JsonPath+"Get-NcCifsServer.json")){
-                $PrimaryCifs=Get-Content $($Global:JsonPath+"Get-NcCifsServer.json") -Raw | ConvertFrom-Json
-            }else{
-                $Return=$False
-                $filepath=$($Global:JsonPath+"Get-NcCifsServer.json")
-                Throw "ERROR: failed to read $filepath"
-            }
+            $Return=$False
+            $filepath=$($Global:JsonPath+"Get-NcCifsServer.json")
+            Throw "ERROR: failed to read $filepath"
         }
     }
+
     if($Backup -eq $False){
         $SecondaryUserList=Get-NcCifsLocalUser -VserverContext $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsLocalUser failed [$ErrorVar]" }

@@ -2886,6 +2886,16 @@ function Restore-SvmDr {
         # Enables OnCommand Workflow Automation (WFA) Integration
         [switch]$WfaIntegration,
 
+        # Enables Non-Interactive Mode
+        # Is default enabled in Wfa-Integration Mode
+        [switch]$NonInteractive,
+
+        # Enables Force Restore Original CIFS server Name Mode
+        # By default, will restore CIFS by adding -DR to source CIFS server name.
+        # With this switch parameter, it forces to restore CIFS server with same name as source.
+        # Make sure that there is no duplicate entry in Active Directory 
+        [switch]$ForceRestoreOriginal,
+
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
         [Int32]$Timeout = 60

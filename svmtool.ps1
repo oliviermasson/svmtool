@@ -547,6 +547,7 @@
                     Change test source alive with only SSh and HTTPS (no more ping)
         - 0.4.1 :   Change default Log level for logfile to Debug
                     Update user guide
+        - 0.4.2 :   Fix Restore-SvmDr
 #>
 [CmdletBinding(HelpURI = "https://github.com/oliviermasson/svmtool", DefaultParameterSetName = "ListInstance")]
 Param (
@@ -745,6 +746,9 @@ Param (
 
     [Parameter(Mandatory = $false, ParameterSetName = 'CloneDR')]
     [switch]$ForceCloneOriginal,
+
+    [Parameter(Mandatory = $false, ParameterSetName = 'Restore')]
+    [switch]$ForceRestoreOriginal,
 
     [Parameter(Mandatory = $false, ParameterSetName = 'ConfigureDR')]
     [Parameter(Mandatory = $false, ParameterSetName = 'UpdateDR')] 
@@ -1083,8 +1087,8 @@ $Global:MIN_MINOR = 5
 $Global:MIN_BUILD = 0
 $Global:MIN_REVISION = 0
 #############################################################################################
-$Global:RELEASE = "0.4.1"
-$Global:SCRIPT_RELEASE = "0.1.21"
+$Global:RELEASE = "0.4.2"
+$Global:SCRIPT_RELEASE = "0.1.22"
 $Global:BASEDIR = 'C:\Scripts\SVMTOOL'
 $Global:SVMTOOL_DB_DEFAULT = $Global:BASEDIR
 $Global:CONFBASEDIR = $BASEDIR + '\etc\'
@@ -1116,6 +1120,7 @@ $Global:DefaultLDAPCredentials = $DefaultLDAPCredentials
 $Global:ForceClean = $ForceClean
 $Global:SkipVscanFpolicy = $SkipVscanFpolicy
 $Global:ForceCloneOriginal = $ForceCloneOriginal
+$Global:ForceRestoreOriginal = $ForceRestoreOriginal
 $Global:BACKUPALLSVM = $False
 $Global:PreserveIdentity=$PreserveIdentity
 $Global:TieringPolicy=$TieringPolicy
@@ -1478,6 +1483,7 @@ if ( $Backup ) {
                     Write-Error "ERROR: Failed to load module SVMTOOLS"
                     exit 1
                 }
+                $Global:Run_Mode="Backup"
                 $Global:NFSonly=$False
                 $Global:STOP_TIMEOUT = 360
                 $Global:START_TIMEOUT = 360
@@ -1777,14 +1783,17 @@ if ( $Restore ) {
                     [Parameter(Mandatory = $False)][string]$DataAggr="",        
                     [Parameter(Mandatory = $False)][string]$LogLevelConsole="Info",
                     [Parameter(Mandatory = $False)][string]$LogLevelLogFile="Debug",
-                    [Parameter(Mandatory = $True)][string]$RESTORE_ORIGINAL,
-                    [boolean]$NonInteractive
+                    [Parameter(Mandatory = $True)][bool]$RESTORE_ORIGINAL=$False,
+                    [Parameter(Mandatory = $False)][bool]$FORCE_RESTORE_ORIGINAL=$False,
+                    [boolean]$NonInteractive=$True
                 )
+                $Global:Run_Mode="Restore"
                 $Global:NFSonly=$False
                 $Global:RootAggr = $RootAggr
                 $Global:DataAggr = $DataAggr
                 $Global:ConsoleThreadingRequired = $true
                 $Global:RESTORE_ORIGINAL = $RESTORE_ORIGINAL
+                $Global:ForceRestoreOriginal = $FORCE_RESTORE_ORIGINAL
                 $Path = $env:PSModulePath.split(";")
                 if ($Path -notcontains $script_path) {
                     $Path += $script_path
@@ -1891,7 +1900,13 @@ if ( $Restore ) {
         [void]$RestoreJob.AddParameter("RootAggr", $Global:RootAggr)
         [void]$RestoreJob.AddParameter("DataAggr", $Global:DataAggr)
         [void]$RestoreJob.AddParameter("RESTORE_ORIGINAL", $Global:RESTORE_ORIGINAL)
-        [void]$RestoreJob.AddParameter("Object",$Global:Object)
+
+        if($Global:ForceRestoreOriginal.IsPresent){
+            [void]$RestoreJob.AddParameter("FORCE_RESTORE_ORIGINAL", $True)
+        }else{
+            [void]$RestoreJob.AddParameter("FORCE_RESTORE_ORIGINAL", $False)
+        }
+        
         if ($RW -eq $True) {
             [void]$RestoreJob.AddParameter("VOLTYPE", "RW")
         }
@@ -1924,7 +1939,7 @@ if ( $Restore ) {
         $Jobs_Restore += $JobRestore
         $numJobRestore++
     }
-    While (@($Jobs_Restore | Where-Object { $_.Handle.IsCompleted -eq $True } | Measure-Object).Count -ne $numJobRestore) {
+    While ( (@($Jobs_Restore | Where-Object { $_.Handle.IsCompleted -eq $True }) | Measure-Object).Count -ne $numJobRestore ) {
         $JobRemain = $Jobs_Restore | Where-Object { $_.Handle.IsCompleted -eq $False }
         $Remaining = ""
         $Remaining = $JobRemain.Name

@@ -76,13 +76,17 @@
 #           Fix NFS only replication
 #           Fix onAccessPolicy management
 #           Change test source alive with only SSh and HTTPS (no more ping) 
+#   1.3.6 : Fix Restore-SvmDr for Lif
+#           Fix Restore-SvmDr for CIFS server name (add ForceRestoreOriginal to force restoring Original CIFS server name on destination. Make sure to avoid duplicate entry in ActiveDirectory)
+#           Fix Restore-SvmDr for Qtree & VolumeOptions for Flexgroup volumes
+#           Set warning during Restore Flexgroup volume. Currently, could not restore missing Flexgroup volume, must be recreated manualy
 @{
 
     # Script module or binary module file associated with this manifest.
     RootModule        = '.\svmtools.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.3.5'
+    ModuleVersion     = '1.3.6'
 
     # Supported PSEditions
     # CompatiblePSEditions = @()
@@ -97,7 +101,7 @@
     CompanyName       = 'NetApp'
 
     # Copyright statement for this module
-    Copyright         = '(c) 2019 Netapp. All rights reserved.'
+    Copyright         = '(c) 2020 Netapp. All rights reserved.'
 
     # Description of the functionality provided by this module
     Description       = 'This module contains several tools (cmdlet) to work with SVM in order to perform SVMDR with Metrocluster on source or destination, Backup and Restore of configuration, etc...'
