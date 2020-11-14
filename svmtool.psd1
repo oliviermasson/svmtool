@@ -6,7 +6,7 @@
 # Generated on: 2018-10-09
 #
 # Updated by : Olivier Masson
-# Updated on : 2020-10-05
+# Updated on : 2020-11-13
 #
 # Version Control :
 #   1.0.0 : Initial version
@@ -23,13 +23,15 @@
 #   1.1.1 : Add wrapper for RemoveInstance
 #   1.1.2 : Add wrapper for RestoreObject
 #   1.1.3 : Fix some function's parameter
+#   1.1.4 : Add NonInteractive parameter to Restore-SvmDr
+#           Add ForceRestoreOriginal parameter to Restore-SvmDr
 @{
 
     # Script module or binary module file associated with this manifest.
     RootModule        = '.\svmtool.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.1.2'
+    ModuleVersion     = '1.1.4'
 
     # Supported PSEditions
     # CompatiblePSEditions = @()
@@ -44,7 +46,7 @@
     CompanyName       = 'NetApp'
 
     # Copyright statement for this module
-    Copyright         = '(c) 2019 Netapp. All rights reserved.'
+    Copyright         = '(c) 2020 Netapp. All rights reserved.'
 
     # Description of the functionality provided by this module
     Description       = 'This module contains several tools (cmdlet) to work with SVM in order to perform SVMDR with Metrocluster on source or destination, Backup and Restore of configuration, etc...'
