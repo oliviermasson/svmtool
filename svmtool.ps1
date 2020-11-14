@@ -547,6 +547,7 @@
                     Change test source alive with only SSh and HTTPS (no more ping)
         - 0.4.1 :   Change default Log level for logfile to Debug
                     Update user guide
+        - 0.4.2 :   Fix Restore-SvmDr
 #>
 [CmdletBinding(HelpURI = "https://github.com/oliviermasson/svmtool", DefaultParameterSetName = "ListInstance")]
 Param (
@@ -1086,8 +1087,8 @@ $Global:MIN_MINOR = 5
 $Global:MIN_BUILD = 0
 $Global:MIN_REVISION = 0
 #############################################################################################
-$Global:RELEASE = "0.4.1"
-$Global:SCRIPT_RELEASE = "0.1.21"
+$Global:RELEASE = "0.4.2"
+$Global:SCRIPT_RELEASE = "0.1.22"
 $Global:BASEDIR = 'C:\Scripts\SVMTOOL'
 $Global:SVMTOOL_DB_DEFAULT = $Global:BASEDIR
 $Global:CONFBASEDIR = $BASEDIR + '\etc\'
