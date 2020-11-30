@@ -1087,7 +1087,7 @@ $Global:MIN_MINOR = 5
 $Global:MIN_BUILD = 0
 $Global:MIN_REVISION = 0
 #############################################################################################
-$Global:RELEASE = "0.4.2_quotaGeorg"
+$Global:RELEASE = "0.4.3"
 $Global:SCRIPT_RELEASE = "0.1.22"
 $Global:BASEDIR = 'C:\Scripts\SVMTOOL'
 $Global:SVMTOOL_DB_DEFAULT = $Global:BASEDIR

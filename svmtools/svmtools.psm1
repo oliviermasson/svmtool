@@ -3338,13 +3338,14 @@ Function create_update_qospolicy_dr(
                 Write-LogDebug "Get-NcQosPolicyGroup -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $PrimaryQosGroupName"
                 $SecondaryQosGroup=Get-NcQosPolicyGroup -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $PrimaryQosGroupName -ErrorVariable ErrorVar    
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcQosPolicyGroup failed [$ErrorVar]" }
-                if($SecondaryQosGroup -ne $null)
+                if($SecondaryQosGroup -ne $null)  # QOS Policy group exist, so modify if needed
                 {
                     $SecondaryQosGroupMaxThroughput=$SecondaryQosGroup.MaxThroughput
                     $SecondaryQosGroupMinThroughput=$SecondaryQosGroup.MinThroughput
                     if( ($PrimaryQosGroupMaxThroughput -ne $SecondaryQosGroupMaxThroughput) -or ($PrimaryQosGroupMinThroughput -ne $SecondaryQosGroupMinThroughput) )
                     {
                         if($ForClone.IsPresent -eq $True){
+                            Write-LogDebug "Work in ForClone mode"
                             Write-LogDebug "QOS Policy Group old name [$PrimaryQosGroupName]"
                             $QosPolicyGroupName=$PrimaryQosGroupName+"___"+($mySecondaryVserver -replace "\.","_")
                             <# if($PrimaryQosGroupName -notmatch ".+___.+$"){
@@ -3365,6 +3366,7 @@ Function create_update_qospolicy_dr(
                         }else{
                             if($Global:SINGLE_CLUSTER -eq $True)
                             {
+                                Write-LogDebug "Work in SINGLE_CLUSTER mode"
                                 Write-Log "[$workOn] Update QOS Policy Group [$PrimaryQosGroupName`_$workOn]"
                                 Write-LogDebug "Set-NcQosPolicyGroup -Name $PrimaryQosGroupName`_$mySecondaryVserver -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -controller $mySecondaryController"
                                 $out=Set-NcQosPolicyGroup -Name $($PrimaryQosGroupName+"_"+$mySecondaryVserver) -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -controller $mySecondaryController  -ErrorVariable ErrorVar
@@ -3372,6 +3374,7 @@ Function create_update_qospolicy_dr(
                             }
                             else
                             {
+                                Write-LogDebug "Work in ForClone mode"
                                 Write-Log "[$workOn] Update QOS Policy Group [$PrimaryQosGroupName]"
                                 Write-LogDebug "Set-NcQosPolicyGroup -Name $PrimaryQosGroupName -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -controller $mySecondaryController"
                                 $out=Set-NcQosPolicyGroup -Name $PrimaryQosGroupName -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -controller $mySecondaryController  -ErrorVariable ErrorVar
@@ -3380,9 +3383,10 @@ Function create_update_qospolicy_dr(
                         }
                     }
                 }
-                else
+                else # QOS Policy group does not exist, do create it
                 {
                     if($ForClone.IsPresent -eq $True){
+                        Write-LogDebug "Work in ForClone mode"
                         Write-LogDebug "QOS Policy Group old name [$PrimaryQosGroupName]"
                         $QosPolicyGroupName=$PrimaryQosGroupName+"___"+($mySecondaryVserver -replace "\.","_")
                         Write-LogDebug "QOS Policy Group new name [$QosPolicyGroupName]"
@@ -3393,6 +3397,7 @@ Function create_update_qospolicy_dr(
                     }else{
                         if($Global:SINGLE_CLUSTER -eq $True)
                         {
+                            Write-LogDebug "Work in SINGLE_CLUSTER mode"
                             Write-Log "[$workOn] Create QOS Policy Group [$PrimaryQosGroupName`_$workOn]" 
                             Write-LogDebug "New-NcQosPolicyGroup -Name $PrimaryQosGroupName`_$mySecondaryVserver -Vserver $mySecondaryVserver -MaxThroughput $PrimaryQosGroupMaxThroughput -controller $mySecondaryController"
                             $out=New-NcQosPolicyGroup -Name $($PrimaryQosGroupName+"_"+$mySecondaryVserver) -Vserver $mySecondaryVserver -MaxThroughput $PrimaryQosGroupMaxThroughput -controller $mySecondaryController  -ErrorVariable ErrorVar 
@@ -3400,6 +3405,7 @@ Function create_update_qospolicy_dr(
                         }
                         else
                         {
+                            Write-LogDebug "Work in normal mode"
                             Write-Log "[$workOn] Create QOS Policy Group [$PrimaryQosGroupName]" 
                             Write-LogDebug "New-NcQosPolicyGroup -Name $PrimaryQosGroupName -Vserver $mySecondaryVserver -MaxThroughput $PrimaryQosGroupMaxThroughput -controller $mySecondaryController"
                             $out=New-NcQosPolicyGroup -Name $PrimaryQosGroupName -Vserver $mySecondaryVserver -MaxThroughput $PrimaryQosGroupMaxThroughput -controller $mySecondaryController  -ErrorVariable ErrorVar 
@@ -3430,6 +3436,7 @@ Function create_update_qospolicy_dr(
                 $SecondaryQosPolicyGroupOnSVM=(Get-NcVserver -Name $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar).QosPolicyGroup
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" }
                 if($ForClone.IsPresent -eq $True){
+                    Write-LogDebug "Work in ForClone mode"
                     Write-LogDebug "QOS Policy Group old name [$PrimaryQosGroupName]"
                     $QosPolicyGroupName=$PrimaryQosGroupName+"___"+($mySecondaryVserver -replace "\.","_")
                     Write-LogDebug "QOS Policy Group new name [$QosPolicyGroupName]"
@@ -3442,6 +3449,7 @@ Function create_update_qospolicy_dr(
                         $SecondaryQosPolicyGroupOnSVM=$SecondaryQosPolicyGroupOnSVM -replace "$mySecondaryVserver",""
                         if($PrimaryQosPolicyGroupOnSVM -ne $SecondaryQosPolicyGroupOnSVM)
                         {
+                            Write-LogDebug "Work in SINGLE_CLUSTER mode"
                             Write-logDebug "Set-NcVserver -name $mySecondaryVserver -QOsPolicyGroup $PrimaryQosPolicyGroupOnSVM`_$mySecondaryVserver -Controller $mySecondaryController"
                             $out=Set-NcVserver -Name $mySecondaryVserver -QOsPolicyGroup $($PrimaryQosPolicyGroupOnSVM+"_"+$mySecondaryVserver) -Controller $mySecondaryController  -ErrorVariable ErrorVar
                             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcVserver failed [$ErrorVar]" }  
@@ -3451,6 +3459,7 @@ Function create_update_qospolicy_dr(
                     {
                         if($PrimaryQosPolicyGroupOnSVM -ne $SecondaryQosPolicyGroupOnSVM)
                         {
+                            Write-LogDebug "Work in normal mode"
                             Write-logDebug "Set-NcVserver -name $mySecondaryVserver -QOsPolicyGroup $PrimaryQosPolicyGroupOnSVM -Controller $mySecondaryController"
                             $out=Set-NcVserver -Name $mySecondaryVserver -QOsPolicyGroup $PrimaryQosPolicyGroupOnSVM -Controller $mySecondaryController  -ErrorVariable ErrorVar
                             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcVserver failed [$ErrorVar]" }  
@@ -3505,6 +3514,7 @@ Function create_update_qospolicy_dr(
                         Write-LogDebug "QOS Policy Group new name [$QosPolicyGroupName]"
                         if($QosPolicyGroupName -ne $mySecondaryVolQosName)
                         {
+                            Write-LogDebug "Work in ForClone mode"
                             Write-log "[$workOn] Update Qos Policy Group name [$QosPolicyGroupName] for volume [$PrimaryVolName]"
                             Write-LogDebug "Get-NcVol -Template -controller $mySecondaryController"
                             $query=Get-NcVol -Template -controller $mySecondaryController  -ErrorVariable ErrorVar 
@@ -3526,6 +3536,7 @@ Function create_update_qospolicy_dr(
                             $mySecondaryVolQosName=$mySecondaryVolQosName -replace "$mySecondaryVserver",""
                             if($PrimaryVolQosName -ne $mySecondaryVolQosName)
                             {
+                                Write-LogDebug "Work in SINGLE_CLUSTER mode"
                                 Write-log "[$workOn] Update Qos Policy Group name [$PrimaryVolQosName`_$workOn] for volume [$PrimaryVolName]"
                                 Write-LogDebug "Get-NcVol -Template -controller $mySecondaryController"
                                 $query=Get-NcVol -Template -controller $mySecondaryController  -ErrorVariable ErrorVar 
@@ -3546,6 +3557,7 @@ Function create_update_qospolicy_dr(
                         {
                             if($PrimaryVolQosName -ne $mySecondaryVolQosName)
                             {
+                                Write-LogDebug "Work in normal mode"
                                 Write-log "[$workOn] Update Qos Policy Group name [$PrimaryVolQosName] for volume [$PrimaryVolName]"
                                 Write-LogDebug "Get-NcVol -Template -controller $mySecondaryController"
                                 $query=Get-NcVol -Template -controller $mySecondaryController  -ErrorVariable ErrorVar 
@@ -3689,17 +3701,17 @@ Try {
         }else{
             $SelectedVolumes=$Selected.volumes
             Write-LogDebug "Get-NcVol -Name $SelectedVolumes -Vserver $myPrimaryVserver -Controller $myPrimaryController"
-            $SnapShotPolicyListPerVol=Get-NcVol -Name $SelectedVolumes -Vserver $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
+            $ListVolumes=Get-NcVol -Name $SelectedVolumes -Vserver $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
         }    
     }else{
         if($Restore -eq $False){
             Write-LogDebug "Get-NcVol -Vserver $myPrimaryVserver -Controller $myPrimaryController"
-            $SnapShotPolicyListPerVol = Get-NcVol -Controller $myPrimaryController -Vserver $myPrimaryVserver -ErrorVariable ErrorVar
+            $ListVolumes = Get-NcVol -Controller $myPrimaryController -Vserver $myPrimaryVserver -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }  
         }else{
             if(Test-Path $($Global:JsonPath+"Get-NcVol.json")){
-                $SnapShotPolicyListPerVol=Get-Content $($Global:JsonPath+"Get-NcVol.json") -Raw | ConvertFrom-Json
+                $ListVolumes=Get-Content $($Global:JsonPath+"Get-NcVol.json") -Raw | ConvertFrom-Json
             }else{
                 $Return=$False
                 $filepath=$($Global:JsonPath+"Get-NcVol.json")
@@ -3707,15 +3719,19 @@ Try {
             }
         }
     }
-	
-    $SnapShotPolicyListPerVol_string=$SnapShotPolicyListPerVol | Out-String
-    Write-LogDebug "SnapShotPolicyListPerVol = $SnapShotPolicyListPerVol_string"
-    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
-    $SnapShotPolicyListName = $SnapShotPolicyListPerVol | ForEach-Object {$_.VolumeSnapshotAttributes.SnapshotPolicy} | Sort-Object -Unique
+    
+    # ? Does below  need to be displayed in logdebug ?
+    # $ListVolumes_string=$ListVolumes | Out-String
+    # Write-LogDebug "ListVolumes = $ListVolumes_string"
+
+    $SnapShotPolicyListName = $ListVolumes | ForEach-Object {$_.VolumeSnapshotAttributes.SnapshotPolicy} | Sort-Object -Unique
     $SnapShotPolicyListName_string = $SnapShotPolicyListName | Out-String
     Write-LogDebug "SnapShotPolicyListName =  $SnapShotPolicyListName_string" 
     foreach ( $SnapShotPolicyName in ( $SnapshotPolicyListName | Skip-Null ) ) {
         if($SnapShotPolicyName -eq "none"){continue}
+        # TODO if snapshot policy = default, this policy is only managed at cluster level
+        # TODO for other snapshot policy, need to look at svm level first. With example : Get-NcSnapshotPolicy -Query @{VserverName = 'SGDST'} -Controller $cot3
+        # TODO and if not found then check at cluster level...
         if($Restore -eq $False){
             Write-LogDebug "Get-NcSnapshotPolicy -Name $SnapShotPolicyName -Controller $myPrimaryController"
             $snapShotPolicy=Get-NcSnapshotPolicy -Name $SnapShotPolicyName -Controller $myPrimaryController  -ErrorVariable ErrorVar
@@ -11399,7 +11415,7 @@ Try {
         if ($ret -ne $True ) { Write-LogError "ERROR: Failed to create all volumes" ; $Return = $False }
     }
 	if ( ( $ret=check_update_voldr  -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: check_update_voldr failed";  $Return = $False }
-    if ( ( $ret=create_update_qospolicy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore -ForClone) -ne $True ) { Write-LogError "ERROR: create_update_qospolicy_dr" ; $Return = $False }
+    if ( ( $ret=create_update_qospolicy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: create_update_qospolicy_dr" ; $Return = $False }
 	if ( ( $ret=create_snapmirror_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn -DDR $DDR -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all snapmirror relations " ; $Return = $False }
     if ( ( $ret=create_update_snap_policy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) {Write-LogError "ERROR: create_update_snap_policy_dr"}
     <# if($Backup -eq $False -and $Restore -eq $False){
