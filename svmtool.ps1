@@ -1075,7 +1075,7 @@ Param (
 	
 	[Parameter(Mandatory = $false, ParameterSetName = 'ConfigureDR')]
     [Parameter(Mandatory = $false, ParameterSetName = 'UpdateDR')]
-	[ValidateSet("auto", "snapshot-only", "all", "none")]
+	[ValidateSet("auto", "snapshot-only", "all", "none", $null)]
     [string]$TieringPolicy = $null
 )
 
@@ -1087,7 +1087,7 @@ $Global:MIN_MINOR = 5
 $Global:MIN_BUILD = 0
 $Global:MIN_REVISION = 0
 #############################################################################################
-$Global:RELEASE = "0.4.2_for_Rene"
+$Global:RELEASE = "0.4.3"
 $Global:SCRIPT_RELEASE = "0.1.22"
 $Global:BASEDIR = 'C:\Scripts\SVMTOOL'
 $Global:SVMTOOL_DB_DEFAULT = $Global:BASEDIR
