@@ -8801,18 +8801,18 @@ Try {
             if($? -ne $True){$Return=$False;Throw "ERROR: Failed to get Qtree [$QName] on [$mySecondaryVserver] reason [$ErrorVar]"}
             if($SecQtree -eq $null){
                 Write-Log "[$workOn] Create Qtree [$QName] on Volume [$Volume]"
-                Write-LogDebug "New-NcQtree -Volume /vol/ $Volume / $QName -Mode $Mode -SecurityStyle $SecStyle -Oplocks $Oplocks -ExportPolicy $ExportPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                Write-LogDebug "New-NcQtree -Volume /vol/$Volume/$QName -Mode $Mode -SecurityStyle $SecStyle -Oplocks $Oplocks -ExportPolicy $ExportPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
                 $ret=New-NcQtree -Volume $("/vol/"+$Volume+"/"+$QName) -Mode $Mode -SecurityStyle $SecStyle -Oplocks $Oplocks -ExportPolicy $ExportPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar 
                 if($? -ne $True){$Return=$False;Throw "ERROR: Failed to create Qtree [$QName] on [$mySecondaryVserver] reason [$ErrorVar]"}
             }
             else{
                 Write-Log "[$workOn] Modify Qtree [$QName] on Volume [$Volume]"
                 if($Oplocks -eq "enabled"){
-                    Write-LogDebug "Set-NcQtree -Volume /vol/ $Volume / $QName -Mode $Mode -SecurityStyle $SecStyle -EnableOplocks -ExportPolicy $ExportPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                    Write-LogDebug "Set-NcQtree -Volume /vol/$Volume/$QName -Mode $Mode -SecurityStyle $SecStyle -EnableOplocks -ExportPolicy $ExportPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
                     $out=Set-NcQtree -Volume $("/vol/"+$Volume+"/"+$QName) -Mode $Mode -SecurityStyle $SecStyle -EnableOplocks -ExportPolicy $ExportPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
                     if($? -ne $True){$Return=$False;Throw "ERROR: Failed to Set Qtree [$QName] on [$mySecondaryVserver] reason [$ErrorVar]"}
                 }else{
-                    Write-LogDebug "Set-NcQtree -Volume /vol/ $Volume / $QName -Mode $Mode -SecurityStyle $SecStyle -DisableOplocks -ExportPolicy $ExportPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                    Write-LogDebug "Set-NcQtree -Volume /vol/$Volume/$QName -Mode $Mode -SecurityStyle $SecStyle -DisableOplocks -ExportPolicy $ExportPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
                     $out=Set-NcQtree -Volume $("/vol/"+$Volume+"/"+$QName) -Mode $Mode -SecurityStyle $SecStyle -DisableOplocks -ExportPolicy $ExportPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
                     if($? -ne $True){$Return=$False;Throw "ERROR: Failed to Set Qtree [$QName] on [$mySecondaryVserver] reason [$ErrorVar]"}    
                 }
@@ -9186,21 +9186,31 @@ Try {
                 $ldapserverslist=@()
                 $existingPreferedADServers=$LDAPclientPreferredAdServers
                 $index=0
-                do{
+                if($Restore -eq $False){
+                    do{
+                        if($existingPreferedADServers.GetType().Name -match "\[\]"){
+                            $previousPreferedServer=$existingPreferedADServers[$index]
+                            $index++
+                        }else{
+                            $previousPreferedServer=$existingPreferedADServers    
+                        }
+                        do{
+                            $ldapserver=Read-HostDefault -question "[$mySecondaryVserver] Enter AD Prefered LDAP server IP []" -default $previousPreferedServer
+                        }
+                        while(validate_ip_format $ldapserver)
+                        $ldapserverslist+=$ldapserver
+                        $ANS=Read-HostOptions -question "[$mySecondaryVserver] Do you want to add another AD Prefered LDAP server ?" -options "y/n" -default "n"
+                    }
+                    while($ANS -eq "y")
+                }else{
                     if($existingPreferedADServers.GetType().Name -match "\[\]"){
                         $previousPreferedServer=$existingPreferedADServers[$index]
                         $index++
                     }else{
                         $previousPreferedServer=$existingPreferedADServers    
                     }
-                    do{
-                        $ldapserver=Read-HostDefault -question "[$mySecondaryVserver] Enter AD Prefered LDAP server IP []" -default $previousPreferedServer
-                    }
-                    while(validate_ip_format $ldapserver)
-                    $ldapserverslist+=$ldapserver
-                    $ANS=Read-HostOptions -question "[$mySecondaryVserver] Do you want to add another AD Prefered LDAP server ?" -options "y/n" -default "n"
+                    $ldapserverslist+=$previousPreferedServer
                 }
-                while($ANS -eq "y")
                 $LDAPclientADServers=$ldapserverslist
                 $LDAPclientBindPassword=get_pwd_from_cli -workOn $mySecondaryVserver -for "LDAP server Bind Password"
                 Write-LogDebug "New-NcLdapClient -Name $PrimClient -VserverContext $mySecondaryVserver `
@@ -9252,7 +9262,24 @@ Try {
                 $serverslist=@()
                 $existingServers=$LDAPclientServers
                 $index=0
-                do{
+                if($Restore -eq $False){
+                    do{
+                        if($existingServers.count -gt 0){
+                            if($existingServers.GetType().Name -match "\[\]"){
+                                $previousServer=$existingServers[$index]
+                                $index++
+                            }else{
+                                $previousServer=$existingServers    
+                            }
+                        }else{$previousServer=""}
+                        do{
+                            $server=Read-HostDefault -question "[$mySecondaryVserver] Enter LDAP server IP" -default $previousServer
+                        }while((validate_ip_format $server) -eq $False)
+                        $serverslist+=$server
+                        $ANS=Read-HostOptions -question "[$mySecondaryVserver] Do you want to add another LDAP server" -options "y/n" -default "n"
+                    }
+                    while($ANS -eq "y")
+                }else{
                     if($existingServers.count -gt 0){
                         if($existingServers.GetType().Name -match "\[\]"){
                             $previousServer=$existingServers[$index]
@@ -9260,15 +9287,9 @@ Try {
                         }else{
                             $previousServer=$existingServers    
                         }
-                    }else{$previsousServer=""}
-                    do{
-                        $server=Read-HostDefault -question "[$mySecondaryVserver] Enter LDAP server IP" -default $previousServer
-                    }
-                    while((validate_ip_format $server) -eq $False)
-                    $serverslist+=$server
-                    $ANS=Read-HostOptions -question "[$mySecondaryVserver] Do you want to add another LDAP server" -options "y/n" -default "n"
+                    }else{$previousServer=""}
+                    $serverslist+=$previousServer    
                 }
-                while($ANS -eq "y")
                 $LDAPclientBindPassword=get_pwd_from_cli -workOn $mySecondaryVserver -for "LDAP server Bind Password" 
                 $LDAPclientServers=$serverslist
                 Write-LogDebug "New-NcLdapClient -Name $PrimClient -VserverContext $mySecondaryVserver `
@@ -17381,13 +17402,10 @@ Try {
     }
     if("Quotas" -in $objects){
         Write-Log "[$mySecondaryVserver] Restore Object Quotas"
-        #add code here to restore Quotas
-        <# if ( ( $ret = create_quota_rules_from_quotadb -myController $mySecondaryController -myVserver $mySecondaryVserver -NoCheck ) -ne $True ) {
-            Write-LogError "ERROR: create_quota_rules_from_quotadb failed"
-        } #>  #Il faut un lien vers une instance pour que le code ci-dessus puisse fonctionner.
-        # Les fichiers quotarules.<policy>.<date> ne sont créés qu'avec une instance qui backup les quota rules...
-        # ici en mode restoreobjects nous n'avons pas d'instance donc pas de lien vers SVMTOOL_DB point vers nu folder backup_<>
-        # et non le repertoire de l'instance...
+        if ( ($ret = restore_quota -myController $mySecondaryController -myVserver $mySecondaryVserver) -ne $True) {
+            Write-LogDebug "restore_quota Error check log [$ret]"
+            $Return = $False
+        }
     }
 
     Write-LogDebug "restore_object: end"
