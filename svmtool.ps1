@@ -1089,7 +1089,7 @@ $Global:MIN_MINOR = 5
 $Global:MIN_BUILD = 0
 $Global:MIN_REVISION = 0
 #############################################################################################
-$Global:RELEASE = "0.4.4"
+$Global:RELEASE = "0.4.4_insidemcc"
 $Global:SCRIPT_RELEASE = "0.1.23"
 $Global:BASEDIR = 'C:\Scripts\SVMTOOL'
 $Global:SVMTOOL_DB_DEFAULT = $Global:BASEDIR
@@ -2457,7 +2457,7 @@ if ($Migrate) {
     $SecondaryClusterName = $NcSecondaryCtrl.Name
 
     # TODO Add inside metrocluster mode's tests
-    
+
     # if ( ( $ret=analyse_junction_path -myController $NcPrimaryCtrl -myVserver $Vserver ) -ne $True ) {
     # Write-LogError "ERROR: analyse_junction_path" 
     # clean_and_exit 1
