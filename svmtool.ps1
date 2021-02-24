@@ -548,6 +548,8 @@
         - 0.4.1 :   Change default Log level for logfile to Debug
                     Update user guide
         - 0.4.2 :   Fix Restore-SvmDr
+        - 0.4.3 :   Fix QOS policy group
+        - 0.4.4 :   Fix behavior with additional snapmirror relationship outdide smvtool context
 #>
 [CmdletBinding(HelpURI = "https://github.com/oliviermasson/svmtool", DefaultParameterSetName = "ListInstance")]
 Param (
@@ -1087,8 +1089,8 @@ $Global:MIN_MINOR = 5
 $Global:MIN_BUILD = 0
 $Global:MIN_REVISION = 0
 #############################################################################################
-$Global:RELEASE = "0.4.3"
-$Global:SCRIPT_RELEASE = "0.1.22"
+$Global:RELEASE = "0.4.4"
+$Global:SCRIPT_RELEASE = "0.1.23"
 $Global:BASEDIR = 'C:\Scripts\SVMTOOL'
 $Global:SVMTOOL_DB_DEFAULT = $Global:BASEDIR
 $Global:CONFBASEDIR = $BASEDIR + '\etc\'
@@ -1126,7 +1128,7 @@ $Global:PreserveIdentity=$PreserveIdentity
 $Global:TieringPolicy=$TieringPolicy
 # Force to use CIFS modify method, instead of delete/recreate when CIFS server name need to be changed
 $Global:NoCifsDeleteMethod=$NoCifsDeleteMethod
-$Global:NumberOfLogicalProcessor = (Get-WmiObject Win32_Processor).NumberOfLogicalProcessors
+$Global:NumberOfLogicalProcessor = (Get-CimInstance  Win32_Processor).NumberOfLogicalProcessors
 if ($Global:NumberOfLogicalProcessor -lt 4) {
     $Global:NumberOfLogicalProcessor = 4
 }
@@ -2107,6 +2109,12 @@ if ( $RestoreObject ){
     clean_and_exit 0  
 }
 ####################################################################################################
+####################################################################################################
+####################################################################################################
+####################################################################################################
+####################################################################################################
+####################################################################################################
+####################################################################################################
 
 if ( ( Test-Path $Global:CONFFILE ) -eq $False ) {
     Write-LogError "ERROR: instance [$instance] not found please run setup option" 
@@ -2199,6 +2207,7 @@ if ( $null -eq $Vserver ) {
     Write-LogError "ERROR: unable to find VserverDR in $VCONFFILE"
     clean_and_exit 1 ;
 }
+$Global:VserverDR=$VserverDR
 $AllowQuotaDR = $read_vconf.Get_Item("AllowQuotaDR")
 $AllowEncryption = $read_vconf.Get_Item("AllowEncrypt")
 if ($AllowEncryption -ne $null) {
@@ -2302,6 +2311,9 @@ if ( $ConfigureDR ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$SECONDARY_CLUSTER]" 
         clean_and_exit 1
     }
+
+    # TODO Add inside metrocluster mode's tests
+
     if ( ($ret = Save_Cluster_To_JSON -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl) -ne $True) {
         Write-Warning "FAILED to backup cluster information"
     }
@@ -2351,7 +2363,7 @@ if ( $ConfigureDR ) {
         clean_and_exit 1
 
     }
-    if ( ( $ret = svmdr_db_switch_datafiles -myController $NcPrimaryCtrl -myVserver $Vserver ) -eq $false ) {
+    if ( ( $ret = svmdr_db_switch_datafiles -myController $NcPrimaryCtrl -myVserver $Vserver -secondaryVserver $VserverDR) -eq $false ) {
         Write-LogError "ERROR: Failed to switch SVMTOOL_DB datafiles" 
         clean_and_exit 1
     }
@@ -2373,7 +2385,7 @@ if ( $ConfigureDR ) {
             }
         }
     }
-    if ( ( $ret = save_vol_options_to_voldb -myController $NcPrimaryCtrl -myVserver $Vserver ) -ne $True ) {
+    if ( ( $ret = save_vol_options_to_voldb -myController $NcPrimaryCtrl -myVserver $Vserver -mySecondaryVserver $VserverDR) -ne $True ) {
         Write-LogError "ERROR: save_vol_options_to_voldb failed"
         clean_and_exit 1
     }
@@ -2408,6 +2420,9 @@ if ( $DeleteDR ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$SECONDARY_CLUSTER]" 
         clean_and_exit 1
     }
+
+    # TODO Add inside metrocluster mode's tests
+
     # if ( ( $ret=analyse_junction_path -myController $NcPrimaryCtrl -myVserver $Vserver ) -ne $True ) {
     # Write-LogError "ERROR: analyse_junction_path" 
     # clean_and_exit 1
@@ -2440,6 +2455,9 @@ if ($Migrate) {
         clean_and_exit 1
     }
     $SecondaryClusterName = $NcSecondaryCtrl.Name
+
+    # TODO Add inside metrocluster mode's tests
+    
     # if ( ( $ret=analyse_junction_path -myController $NcPrimaryCtrl -myVserver $Vserver ) -ne $True ) {
     # Write-LogError "ERROR: analyse_junction_path" 
     # clean_and_exit 1
@@ -2782,11 +2800,11 @@ if ( $UpdateDR ) {
     if ( ( $ret = update_CIFS_server_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR ) -ne $True ) {
         Write-Warning "Some CIFS options has not been set on [$VserverDR]"
     }
-    if ( ( $ret = svmdr_db_switch_datafiles -myController $NcPrimaryCtrl -myVserver $Vserver ) -eq $false ) {
+    if ( ( $ret = svmdr_db_switch_datafiles -myController $NcPrimaryCtrl -myVserver $Vserver -secondaryVserver $VserverDR) -eq $false ) {
         Write-LogError "ERROR: Failed to switch SVMTOOL_DB datafiles" 
         clean_and_exit 1
     }
-    if ( ( $ret = save_vol_options_to_voldb -myController $NcPrimaryCtrl -myVserver $Vserver ) -ne $True ) {
+    if ( ( $ret = save_vol_options_to_voldb -myController $NcPrimaryCtrl -myVserver $Vserver -mySecondaryVserver $VserverDR) -ne $True ) {
         Write-LogError "ERROR: save_vol_options_to_voldb failed"
         clean_and_exit 1
     }
@@ -3293,11 +3311,11 @@ if ( $UpdateReverse ) {
     #    Write-LogError "ERROR: update_cifs_usergroup failed"
     #	clean_and_exit 1
     #}
-    if ( ( $ret = svmdr_db_switch_datafiles -myController $NcSecondaryCtrl -myVserver $VserverDR ) -eq $false ) {
+    if ( ( $ret = svmdr_db_switch_datafiles -myController $NcSecondaryCtrl -myVserver $VserverDR -secondaryVserver $VserverDR) -eq $false ) {
         Write-LogError "ERROR: Failed to switch SVMTOOL_DB datafiles" 
         clean_and_exit 1
     }
-    if ( ( $ret = save_vol_options_to_voldb -myController $NcSecondaryCtrl -myVserver $VserverDR ) -ne $True ) {
+    if ( ( $ret = save_vol_options_to_voldb -myController $NcSecondaryCtrl -myVserver $VserverDR -mySecondaryVserver $Vserver) -ne $True ) {
         Write-LogError "ERROR: save_vol_options_to_voldb failed"
         clean_and_exit 1
     }

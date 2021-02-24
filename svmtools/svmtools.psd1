@@ -80,13 +80,14 @@
 #           Fix Restore-SvmDr for CIFS server name (add ForceRestoreOriginal to force restoring Original CIFS server name on destination. Make sure to avoid duplicate entry in ActiveDirectory)
 #           Fix Restore-SvmDr for Qtree & VolumeOptions for Flexgroup volumes
 #           Set warning during Restore Flexgroup volume. Currently, could not restore missing Flexgroup volume, must be recreated manualy
+#   1.3.7:  Fix svmdr_db_switch_datafiles and save_quota_rules_to_quotadb to hide annexed snapmirror relationships
 @{
 
     # Script module or binary module file associated with this manifest.
     RootModule        = '.\svmtools.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.3.6'
+    ModuleVersion     = '1.3.7'
 
     # Supported PSEditions
     # CompatiblePSEditions = @()

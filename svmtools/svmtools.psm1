@@ -7619,7 +7619,7 @@ Try {
                                 $tmp2 = (Get-Random -minimum 1 -maximum 254)
                                 $BackupOfGateway=$PrimaryGateway
                                 $PrimaryAddress = "169.254.$tmp1.$tmp2"
-                                $PrimaryNetMask = "255.255.0.0"
+                                $PrimaryNetMask = "255.255.255.0"
                                 $PrimaryGateway = ""
                                 Write-LogWarn "[$workOn] Working in PreserveIdentity or NonInteractive CloneDR Mode - creating APIPA address [$PrimaryAddress]"
                                 $APIPA_Mode=$True
@@ -13877,6 +13877,7 @@ Function resync_vserver_dr (
 Function svmdr_db_check (
 	[NetApp.Ontapi.Filer.C.NcController] $myController,
 	[string]$myVserver, 
+    [string]$mySecondaryVserver,
 	[string]$myVolume) {
 Try {
 	$Return = $True
@@ -13899,8 +13900,8 @@ Try {
   	$NcCluster = Get-NcCluster -Controller $myController
   	$SourceCluster = $NcCluster.ClusterName
 
-    Write-LogDebug "Get-NcSnapmirrorDestination  -SourceVserver $myVserver -VserverContext $myVserver -Controller $myController"
-    $relationlist=Get-NcSnapmirrorDestination  -SourceVserver $myVserver -VserverContext $myVserver -Controller $myController  -ErrorVariable ErrorVar
+    Write-LogDebug "Get-NcSnapmirrorDestination  -SourceVserver $myVserver -VserverContext $myVserver -DestinationVserver $mySecondaryVserver -Controller $myController"
+    $relationlist=Get-NcSnapmirrorDestination  -SourceVserver $myVserver -VserverContext $myVserver -DestinationVserver $mySecondaryVserver -Controller $myController  -ErrorVariable ErrorVar
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" } 
   	if ( $relationlist -eq $null ) {
 		Write-LogDebug "svmdr_db_check: SnapMirror No Relations found" ;
@@ -13915,7 +13916,8 @@ Try {
 		$DestinationLocation = $relation.DestinationLocation
 		$RelationshipType =$relation.RelationshipType
 		if ( ( $RelationshipType -eq "data_protection" ) -and ( $SourceVserver -ne $DestinationVserver  )  ) {
-			$NcVserverPeer=Get-NcVserverPeer -Controller $myController -Vserver $SourceVserver -PeerVserver $DestinationVserver 
+            Write-LogDebug "Get-NcVserverPeer -Controller $myController -VserverContext $SourceVserver -PeerVserver $mySecondaryVserver"
+			$NcVserverPeer=Get-NcVserverPeer -Controller $myController -VserverContext $SourceVserver -PeerVserver $mySecondaryVserver 
 			$DestinationCluster=$NcVserverPeer.PeerCluster
 			Write-LogDebug "svmdr_db_check: [$SourceVserver] [$SourceVolume] -> [$DestinationCluster] [$DestinationVserver] [$DestinationVolume] [$RelationshipType]" ;
 			$SVMTOOL_DB_SRC_CLUSTER=$Global:SVMTOOL_DB + '\' + $SourceCluster + '.cluster'
@@ -14351,6 +14353,7 @@ Try {
 Function svmdr_db_switch_datafiles (
 	[NetApp.Ontapi.Filer.C.NcController] $myController,
     [string] $myVserver,
+    [string] $secondaryVserver,
     [switch] $Backup) {
 Try {
     $Return = $True
@@ -14396,7 +14399,8 @@ Try {
         Write-LogDebug "svmdr_db_switch_datafiles: end"
         return $Return
     }else{
-        $relationlist=Get-NcSnapmirrorDestination  -SourceVserver $myVserver -VserverContext $myVserver -Controller $myController  -ErrorVariable ErrorVar
+        Write-LogDebug "Get-NcSnapmirrorDestination  -SourceVserver $myVserver -VserverContext $myVserver -DestinationVserver $secondaryVserver -Controller $myController"
+        $relationlist=Get-NcSnapmirrorDestination  -SourceVserver $myVserver -VserverContext $myVserver -DestinationVserver $secondaryVserver -Controller $myController  -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" } 
         if ( $relationlist -eq $null ) { 
             Write-LogDebug "svmdr_db_switch_datafiles: SnapMirror No Relations found"
@@ -14410,11 +14414,11 @@ Try {
             $DestinationLocation = $relation.DestinationLocation
             $RelationshipType =$relation.RelationshipType
             if ( ( $RelationshipType -eq "data_protection" -or $RelationshipType -eq "extended_data_protection") -and ( $SourceVserver -ne $DestinationVserver  )  ) {
-                $NcVserverPeer=Get-NcVserverPeer -Controller $myController -Vserver $SourceVserver -PeerVserver $DestinationVserver  -ErrorVariable ErrorVar
+                $NcVserverPeer=Get-NcVserverPeer -Controller $myController -VserverContext $SourceVserver -PeerVserver $DestinationVserver  -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserverPeer failed [$ErrorVar]" } 
                 $DestinationCluster=$NcVserverPeer.PeerCluster
                 Write-LogDebug "svmdr_db_switch_datafiles: [$SourceVserver] [$SourceVolume] -> [$DestinationCluster] [$DestinationVserver] [$DestinationVolume] [$RelationshipType]" ;
-                $NcVserver=Get-NcVserver -Vserver $SourceVserver -Controller $myController  -ErrorVariable ErrorVar 
+                $NcVserver=Get-NcVserver -VserverContext $SourceVserver -Controller $myController  -ErrorVariable ErrorVar 
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" } 
                 $Policy = $NcVserver.QuotaPolicy
                 Write-LogDebug "svmdr_db_switch_datafiles: Policy [$Policy]"
@@ -14482,19 +14486,23 @@ Try {
 	$Return = $True
     Write-Log "[$mySecondaryVserver] Save Quota rules"
 	Write-LogDebug "save_quota_rules_to_quotadb: Start"
-	if ( ( svmdr_db_check -myController $myPrimaryController -myVserver $myPrimaryVserver ) -eq $false ) {
+	if ( ( svmdr_db_check -myController $myPrimaryController -myVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver) -eq $false ) {
         	Write-LogError "ERROR: Failed to access quotadb" 
 		return $False
   	}
 
 	$NcCluster = Get-NcCluster -Controller $myPrimaryController
 	$SourceCluster = $NcCluster.ClusterName
+    $DestNCCluster = Get-NcCluster -Controller $mySecondaryController
+    $DestCluster = $DestNCCluster.clusterName
+    Write-LogDebug "Get-NcQuota -Controller $myPrimaryController -VserverContext $myPrimaryVserver"
     $AllQuotaList=Get-NcQuota -Controller $myPrimaryController -VserverContext $myPrimaryVserver -ErrorVariable ErrorVar 
     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcQuota failed [$ErrorVar]" } 
-    $AllPeerList=Get-NcVserverPeer -Controller $myPrimaryController -Vserver $SourceVserver -ErrorVariable ErrorVar 
+    Write-LogDebug "Get-NcVserverPeer -Controller $myPrimaryController -VserverContext $SourceVserver -Query {PeerCluster=$DestCluster}"
+    $AllPeerList=Get-NcVserverPeer -Controller $myPrimaryController -VserverContext $SourceVserver -Query @{PeerCluster=$DestCluster} -ErrorVariable ErrorVar 
     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserverPeer failed [$ErrorVar]" }
-	Write-logDebug "Get-NcSnapmirrorDestination -SourceVserver $myPrimaryVserver -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar"
-	$relationlist=Get-NcSnapmirrorDestination -SourceVserver $myPrimaryVserver -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
+	Write-logDebug "Get-NcSnapmirrorDestination -SourceVserver $myPrimaryVserver -VserverContext $myPrimaryVserver -Controller $myPrimaryController -DestinationVserver $mySecondaryVserver -ErrorVariable ErrorVar"
+	$relationlist=Get-NcSnapmirrorDestination -SourceVserver $myPrimaryVserver -VserverContext $myPrimaryVserver -Controller $myPrimaryController -DestinationVserver $mySecondaryVserver -ErrorVariable ErrorVar
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
 	foreach ( $relation in $relationlist ) {
 		$SourceVolume = $relation.SourceVolume
@@ -15595,6 +15603,7 @@ Function Save_Volume_To_Selectvolumedb (
 Function save_vol_options_to_voldb (
 	[NetApp.Ontapi.Filer.C.NcController] $myController,
     [string] $myVserver,
+    [string] $mySecondaryVserver,
     [switch] $Backup) 
 {
     Try 
@@ -15602,15 +15611,16 @@ Function save_vol_options_to_voldb (
         Write-Log "[$myVserver] Save volumes options"
     	$Return = $True
     	Write-LogDebug "save_vol_options_to_voldb: start"
-    	if ( ( svmdr_db_check -myController $myController -myVserver $myVserver ) -eq $false ) {
+        Write-LogDebug "call svmdr_db_check -myController $myController -myVserver $myVserver -mySecondaryVserver $mySecondaryVserver"
+        if ( ( svmdr_db_check -myController $myController -myVserver $myVserver -mySecondaryVserver $mySecondaryVserver) -eq $false ) {
     		Write-LogError "ERROR: Failed to access quotadb" 
             Write-LogDebug "save_vol_options_to_voldb: end"
     		return $False
     	}
     	$NcCluster = Get-NcCluster -Controller $myController
     	$SourceCluster = $NcCluster.ClusterName
-    	Write-LogDebug "Get-NcSnapmirrorDestination -SourceVserver $myVserver -VserverContext $myVserver -Controller $myController"
-    	$relationlist=Get-NcSnapmirrorDestination -SourceVserver $myVserver -VserverContext $myVserver -Controller $myController  -ErrorVariable ErrorVar
+    	Write-LogDebug "Get-NcSnapmirrorDestination -SourceVserver $myVserver -VserverContext $myVserver -DestinationVserver $mySecondaryVserver -Controller $myController"
+    	$relationlist=Get-NcSnapmirrorDestination -SourceVserver $myVserver -VserverContext $myVserver -DestinationVserver $mySecondaryVserver -Controller $myController  -ErrorVariable ErrorVar
     	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
         #$count_delete_SRC=0
         #$count_delete_DST=0
@@ -15623,7 +15633,7 @@ Function save_vol_options_to_voldb (
     		$RelationshipType = $relation.RelationshipType
     		if ( ( $RelationshipType -eq "data_protection" -or $RelationshipType -eq "extended_data_protection" ) -and ( $SourceVserver -ne $DestinationVserver  )  ) 
             {
-    			$NcVserverPeer=Get-NcVserverPeer -Controller $myController -Vserver $SourceVserver -PeerVserver $DestinationVserver  -ErrorVariable ErrorVar 
+    			$NcVserverPeer=Get-NcVserverPeer -Controller $myController -VserverContext $SourceVserver -PeerVserver $DestinationVserver  -ErrorVariable ErrorVar 
     			if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserverPeer failed [$ErrorVar]" } 
     			$DestinationCluster=$NcVserverPeer.PeerCluster
     			Write-LogDebug "save_vol_options_to_voldb: [$SourceVserver] [$SourceVolume] -> [$DestinationCluster] [$DestinationVserver] [$DestinationVolume] [$RelationshipType]" ;
@@ -16006,7 +16016,8 @@ Function set_vol_options_from_voldb (
         }else{
             $VolumeListToRestartQuota= @()
             if($NoCheck -eq $False){
-                if ( ( svmdr_db_check -myController $myController -myVserver $myVserver ) -eq $false ) 
+                Write-LogDebug "Use $Global:VserverDR as VserverDR name"
+                if ( ( svmdr_db_check -myController $myController -myVserver $myVserver -mySecondaryVserver $Global:VserverDR) -eq $false ) 
                 {
                     Write-LogError "ERROR: Failed to access quotadb" 
                     return $False
@@ -16203,8 +16214,8 @@ Function save_shareacl_options_to_shareacldb (
     	$NcCluster = Get-NcCluster -Controller $myPrimaryController
     	$SourceCluster = $NcCluster.ClusterName
 
-    	Write-LogDebug "Get-NcSnapmirrorDestination -SourceVserver $myPrimaryVserver -VserverContext $myPrimaryVserver -Controller $myPrimaryController"
-    	$relationlist=Get-NcSnapmirrorDestination -SourceVserver $myPrimaryVserver -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar | sort-object -unique SourceVserver,DestinationVserver,RelationShipType
+    	Write-LogDebug "Get-NcSnapmirrorDestination -SourceVserver $myPrimaryVserver -VserverContext $myPrimaryVserver -DestinationVserver $mySecondaryVserver -Controller $myPrimaryController"
+    	$relationlist=Get-NcSnapmirrorDestination -SourceVserver $myPrimaryVserver -VserverContext $myPrimaryVserver -DestinationVserver $mySecondaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar | sort-object -unique SourceVserver,DestinationVserver,RelationShipType
     	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
         #$count_delete_SRC=0
         #$count_delete_DST=0
@@ -16214,7 +16225,7 @@ Function save_shareacl_options_to_shareacldb (
     		$RelationshipType = $relation.RelationshipType
     		if ( ( $RelationshipType -eq "data_protection" -or $RelationshipType -eq "extended_data_protection" ) -and ( $SourceVserver -ne $DestinationVserver )  ) 
             {
-    			$NcVserverPeer=Get-NcVserverPeer -Controller $myPrimaryController -Vserver $SourceVserver -PeerVserver $DestinationVserver  -ErrorVariable ErrorVar 
+    			$NcVserverPeer=Get-NcVserverPeer -Controller $myPrimaryController -VserverContext $SourceVserver -PeerVserver $DestinationVserver  -ErrorVariable ErrorVar 
     			if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserverPeer failed [$ErrorVar]" } 
     			$DestinationCluster=$NcVserverPeer.PeerCluster
     			$SVMTOOL_DB_SRC_CLUSTER=$Global:SVMTOOL_DB + '\' + $SourceCluster + '.cluster'
@@ -16359,7 +16370,8 @@ Function set_shareacl_options_from_shareacldb (
         Write-logDebug "set_shareacl_options_from_shareacldb: start"
     	#$VolumeListToRestartQuota= @()
         if($NoCheck -eq $False){
-            if ( ( svmdr_db_check -myController $myController -myVserver $myVserver ) -eq $false ) 
+            Write-LogDebug "Use $Global:VserverDR as VserverDR name"
+            if ( ( svmdr_db_check -myController $myController -myVserver $myVserver -mySecondaryVserver $Global:VserverDR) -eq $false ) 
             {
                 Write-LogError "ERROR: Failed to access quotadb" 
                 return $False
@@ -16750,7 +16762,8 @@ Function create_quota_rules_from_quotadb (
         Write-LogDebug "create_quota_rules_from_quotadb: start"
 	    $VolumeListToRestartQuota= @()
 	    if($NoCheck -eq $False){
-            if ( ( svmdr_db_check -myController $myController -myVserver $myVserver ) -eq $false ) 
+            Write-LogDebug "Use $Global:VserverDR as VserverDR name"
+            if ( ( svmdr_db_check -myController $myController -myVserver $myVserver -mySecondaryVserver $Global:VserverDR) -eq $false ) 
             {
                 Write-LogError "ERROR: Failed to access quotadb" 
                 return $False
