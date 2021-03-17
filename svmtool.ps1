@@ -934,6 +934,7 @@ Param (
     [Parameter(Mandatory = $false, ParameterSetName = 'SplitCloneDR')]
     [Parameter(Mandatory = $false, ParameterSetName = 'DeleteCloneDR')]
     [Parameter(Mandatory = $false, ParameterSetName = 'RemoveInstance')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'Version')]
     [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
     [string]$LogLevelConsole = "Info",
 
@@ -965,6 +966,7 @@ Param (
     [Parameter(Mandatory = $false, ParameterSetName = 'SplitCloneDR')]
     [Parameter(Mandatory = $false, ParameterSetName = 'DeleteCloneDR')]
     [Parameter(Mandatory = $false, ParameterSetName = 'RemoveInstance')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'Version')]
     [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
     [string]$LogLevelLogFile = "Debug",
 
@@ -1081,19 +1083,31 @@ Param (
     [string]$TieringPolicy = $null
 )
 
+if($IsWindows -eq $True){
+    $Global:WorkingOnWindows=$True
+}else{
+    $Global:WorkingOnWindows=$False
+}
 #############################################################################################
-# Minimum Netapp Supported TK
+# Minimum Netapp Supported PSTK
 #############################################################################################
 $Global:MIN_MAJOR = 4
 $Global:MIN_MINOR = 5
 $Global:MIN_BUILD = 0
 $Global:MIN_REVISION = 0
 #############################################################################################
-$Global:RELEASE = "0.4.4"
+$Global:RELEASE = "0.4.4_insidemcc"
 $Global:SCRIPT_RELEASE = "0.1.23"
-$Global:BASEDIR = 'C:\Scripts\SVMTOOL'
+if($Global:WorkingOnWindows -eq $True){
+    $Global:BASEDIR = 'C:\Scripts\SVMTOOL'  
+}else{
+    # In Linux/MacOS svmtool will create all its files inside home directory of user running the script
+    $UserHome=$Home
+    $Global:BASEDIR = $UserHome + '/SVMTOOL'
+}
+
 $Global:SVMTOOL_DB_DEFAULT = $Global:BASEDIR
-$Global:CONFBASEDIR = $BASEDIR + '\etc\'
+if($IsWindows){$Global:CONFBASEDIR = $BASEDIR + '\etc\'}else{$Global:CONFBASEDIR = $BASEDIR + '/etc/'}
 $Global:STOP_TIMEOUT = 360
 $Global:START_TIMEOUT = 360
 $Global:SINGLE_CLUSTER = $False
@@ -1128,7 +1142,11 @@ $Global:PreserveIdentity=$PreserveIdentity
 $Global:TieringPolicy=$TieringPolicy
 # Force to use CIFS modify method, instead of delete/recreate when CIFS server name need to be changed
 $Global:NoCifsDeleteMethod=$NoCifsDeleteMethod
+if($IsWindows){
 $Global:NumberOfLogicalProcessor = (Get-CimInstance  Win32_Processor).NumberOfLogicalProcessors
+}else{
+    $Global:NumberOfLogicalProcessor = (get-content /proc/cpuinfo | sls "processor" | Measure-Object).count   
+}
 if ($Global:NumberOfLogicalProcessor -lt 4) {
     $Global:NumberOfLogicalProcessor = 4
 }
@@ -1141,56 +1159,56 @@ $Global:SnapmirrorType = $SnapmirrorType
 
 if ( ( $null -eq $Instance ) -or ( $Instance -eq "" ) ) {
     if ($Backup.Length -eq 0 -and $Restore.Length -eq 0 -and $RestoreObject.Length -eq 0) {
-        $Global:CONFDIR = $Global:CONFBASEDIR + 'default\'
+        if($IsWindows){$Global:CONFDIR = $Global:CONFBASEDIR + 'default\'}else{$Global:CONFDIR = $Global:CONFBASEDIR + 'default'}
     }
     elseif ($Backup.Length -gt 0) {
-        $Global:CONFDIR = $Global:CONFBASEDIR + $Backup + '\'
+        if($IsWindows){$Global:CONFDIR = $Global:CONFBASEDIR + $Backup + '\'}else{$Global:CONFDIR = $Global:CONFBASEDIR + $Backup + '/'}
     }
     elseif ($Restore.Length -gt 0) {
-        $Global:CONFDIR = $Global:CONFBASEDIR + $Restore + '\'
+        if($IsWindows){$Global:CONFDIR = $Global:CONFBASEDIR + $Restore + '\'}else{$Global:CONFDIR = $Global:CONFBASEDIR + $Restore + '/'}
     }
     elseif ($RestoreObject.Length -gt 0) {
-        $Global:CONFDIR = $Global:CONFBASEDIR + $RestoreObject + '\'
+        if($IsWindows){$Global:CONFDIR = $Global:CONFBASEDIR + $RestoreObject + '\'}else{$Global:CONFDIR = $Global:CONFBASEDIR + $RestoreObject + '/'}
     }
 }
 else {
-    $Global:CONFDIR = $Global:CONFBASEDIR + $Instance + '\'
+    if($IsWindows){$Global:CONFDIR = $Global:CONFBASEDIR + $Instance + '\'}else{$Global:CONFDIR = $Global:CONFBASEDIR + $Instance + '/'}
 }
 
 $Global:CONFFILE = $Global:CONFDIR + 'svmtool.conf'
 
-$Global:ROOTLOGDIR = ($Global:BASEDIR + '\log\')
+if($IsWindows){$Global:ROOTLOGDIR = ($Global:BASEDIR + '\log\')}else{$Global:ROOTLOGDIR = ($Global:BASEDIR + '/log/')}
 
 if ($Backup -ne "") {
-    $Global:ROOTLOGDIR = ($Global:ROOTLOGDIR + $Backup + '\')
+    if($IsWindows){$Global:ROOTLOGDIR = ($Global:ROOTLOGDIR + $Backup + '\')}else{$Global:ROOTLOGDIR = ($Global:ROOTLOGDIR + $Backup + '/')}
     if (-not (Test-Path $Global:ROOTLOGDIR)) {
         New-Item -Path $Global:ROOTLOGDIR -ItemType "directory" -ErrorAction "silentlycontinue" | Out-Null
     }		
 }
 
 if ($Restore -ne "") {
-    $Global:ROOTLOGDIR = ($Global:ROOTLOGDIR + $Restore + '\')
+    if($IsWindows){$Global:ROOTLOGDIR = ($Global:ROOTLOGDIR + $Restore + '\')}else{$Global:ROOTLOGDIR = ($Global:ROOTLOGDIR + $Restore + '/')}
     if (-not (Test-Path $Global:ROOTLOGDIR)) {
         New-Item -Path $Global:ROOTLOGDIR -ItemType "directory" -ErrorAction "silentlycontinue" | Out-Null
     }
 }
 
 if ($RestoreObject -ne "") {
-    $Global:ROOTLOGDIR = ($Global:ROOTLOGDIR + $RestoreObject + '\')
+    if($IsWindows){$Global:ROOTLOGDIR = ($Global:ROOTLOGDIR + $RestoreObject + '\')}else{$Global:ROOTLOGDIR = ($Global:ROOTLOGDIR + $RestoreObject + '/')}
     if (-not (Test-Path $Global:ROOTLOGDIR)) {
         New-Item -Path $Global:ROOTLOGDIR -ItemType "directory" -ErrorAction "silentlycontinue" | Out-Null
     }
 }
 
 if ($Vserver -ne "" -and ($Backup -eq "" -and $Restore -eq "" -and $RestoreObject -eq "")) {
-    $Global:LOGDIR = ($Global:ROOTLOGDIR + $Vserver + '\')
+    if($IsWindows){$Global:LOGDIR = ($Global:ROOTLOGDIR + $Vserver + '\')}else{$Global:LOGDIR = ($Global:ROOTLOGDIR + $Vserver + '/')}
 }
 else {
     $Global:LOGDIR = $Global:ROOTLOGDIR
 }
 
 $LOGFILE = $LOGDIR + "svmtool.log"
-$Global:CRED_CONFDIR = $BASEDIR + "\cred\"
+if($IsWindows){$Global:CRED_CONFDIR = $BASEDIR + "\cred\"}else{$Global:CRED_CONFDIR = $BASEDIR + "/cred/"}
 $Global:MOUNT_RETRY_COUNT = 100
 $Global:TemporarySecondaryCifsIp=$TemporarySecondaryCifsIp
 $Global:NFSonly=$False
@@ -1198,47 +1216,18 @@ $Global:NFSonly=$False
 #############################################################################################
 # MAIN
 #############################################################################################
-$Path = $env:PSModulePath.split(";")
+if($IsWindows){$Path = $env:PSModulePath.split(";")}else{$Path = $env:PSModulePath.split(":")}
 if ($Path -notcontains $PSScriptRoot) {
     $Path += $PSScriptRoot
-    $Path = [string]::Join(";", $Path)
+    if($IsWindows){$Path = [string]::Join(";", $Path)}else{$Path = [string]::Join(":", $Path)}
     [System.Environment]::SetEnvironmentVariable('PSModulePath', $Path)
 }
 Remove-Module -Name svmtools -ErrorAction SilentlyContinue
-$module = Import-Module "$PSScriptRoot\svmtools" -PassThru
+if($IsWindows){$module = Import-Module "$PSScriptRoot\svmtools" -PassThru}else{$module = Import-Module "$PSScriptRoot/svmtools" -PassThru}
 if ( $module -eq $null ) {
     Write-Host "ERROR: Failed to load module SVMTOOLS" -ForegroundColor Red
     Write-Error "ERROR: Failed to load module SVMTOOLS"
     exit 1
-}
-if (!($env:PSModulePath -match "NetApp PowerShell Toolkit")) {
-    $env:PSModulePath = $($env:PSModulePath + ";C:\Program Files (x86)\NetApp\NetApp PowerShell Toolkit\Modules")
-}
-if (-not $WfaIntegration) {
-    $module = Get-Module DataONTAP
-    if ($module -eq $null) {
-        $module = Import-Module -Name DataONTAP -PassThru
-        if ( $module -eq $null ) {
-            Write-Error "ERROR: DataONTAP module not found" 
-            clean_and_exit 1
-        }
-    }
-    else {
-        # dataontap was loaded externally
-    }
-}
-else {
-    $module = Import-Module "$PSScriptRoot\..\DataOntap" -PassThru
-}
-
-$PSTKVersion = Get-NaToolkitVersion
-if ($PSTKVersion.Major -lt $Global:MIN_MAJOR -and $PSTKVersion.Minor -lt $Global:MIN_MINOR -and $PSTKVersion.Minor -lt $Global:MIN_BUILD) {
-    Write-LogWarn "Your PSTK version is lower than mandatory version (ToolkitVersion 4.5.0 / PSTK 4.7)"
-    Write-LogWarn "You will not be able to manage volume encryption and other options may not work properly"
-    $Global:PSTKEncryptionPossible = $False
-}
-else {
-    $Global:PSTKEncryptionPossible = $True
 }
 
 # initialize log4net, only needed once.
@@ -1246,7 +1235,7 @@ init_log4net
 
 # appenders (logfile, eventviewer & console)
 $masterLogFileAppender = create_rolling_log_appender -name "svmtool.log" -file $LOGFILE -threshold $LogLevelLogFile
-$masterEventViewerAppender = create_eventviewer_appender -name "eventviewer" -applicationname "svmtool"
+if($IsWindows){$masterEventViewerAppender = create_eventviewer_appender -name "eventviewer" -applicationname "svmtool"}
 $consoleAppender = create_console_appender -name "console" -threshold $LogLevelConsole
 
 # initialize logonly
@@ -1256,12 +1245,73 @@ $Global:MasterLog = get_logger -name "logonly"
 
 # initialize console
 add_appender -loggerinstance "console" $masterLogFileAppender
-add_appender -loggerinstance "console" $masterEventViewerAppender
+if($IsWindows){add_appender -loggerinstance "console" $masterEventViewerAppender}
 add_appender -loggerinstance "console" $consoleAppender 
 set_log_level -loggerinstance "console" -level "All"
 $Global:ConsoleLog = get_logger -name "console"
 
-check_ToolkitVersion 
+
+$PSVersion=$PSVersionTable.PSVersion
+if($PSVersionTable.PSVersion.Major -le 5){
+    Write-LogDebug "Running svmtool with Powershell version [$PSVersion]"
+    Write-LogDebug "Import classical PSTK"
+    if (!($env:PSModulePath -match "NetApp PowerShell Toolkit")) {
+        $env:PSModulePath = $($env:PSModulePath + ";C:\Program Files (x86)\NetApp\NetApp PowerShell Toolkit\Modules")
+    }
+    if (-not $WfaIntegration) {
+        $module = Get-Module DataONTAP
+        if ($module -eq $null) {
+            $module = Import-Module -Name DataONTAP -PassThru
+            $module = Get-Module DataONTAP
+            if ( $module -eq $null ) {
+                Write-Error "ERROR: DataONTAP Core module not found" 
+                clean_and_exit 1
+            }
+            if ( $module -eq $null ) {
+                Write-Error "ERROR: DataONTAP module not found" 
+                clean_and_exit 1
+            }
+        }
+        else {
+            # dataontap was loaded externally
+        }
+    }
+    else {
+        $module = Import-Module "$PSScriptRoot\..\DataOntap" -PassThru
+        $module = Get-Module DataONTAP
+        if ( $module -eq $null ) {
+            Write-Error "ERROR: DataONTAP Core module not found" 
+            clean_and_exit 1
+        }
+    }
+}else{
+    Write-LogDebug "Running svmtool with PWSH Core version [$PSVersion]"
+    Write-LogDebug "Import PSTK Core version"
+    $module = Import-Module NetApp.ONTAP
+    <# if($IsWindows){
+        #$module = Import-Module "C:\Users\masson\Downloads\PSTK 9.8 CORE\NetApp.ONTAP\NetApp.ONTAP.psd1"
+        
+    }else{
+
+    } #>
+    $module = Get-Module NetApp.ONTAP
+    if ( $module -eq $null ) {
+        Write-Error "ERROR: NetApp.ONTAP Core module not found" 
+        clean_and_exit 1
+    }
+}
+
+$PSTKVersion = Get-NaToolkitVersion
+<# if ($PSTKVersion.Major -lt $Global:MIN_MAJOR -and $PSTKVersion.Minor -lt $Global:MIN_MINOR -and $PSTKVersion.Minor -lt $Global:MIN_BUILD) {
+    Write-LogWarn "Your PSTK version is lower than mandatory version (ToolkitVersion 4.5.0 / PSTK 4.7)"
+    Write-LogWarn "You will not be able to manage volume encryption and other options may not work properly"
+    $Global:PSTKEncryptionPossible = $False
+}
+else {
+    $Global:PSTKEncryptionPossible = $True
+} #>
+
+#check_ToolkitVersion 
 
 if ($LastSnapshot) {
     Write-Warn "The switch -LastSnapshot is deprecated, Cdot always transfers last snapshot"
@@ -1327,6 +1377,7 @@ Write-LogDebug "Vserver           [$Vserver]"
 Write-LogDebug "LogLevelConsole   [$LogLevelConsole]"
 Write-LogDebug "LogLevelLogFile   [$LogLevelLogFile]"
 Write-LogDebug "RW                [$RW]"
+Write-LogDebug "PSVersionTable    [$PSVersion]"
 ####################################################################################################
 
 if ( $ListInstance ) {
@@ -1372,8 +1423,8 @@ if ( $Backup ) {
     $Global:Run_Mode = "Backup"
     Write-Log "SVMTOOL Run Backup"
     if ((Test-Path $Global:CONFFILE) -eq $True ) {
-        Write-Log "use Config File [$Global:CONFFILE]"s
-        $read_conf = read_config_file $Global:CONFFILE ;
+        Write-Log "use Config File [$Global:CONFFILE]"
+        $read_conf = read_config_file $Global:CONFFILE
         if ( $read_conf -eq $null ) {
             Write-LogError "ERROR: read configuration file $Global:CONFFILE failed"
             clean_and_exit 1 ;
@@ -1511,14 +1562,29 @@ if ( $Backup ) {
                 $Global:MasterLog = get_logger -name "logonly" 
 
                 $Global:NonInteractive = $NonInteractive
-			
-                if (!($env:PSModulePath -match "NetApp PowerShell Toolkit")) {
-                    $env:PSModulePath = $($env:PSModulePath + ";C:\Program Files (x86)\NetApp\NetApp PowerShell Toolkit\Modules")
-                }
-                $module = Import-Module -Name DataONTAP -PassThru
-                if ( $module -eq $null ) {
-                    Write-LogError "ERROR: Failed to load module Netapp PSTK"
-                    exit 1
+                
+                $PSVersion=$PSVersionTable.PSVersion
+                if($PSVersionTable.PSVersion.Major -le 5){
+                    Write-LogDebug "Running svmtool with Powershell version [$PSVersion]"
+                    Write-LogDebug "Import classical PSTK"
+                    if (!($env:PSModulePath -match "NetApp PowerShell Toolkit")) {
+                        $env:PSModulePath = $($env:PSModulePath + ";C:\Program Files (x86)\NetApp\NetApp PowerShell Toolkit\Modules")
+                    }
+                    $module = Import-Module -Name DataONTAP -PassThru
+                    if ( $module -eq $null ) {
+                        Write-LogError "ERROR: Failed to load module Netapp PSTK"
+                        exit 1
+                    }
+                }else{
+                    Write-LogDebug "Running svmtool with PWSH Core version [$PSVersion]"
+                    Write-LogDebug "Import PSTK Core version"
+                    #$module = Import-Module "C:\Users\masson\Downloads\PSTK 9.8 CORE\NetApp.ONTAP\NetApp.ONTAP.psd1"
+                    $module = Import-Module NetApp.ONTAP
+                    $module = Get-Module NetApp.ONTAP
+                    if ( $module -eq $null ) {
+                        Write-Error "ERROR: NetApp.ONTAP Core module not found" 
+                        exit 1
+                    }    
                 }
 
                 check_create_dir -FullPath $LOGFILE -Vserver $myPrimaryVserver | Out-Null
@@ -1544,7 +1610,7 @@ if ( $Backup ) {
                     flush_log4net -loggerinstance "logonly_$guid"
                     return $False
                 }
-                $AllQuotaRulesList | ConvertTo-Json -Depth 5 | Out-File -FilePath $($Global:JsonPath + "Get-NcQuota.json") -Encoding ASCII -Width 65535
+                $AllQuotaRulesList | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath + "Get-NcQuota.json") -Encoding ASCII -Width 65535
                 if ( ($ret = Get-Item $($Global:JsonPath + "Get-NcQuota.json") -ErrorAction SilentlyContinue) -ne $null ) {
                     Write-LogDebug "$($Global:JsonPath+"Get-NcQuota.json") saved successfully"
                 }
@@ -1562,7 +1628,7 @@ if ( $Backup ) {
                     flush_log4net -loggerinstance "logonly_$guid"
                     return $False
                 }
-                $AllQuotaPolicyList | ConvertTo-Json -Depth 5 | Out-File -FilePath $($Global:JsonPath + "Get-NcQuotaPolicy.json") -Encoding ASCII -Width 65535
+                $AllQuotaPolicyList | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath + "Get-NcQuotaPolicy.json") -Encoding ASCII -Width 65535
                 if ( ($ret = Get-Item $($Global:JsonPath + "Get-NcQuotaPolicy.json") -ErrorAction SilentlyContinue) -ne $null ) {
                     Write-LogDebug "$($Global:JsonPath+"Get-NcQuotaPolicy.json") saved successfully"
                 }
@@ -1620,11 +1686,11 @@ if ( $Backup ) {
             $JobRemain
         }
         $percentage = [math]::round((($numJobBackup - $numberRemaining) / $numJobBackup) * 100)
-        Write-Progress `
+        <# Write-Progress `
             -id 1 `
             -Activity "Waiting for all $numJobBackup Jobs to finish..." `
             -PercentComplete (((($Jobs_Backup.Count) - $numberRemaining) / $Jobs_Backup.Count) * 100) `
-            -Status "$($($($Jobs_Backup | Where-Object {$_.Handle.IsCompleted -eq $False})).count) remaining task(s) : $Remaining [$percentage% done]"
+            -Status "$($($($Jobs_Backup | Where-Object {$_.Handle.IsCompleted -eq $False})).count) remaining task(s) : $Remaining [$percentage% done]" #>
     }
     ForEach ($JobBackup in $($Jobs_Backup | Where-Object { $_.Handle.IsCompleted -eq $True })) {
         $jobname = $JobBackup.Name
@@ -1809,14 +1875,30 @@ if ( $Restore ) {
                 }
                 $Global:NonInteractive = $NonInteractive
 			
-                if (!($env:PSModulePath -match "NetApp PowerShell Toolkit")) {
-                    $env:PSModulePath = $($env:PSModulePath + ";C:\Program Files (x86)\NetApp\NetApp PowerShell Toolkit\Modules")
+                $PSVersion=$PSVersionTable.PSVersion
+                if($PSVersionTable.PSVersion.Major -le 5){
+                    Write-LogDebug "Running svmtool with Powershell version [$PSVersion]"
+                    Write-LogDebug "Import classical PSTK"
+                    if (!($env:PSModulePath -match "NetApp PowerShell Toolkit")) {
+                        $env:PSModulePath = $($env:PSModulePath + ";C:\Program Files (x86)\NetApp\NetApp PowerShell Toolkit\Modules")
+                    }
+                    $module = Import-Module -Name DataONTAP -PassThru
+                    if ( $module -eq $null ) {
+                        Write-LogError "ERROR: Failed to load module Netapp PSTK"
+                        exit 1
+                    }
+                }else{
+                    Write-LogDebug "Running svmtool with PWSH Core version [$PSVersion]"
+                    Write-LogDebug "Import PSTK Core version"
+                    #$module = Import-Module "C:\Users\masson\Downloads\PSTK 9.8 CORE\NetApp.ONTAP\NetApp.ONTAP.psd1"
+                    $module = Import-Module NetApp.ONTAP
+                    $module = Get-Module NetApp.ONTAP
+                    if ( $module -eq $null ) {
+                        Write-Error "ERROR: NetApp.ONTAP Core module not found" 
+                        exit 1
+                    }    
                 }
-                $module = Import-Module -Name DataONTAP -PassThru
-                if ( $module -eq $null ) {
-                    Write-LogError "ERROR: Failed to load module Netapp PSTK"
-                    exit 1
-                }
+
                 $Global:STOP_TIMEOUT = 360
                 $Global:START_TIMEOUT = 360
                 $dir = Split-Path -Path $LOGFILE -Parent
@@ -2312,7 +2394,8 @@ if ( $ConfigureDR ) {
         clean_and_exit 1
     }
 
-    # TODO Add inside metrocluster mode's tests
+    # TODO Add inside same metrocluster mode's tests
+    Check_Running_Inside_Same_MCC -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl
 
     if ( ($ret = Save_Cluster_To_JSON -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl) -ne $True) {
         Write-Warning "FAILED to backup cluster information"
@@ -2421,8 +2504,6 @@ if ( $DeleteDR ) {
         clean_and_exit 1
     }
 
-    # TODO Add inside metrocluster mode's tests
-
     # if ( ( $ret=analyse_junction_path -myController $NcPrimaryCtrl -myVserver $Vserver ) -ne $True ) {
     # Write-LogError "ERROR: analyse_junction_path" 
     # clean_and_exit 1
@@ -2456,8 +2537,9 @@ if ($Migrate) {
     }
     $SecondaryClusterName = $NcSecondaryCtrl.Name
 
-    # TODO Add inside metrocluster mode's tests
-    
+    # TODO Add inside same metrocluster mode's tests
+    Check_Running_Inside_Same_MCC -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl
+
     # if ( ( $ret=analyse_junction_path -myController $NcPrimaryCtrl -myVserver $Vserver ) -ne $True ) {
     # Write-LogError "ERROR: analyse_junction_path" 
     # clean_and_exit 1
@@ -2680,6 +2762,10 @@ if ( $DeleteSource ) {
         clean_and_exit 1
     }
     $SecondaryClusterName = $NcSecondaryCtrl.Name
+
+    # TODO Add inside same metrocluster mode's tests
+    Check_Running_Inside_Same_MCC -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl
+
     $SourceVserver = Get-NcVserver -Name $Vserver -Controller $NcPrimaryCtrl -ErrorVariable ErrorVar
     if ($? -ne $True) {
         Write-LogError "ERROR : SVM [$Vserver] does not exist on [$PrimaryClusterName]"; clean_and_exit 1
@@ -2698,7 +2784,7 @@ if ( $DeleteSource ) {
     else {
         Write-Warning "[$Vserver] Delete Source SVM cannot be interrupted or rolled back"
         $ASK_WAIT = Read-HostOptions -question "Do you want to completely delete [$Vserver] on [$PrimaryClusterName] ?" -options "y/n" -default "y"
-        if ($ASK_WAIT -eq 'y') {
+        if ($ASK_WAIT -eq 'y'){
             if ( ( $ret = remove_snapmirror_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR) -ne $True ) {
                 Write-LogError "ERROR: remove_snapmirror_dr failed" 
                 clean_and_exit 1
@@ -2708,20 +2794,49 @@ if ( $DeleteSource ) {
                 Write-LogError "ERROR: remove_vserver_peer failed" 
                 return $false
             }
-
-            Write-Log "[$VserverDR] Renamed to [$Vserver]"
-            Write-LogDebug "Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl"
-            $out = Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar
-            if ( $? -ne $True ) {
-                throw "ERROR: Rename-NcVserver failed [$ErrorVar]"
-            } 
-            Write-Log "[$Vserver] will be deleted on cluster [$PrimaryClusterName]"
-            if ( ( $ret = remove_vserver_source -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR ) -eq $False ) {
-                Write-LogError "ERROR: remove_vserver_dr: Unable to remove vserver [$VserverDR]" 
-                clean_and_exit 1
+            
+            if($Global:InsideMCC -eq $True){
+                Write-LogDebug "In mode InsideMCC = True"
+                <# Write-LogDebug "Get-NcMetroclusterVserver -Controller $mySecondaryController -Vserver $myPrimaryVserver"
+                $ReplicatedSVM=(Get-NcMetroclusterVserver -Controller $mySecondaryController -Vserver $myPrimaryVserver).PartnerVserver
+                Write-LogDebug "Will override CIFS configuration on [$ReplicatedSVM]" #>
+                $TemporarySVMName="TempBeforeDelete"
+                Write-Log "[$Vserver] Renamed temporary to [$TemporarySVMName] on [$NcPrimaryCtrl]"
+                Write-LogDebug "Rename-NcVserver -Name $Vserver -NewName $TemporarySVMName -Controller $NcPrimaryCtrl"
+                $out = Rename-NcVserver -Name $Vserver -NewName $TemporarySVMName -Controller $NcPrimaryCtrl  -ErrorVariable ErrorVar
+                if ( $? -ne $True ) {
+                    throw "ERROR: Rename-NcVserver failed [$ErrorVar]"
+                }
+                Start-Sleep 1
+                Write-Log "[$VserverDR] Renamed to [$Vserver] on [$NcSecondaryCtrl]"
+                Write-LogDebug "Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl"
+                $out = Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar
+                if ( $? -ne $True ) {
+                    throw "ERROR: Rename-NcVserver failed [$ErrorVar]"
+                } 
+                Write-Log "[$Vserver] will be deleted on cluster [$PrimaryClusterName]"
+                Write-LogDebug "remove_vserver_source -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $TemporarySVMName -mySecondaryVserver $Vserver"
+                if ( ( $ret = remove_vserver_source -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $TemporarySVMName -mySecondaryVserver $Vserver ) -eq $False ) {
+                    Write-LogError "ERROR: remove_vserver_dr: Unable to remove vserver [$VserverDR]" 
+                    clean_and_exit 1
+                }
+            }else{
+                Write-Log "[$VserverDR] Renamed to [$Vserver]"
+                Write-LogDebug "Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl"
+                $out = Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar
+                if ( $? -ne $True ) {
+                    throw "ERROR: Rename-NcVserver failed [$ErrorVar]"
+                } 
+                Write-Log "[$Vserver] will be deleted on cluster [$PrimaryClusterName]"
+                Write-LogDebug "remove_vserver_source -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $Vserver"
+                if ( ( $ret = remove_vserver_source -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $Vserver ) -eq $False ) {
+                    Write-LogError "ERROR: remove_vserver_dr: Unable to remove vserver [$VserverDR]" 
+                    clean_and_exit 1
+                }
             }
             Write-Log "[$Vserver] completely deleted on [$PrimaryClusterName]"
             clean_and_exit 0
+
         }
         else {
             Write-Log "[$Vserver] will not be deleted on [$PrimaryClusterName]"

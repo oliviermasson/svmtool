@@ -2948,6 +2948,17 @@ function Import-SvmDrConfiguration {
 #>
 function Show-SvmDrVersion {
     [CmdletBinding()]
+    param(
+
+        # Loglevel of the console output
+        [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
+        [string]$LogLevelConsole = "Info",
+
+        # Loglevel of the logfile output
+        [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
+        [string]$LogLevelLogFile = "Debug"
+    )
+
     $scriptPath = "$PSScriptRoot\svmtool.ps1"
     Invoke-Expression "& `"$scriptPath`" -Version"
 }
