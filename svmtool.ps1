@@ -550,6 +550,9 @@
         - 0.4.2 :   Fix Restore-SvmDr
         - 0.4.3 :   Fix QOS policy group
         - 0.4.4 :   Fix behavior with additional snapmirror relationship outdide smvtool context
+        - 0.5.0 :   Compatible with PSTK Core under Windows, Linux and Macos
+                    Allow to migrate SVM inside one Metrocluster (between the two Clusters that compose this Metrocluster)
+                    Improve Cron replication with Powershell >=7
 #>
 [CmdletBinding(HelpURI = "https://github.com/oliviermasson/svmtool", DefaultParameterSetName = "ListInstance")]
 Param (
@@ -750,6 +753,7 @@ Param (
     [switch]$ForceCloneOriginal,
 
     [Parameter(Mandatory = $false, ParameterSetName = 'Restore')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'RestoreObject')]
     [switch]$ForceRestoreOriginal,
 
     [Parameter(Mandatory = $false, ParameterSetName = 'ConfigureDR')]
@@ -1083,11 +1087,6 @@ Param (
     [string]$TieringPolicy = $null
 )
 
-if($IsWindows -eq $True){
-    $Global:WorkingOnWindows=$True
-}else{
-    $Global:WorkingOnWindows=$False
-}
 #############################################################################################
 # Minimum Netapp Supported PSTK
 #############################################################################################
@@ -1096,9 +1095,12 @@ $Global:MIN_MINOR = 5
 $Global:MIN_BUILD = 0
 $Global:MIN_REVISION = 0
 #############################################################################################
-$Global:RELEASE = "0.4.4_insidemcc"
-$Global:SCRIPT_RELEASE = "0.1.23"
-if($Global:WorkingOnWindows -eq $True){
+$Global:RELEASE = "0.5.0"
+$Global:SCRIPT_RELEASE = "0.1.24"
+if($PSVersionTable.PSVersion.Major -lt 7){
+    $Global:BASEDIR = 'C:\Scripts\SVMTOOL'      
+}
+elseif($PSVersionTable.PSVersion.Major -ge 7 -and $IsWindows){
     $Global:BASEDIR = 'C:\Scripts\SVMTOOL'  
 }else{
     # In Linux/MacOS svmtool will create all its files inside home directory of user running the script
@@ -1107,7 +1109,13 @@ if($Global:WorkingOnWindows -eq $True){
 }
 
 $Global:SVMTOOL_DB_DEFAULT = $Global:BASEDIR
-if($IsWindows){$Global:CONFBASEDIR = $BASEDIR + '\etc\'}else{$Global:CONFBASEDIR = $BASEDIR + '/etc/'}
+if($PSVersionTable.PSVersion.Major -lt 7){
+    $Global:CONFBASEDIR = $BASEDIR + '\etc\'
+}elseif($PSVersionTable.PSVersion.Major -ge 7 -and $IsWindows){
+    $Global:CONFBASEDIR = $BASEDIR + '\etc\'
+}else{
+    $Global:CONFBASEDIR = $BASEDIR + '/etc/'
+}
 $Global:STOP_TIMEOUT = 360
 $Global:START_TIMEOUT = 360
 $Global:SINGLE_CLUSTER = $False
@@ -1142,8 +1150,11 @@ $Global:PreserveIdentity=$PreserveIdentity
 $Global:TieringPolicy=$TieringPolicy
 # Force to use CIFS modify method, instead of delete/recreate when CIFS server name need to be changed
 $Global:NoCifsDeleteMethod=$NoCifsDeleteMethod
-if($IsWindows){
-$Global:NumberOfLogicalProcessor = (Get-CimInstance  Win32_Processor).NumberOfLogicalProcessors
+if($PSVersionTable.PSVersion.Major -lt 7){
+    $Global:NumberOfLogicalProcessor = (Get-CimInstance  Win32_Processor).NumberOfLogicalProcessors
+}
+elseif($PSVersionTable.PSVersion.Major -ge 7 -and $IsWindows){
+    $Global:NumberOfLogicalProcessor = (Get-CimInstance  Win32_Processor).NumberOfLogicalProcessors
 }else{
     $Global:NumberOfLogicalProcessor = (get-content /proc/cpuinfo | sls "processor" | Measure-Object).count   
 }
@@ -1159,56 +1170,56 @@ $Global:SnapmirrorType = $SnapmirrorType
 
 if ( ( $null -eq $Instance ) -or ( $Instance -eq "" ) ) {
     if ($Backup.Length -eq 0 -and $Restore.Length -eq 0 -and $RestoreObject.Length -eq 0) {
-        if($IsWindows){$Global:CONFDIR = $Global:CONFBASEDIR + 'default\'}else{$Global:CONFDIR = $Global:CONFBASEDIR + 'default'}
+        if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){$Global:CONFDIR = $Global:CONFBASEDIR + 'default\'}else{$Global:CONFDIR = $Global:CONFBASEDIR + 'default'}
     }
     elseif ($Backup.Length -gt 0) {
-        if($IsWindows){$Global:CONFDIR = $Global:CONFBASEDIR + $Backup + '\'}else{$Global:CONFDIR = $Global:CONFBASEDIR + $Backup + '/'}
+        if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){$Global:CONFDIR = $Global:CONFBASEDIR + $Backup + '\'}else{$Global:CONFDIR = $Global:CONFBASEDIR + $Backup + '/'}
     }
     elseif ($Restore.Length -gt 0) {
-        if($IsWindows){$Global:CONFDIR = $Global:CONFBASEDIR + $Restore + '\'}else{$Global:CONFDIR = $Global:CONFBASEDIR + $Restore + '/'}
+        if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){$Global:CONFDIR = $Global:CONFBASEDIR + $Restore + '\'}else{$Global:CONFDIR = $Global:CONFBASEDIR + $Restore + '/'}
     }
     elseif ($RestoreObject.Length -gt 0) {
-        if($IsWindows){$Global:CONFDIR = $Global:CONFBASEDIR + $RestoreObject + '\'}else{$Global:CONFDIR = $Global:CONFBASEDIR + $RestoreObject + '/'}
+        if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){$Global:CONFDIR = $Global:CONFBASEDIR + $RestoreObject + '\'}else{$Global:CONFDIR = $Global:CONFBASEDIR + $RestoreObject + '/'}
     }
 }
 else {
-    if($IsWindows){$Global:CONFDIR = $Global:CONFBASEDIR + $Instance + '\'}else{$Global:CONFDIR = $Global:CONFBASEDIR + $Instance + '/'}
+    if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){$Global:CONFDIR = $Global:CONFBASEDIR + $Instance + '\'}else{$Global:CONFDIR = $Global:CONFBASEDIR + $Instance + '/'}
 }
 
 $Global:CONFFILE = $Global:CONFDIR + 'svmtool.conf'
 
-if($IsWindows){$Global:ROOTLOGDIR = ($Global:BASEDIR + '\log\')}else{$Global:ROOTLOGDIR = ($Global:BASEDIR + '/log/')}
+if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){$Global:ROOTLOGDIR = ($Global:BASEDIR + '\log\')}else{$Global:ROOTLOGDIR = ($Global:BASEDIR + '/log/')}
 
 if ($Backup -ne "") {
-    if($IsWindows){$Global:ROOTLOGDIR = ($Global:ROOTLOGDIR + $Backup + '\')}else{$Global:ROOTLOGDIR = ($Global:ROOTLOGDIR + $Backup + '/')}
+    if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){$Global:ROOTLOGDIR = ($Global:ROOTLOGDIR + $Backup + '\')}else{$Global:ROOTLOGDIR = ($Global:ROOTLOGDIR + $Backup + '/')}
     if (-not (Test-Path $Global:ROOTLOGDIR)) {
         New-Item -Path $Global:ROOTLOGDIR -ItemType "directory" -ErrorAction "silentlycontinue" | Out-Null
     }		
 }
 
 if ($Restore -ne "") {
-    if($IsWindows){$Global:ROOTLOGDIR = ($Global:ROOTLOGDIR + $Restore + '\')}else{$Global:ROOTLOGDIR = ($Global:ROOTLOGDIR + $Restore + '/')}
+    if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){$Global:ROOTLOGDIR = ($Global:ROOTLOGDIR + $Restore + '\')}else{$Global:ROOTLOGDIR = ($Global:ROOTLOGDIR + $Restore + '/')}
     if (-not (Test-Path $Global:ROOTLOGDIR)) {
         New-Item -Path $Global:ROOTLOGDIR -ItemType "directory" -ErrorAction "silentlycontinue" | Out-Null
     }
 }
 
 if ($RestoreObject -ne "") {
-    if($IsWindows){$Global:ROOTLOGDIR = ($Global:ROOTLOGDIR + $RestoreObject + '\')}else{$Global:ROOTLOGDIR = ($Global:ROOTLOGDIR + $RestoreObject + '/')}
+    if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){$Global:ROOTLOGDIR = ($Global:ROOTLOGDIR + $RestoreObject + '\')}else{$Global:ROOTLOGDIR = ($Global:ROOTLOGDIR + $RestoreObject + '/')}
     if (-not (Test-Path $Global:ROOTLOGDIR)) {
         New-Item -Path $Global:ROOTLOGDIR -ItemType "directory" -ErrorAction "silentlycontinue" | Out-Null
     }
 }
 
 if ($Vserver -ne "" -and ($Backup -eq "" -and $Restore -eq "" -and $RestoreObject -eq "")) {
-    if($IsWindows){$Global:LOGDIR = ($Global:ROOTLOGDIR + $Vserver + '\')}else{$Global:LOGDIR = ($Global:ROOTLOGDIR + $Vserver + '/')}
+    if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){$Global:LOGDIR = ($Global:ROOTLOGDIR + $Vserver + '\')}else{$Global:LOGDIR = ($Global:ROOTLOGDIR + $Vserver + '/')}
 }
 else {
     $Global:LOGDIR = $Global:ROOTLOGDIR
 }
 
 $LOGFILE = $LOGDIR + "svmtool.log"
-if($IsWindows){$Global:CRED_CONFDIR = $BASEDIR + "\cred\"}else{$Global:CRED_CONFDIR = $BASEDIR + "/cred/"}
+if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){$Global:CRED_CONFDIR = $BASEDIR + "\cred\"}else{$Global:CRED_CONFDIR = $BASEDIR + "/cred/"}
 $Global:MOUNT_RETRY_COUNT = 100
 $Global:TemporarySecondaryCifsIp=$TemporarySecondaryCifsIp
 $Global:NFSonly=$False
@@ -1216,14 +1227,14 @@ $Global:NFSonly=$False
 #############################################################################################
 # MAIN
 #############################################################################################
-if($IsWindows){$Path = $env:PSModulePath.split(";")}else{$Path = $env:PSModulePath.split(":")}
+if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){$Path = $env:PSModulePath.split(";")}else{$Path = $env:PSModulePath.split(":")}
 if ($Path -notcontains $PSScriptRoot) {
     $Path += $PSScriptRoot
-    if($IsWindows){$Path = [string]::Join(";", $Path)}else{$Path = [string]::Join(":", $Path)}
+    if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){$Path = [string]::Join(";", $Path)}else{$Path = [string]::Join(":", $Path)}
     [System.Environment]::SetEnvironmentVariable('PSModulePath', $Path)
 }
 Remove-Module -Name svmtools -ErrorAction SilentlyContinue
-if($IsWindows){$module = Import-Module "$PSScriptRoot\svmtools" -PassThru}else{$module = Import-Module "$PSScriptRoot/svmtools" -PassThru}
+if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){$module = Import-Module "$PSScriptRoot\svmtools" -PassThru}else{$module = Import-Module "$PSScriptRoot/svmtools" -PassThru}
 if ( $module -eq $null ) {
     Write-Host "ERROR: Failed to load module SVMTOOLS" -ForegroundColor Red
     Write-Error "ERROR: Failed to load module SVMTOOLS"
@@ -1235,7 +1246,7 @@ init_log4net
 
 # appenders (logfile, eventviewer & console)
 $masterLogFileAppender = create_rolling_log_appender -name "svmtool.log" -file $LOGFILE -threshold $LogLevelLogFile
-if($IsWindows){$masterEventViewerAppender = create_eventviewer_appender -name "eventviewer" -applicationname "svmtool"}
+if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){$masterEventViewerAppender = create_eventviewer_appender -name "eventviewer" -applicationname "svmtool"}
 $consoleAppender = create_console_appender -name "console" -threshold $LogLevelConsole
 
 # initialize logonly
@@ -1245,7 +1256,7 @@ $Global:MasterLog = get_logger -name "logonly"
 
 # initialize console
 add_appender -loggerinstance "console" $masterLogFileAppender
-if($IsWindows){add_appender -loggerinstance "console" $masterEventViewerAppender}
+if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){add_appender -loggerinstance "console" $masterEventViewerAppender}
 add_appender -loggerinstance "console" $consoleAppender 
 set_log_level -loggerinstance "console" -level "All"
 $Global:ConsoleLog = get_logger -name "console"
@@ -1287,8 +1298,14 @@ if($PSVersionTable.PSVersion.Major -le 5){
 }else{
     Write-LogDebug "Running svmtool with PWSH Core version [$PSVersion]"
     Write-LogDebug "Import PSTK Core version"
-    $module = Import-Module NetApp.ONTAP
-    <# if($IsWindows){
+    $module = Get-Module NetApp.ONTAP
+    if ($module -eq $null) {
+        $module = Import-Module NetApp.ONTAP
+        # workaround for BURT 1385162
+        $DataONTAP_SkipEmsReport = $null
+        $DataONTAP_SkipUsageReport = $true
+    }
+    <# if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){
         #$module = Import-Module "C:\Users\masson\Downloads\PSTK 9.8 CORE\NetApp.ONTAP\NetApp.ONTAP.psd1"
         
     }else{
@@ -1335,7 +1352,9 @@ if ( ( check_init_setup_dir ) -eq $False ) {
     clean_and_exit 1
 }
 
-Write-LogOnly ""
+Write-LogOnly " "
+Write-LogOnly " "
+Write-LogOnly "**************************************************************************************************************************************************************"
 Write-LogOnly "SVMTOOL START $($Global:RELEASE)"
 if ( $Help ) {
     Write-Help 
@@ -1366,6 +1385,7 @@ if ( $Version ) {
     Write-Log "[Module svmtools] Version [$ModulesVersion]"
     Clean_and_exit 0 
 }
+
 Write-LogDebug "BASEDIR           [$BASEDIR]"
 Write-LogDebug "CONFDIR           [$Global:CONFDIR]"
 Write-LogDebug "LOGDIR            [$LOGDIR]"
@@ -1423,7 +1443,7 @@ if ( $Backup ) {
     $Global:Run_Mode = "Backup"
     Write-Log "SVMTOOL Run Backup"
     if ((Test-Path $Global:CONFFILE) -eq $True ) {
-        Write-Log "use Config File [$Global:CONFFILE]"
+        Write-LogDebug "use Config File [$Global:CONFFILE]"
         $read_conf = read_config_file $Global:CONFFILE
         if ( $read_conf -eq $null ) {
             Write-LogError "ERROR: read configuration file $Global:CONFFILE failed"
@@ -1441,10 +1461,11 @@ if ( $Backup ) {
         Write-Log "[$Backup] Create new Config File"
         $ANS = 'n'
         while ( $ANS -ne 'y' ) {
-            $SVMTOOL_DB = Read-HostDefault -question  "Please enter Backup directory where configuration will be backup" -default $Global:SVMTOOL_DB_DEFAULT
+            $SVMTOOL_DB = Read-HostDefault -question  "Please enter the directory in which the backups will be stored" -default $Global:SVMTOOL_DB_DEFAULT
             if($SVMTOOL_DB -notmatch $("\\"+$Backup+"$")){
                 Write-LogDebug "Backup directory [$SVMTOOL_DB] does not contains subfolder with Cluster name [$Backup]"
-                $SVMTOOL_DB+=$("\"+$Backup)
+                if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){$SVMTOOL_DB+=$("\"+$Backup)}
+                else{$SVMTOOL_DB+=$("/"+$Backup)}
             }else{
                 Write-LogDebug "Backup directory [$SVMTOOL_DB] already contains subfolder with Cluster name [$Backup]"    
             }
@@ -1524,13 +1545,16 @@ if ( $Backup ) {
                     [Parameter(Mandatory = $False)][string]$LogLevelLogFile,
                     [boolean]$NonInteractive
                 )
+                #Wait-Debugger
                 $ConsoleThreadingRequired = $true
-                $Path = $env:PSModulePath.split(";")
+
+                if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){$Path = $env:PSModulePath.split(";")}else{$Path = $env:PSModulePath.split(":")}
                 if ($Path -notcontains $script_path) {
                     $Path += $script_path
-                    $Path = [string]::Join(";", $Path)
+                    if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){$Path = [string]::Join(";", $Path)}else{$Path = [string]::Join(":", $Path)}
                     [System.Environment]::SetEnvironmentVariable('PSModulePath', $Path)
                 }
+        
                 $module = Import-Module svmtools -PassThru
                 if ( $module -eq $null ) {
                     Write-Error "ERROR: Failed to load module SVMTOOLS"
@@ -1542,7 +1566,11 @@ if ( $Backup ) {
                 $Global:START_TIMEOUT = 360
                 $dir = Split-Path -Path $LOGFILE -Parent
                 $file = Split-Path -Path $LOGFILE -Leaf
-                $LOGFILE = ($dir + '\' + $myPrimaryVserver + '\' + $file)
+                if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){
+                    $LOGFILE = ($dir + '\' + $myPrimaryVserver + '\' + $file)
+                }else{
+                    $LOGFILE = ($dir + '/' + $myPrimaryVserver + '/' + $file)
+                }
 
                 # appenders (logfile, eventviewer & console)
                 if($LogLevelConsole -eq ""){$LogLevelConsole="Info"}
@@ -1584,13 +1612,20 @@ if ( $Backup ) {
                     if ( $module -eq $null ) {
                         Write-Error "ERROR: NetApp.ONTAP Core module not found" 
                         exit 1
-                    }    
+                    }  
+                    # workaround for BURT 1385162
+                    $DataONTAP_SkipEmsReport = $null
+                    $DataONTAP_SkipUsageReport = $true  
                 }
 
                 check_create_dir -FullPath $LOGFILE -Vserver $myPrimaryVserver | Out-Null
                 Write-Log "[$myPrimaryVserver] Log File is [$LOGFILE]"
                 $Global:SVMTOOL_DB = $SVMTOOL_DB
-                $Global:JsonPath = $($SVMTOOL_DB + "\" + $myPrimaryVserver + "\" + $BackupDate + "\")
+                if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){
+                    $Global:JsonPath = $($SVMTOOL_DB + "\" + $myPrimaryVserver + "\" + $BackupDate + "\")
+                }else{
+                    $Global:JsonPath = $($SVMTOOL_DB + "/" + $myPrimaryVserver + "/" + $BackupDate + "/")    
+                }
                 Write-LogDebug "[$myPrimaryVserver] Backup Folder is [$Global:JsonPath]"
                 check_create_dir -FullPath $($Global:JsonPath + "backup.json") -Vserver $myPrimaryVserver | Out-Null
                 #wait-debugger
@@ -1795,7 +1830,11 @@ if ( $Restore ) {
     $numJobRestore = 0
     foreach ($svm in $SVMList) {
         Write-Log "Select Backup Date for [$svm]"
-        $BackupAvailable = Get-ChildItem $($SVMTOOL_DB + "\" + $svm) -Directory | Sort-Object -Property CreationTime
+        if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){
+            $BackupAvailable = Get-ChildItem $($SVMTOOL_DB + "\" + $svm) -Directory | Sort-Object -Property CreationTime
+        }else{
+            $BackupAvailable = Get-ChildItem $($SVMTOOL_DB + "/" + $svm) -Directory | Sort-Object -Property CreationTime
+        }
         if ($BackupAvailable -eq $null) {
             Write-Error "ERROR: No Backup available for [$svm]"
             next
@@ -1808,7 +1847,11 @@ if ( $Restore ) {
                     Write-Host "Select a Backup Date for [$svm] : "
                     $i = 1
                     foreach ($date in $listBackupAvailable) {
-                        $numFiles = (Get-ChildItem $($SVMTOOL_DB + "\" + $svm + "\" + $date + "\") | Measure-Object).Count
+                        if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){
+                            $numFiles = (Get-ChildItem $($SVMTOOL_DB + "\" + $svm + "\" + $date + "\") | Measure-Object).Count
+                        }else{
+                            $numFiles = (Get-ChildItem $($SVMTOOL_DB + "/" + $svm + "/" + $date + "/") | Measure-Object).Count
+                        }
                         $datetime = [datetime]::parseexact($date, "yyyyMMddHHmmss", $null)
                         Format-ColorBrackets "`t[$i] : [$datetime] [$numFiles Files]" -FirstIsSpecial
                         $i++
@@ -1820,18 +1863,30 @@ if ( $Restore ) {
                         Write-Warning "Bad input"; $ans = $null
                     }
                 }
-                $date = $listBackupAvailable[$ans - 1]
+                if($listBackupAvailable.count -gt 1){
+                    $date = $listBackupAvailable[$ans - 1]
+                }else{
+                    $date = $listBackupAvailable
+                }
             }
             else {
                 # display lastbackup automatically selected for each SVM (with #files inside folder)
                 $LastBackup = $BackupAvailable[-1]
                 $date = $LastBackup.Name
                 $datetime = [datetime]::parseexact($date, "yyyyMMddHHmmss", $null)
-                $numFiles = (Get-ChildItem $($SVMTOOL_DB + "\" + $svm + "\" + $date + "\") | Measure-Object).Count
+                if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){
+                    $numFiles = (Get-ChildItem $($SVMTOOL_DB + "\" + $svm + "\" + $date + "\") | Measure-Object).Count
+                }else{
+                    $numFiles = (Get-ChildItem $($SVMTOOL_DB + "/" + $svm + "/" + $date + "/") | Measure-Object).Count
+                }
                 Write-Log "[$svm] Last Backup date is [$datetime] with [$numFiles Files]" -firstValueIsSpecial
             }
         }
-        $JsonPath = $($SVMTOOL_DB + "\" + $svm + "\" + $date + "\")
+        if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){
+            $JsonPath = $($SVMTOOL_DB + "\" + $svm + "\" + $date + "\")
+        }else{
+            $JsonPath = $($SVMTOOL_DB + "/" + $svm + "/" + $date + "/")
+        }
         Write-Log "[$svm] Create Restore Job from [$JsonPath]"
         $codeRestore = [scriptblock]::Create( {
                 param(
@@ -1862,12 +1917,14 @@ if ( $Restore ) {
                 $Global:ConsoleThreadingRequired = $true
                 $Global:RESTORE_ORIGINAL = $RESTORE_ORIGINAL
                 $Global:ForceRestoreOriginal = $FORCE_RESTORE_ORIGINAL
-                $Path = $env:PSModulePath.split(";")
+
+                if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){$Path = $env:PSModulePath.split(";")}else{$Path = $env:PSModulePath.split(":")}
                 if ($Path -notcontains $script_path) {
                     $Path += $script_path
-                    $Path = [string]::Join(";", $Path)
+                    if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){$Path = [string]::Join(";", $Path)}else{$Path = [string]::Join(":", $Path)}
                     [System.Environment]::SetEnvironmentVariable('PSModulePath', $Path)
                 }
+
                 $module = Import-Module svmtools -PassThru
                 if ( $module -eq $null ) {
                     Write-Error "ERROR: Failed to load module SVMTOOLS"
@@ -1896,14 +1953,21 @@ if ( $Restore ) {
                     if ( $module -eq $null ) {
                         Write-Error "ERROR: NetApp.ONTAP Core module not found" 
                         exit 1
-                    }    
+                    }  
+                    # workaround for BURT 1385162
+                    $DataONTAP_SkipEmsReport = $null
+                    $DataONTAP_SkipUsageReport = $true  
                 }
 
                 $Global:STOP_TIMEOUT = 360
                 $Global:START_TIMEOUT = 360
                 $dir = Split-Path -Path $LOGFILE -Parent
                 $file = Split-Path -Path $LOGFILE -Leaf
-                $LOGFILE = ($dir + '\' + $SourceVserver + '\' + $file)
+                if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){
+                    $LOGFILE = ($dir + '\' + $SourceVserver + '\' + $file)
+                }else{
+                    $LOGFILE = ($dir + '/' + $SourceVserver + '/' + $file)    
+                }
 
                 # appenders (logfile, eventviewer & console)
                 
@@ -2008,7 +2072,11 @@ if ( $Restore ) {
         $JobRestore.Name = $svm
         $dir = Split-Path -Path $LOGFILE -Parent
         $file = Split-Path -Path $LOGFILE -Leaf
-        $LOGJOB = ($dir + '\' + $svm + '\' + $file)
+        if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){
+            $LOGJOB = ($dir + '\' + $svm + '\' + $file)
+        }else{
+            $LOGJOB = ($dir + '/' + $svm + '/' + $file)    
+        }
         $JobRestore.Log = $LOGJOB
         <# if ($JobRestore.Thread.InvocationStateInfo.State -eq "Failed") {
             $reason = $JobRestore.Thread.InvocationStateInfo.Reason
@@ -2087,6 +2155,9 @@ if ( $RestoreObject ){
     else {
         $Global:RESTORE_ORIGINAL = $False	
     }
+    if($Global:ForceRestoreOriginal.IsPresent){
+        $Global:RESTORE_ORIGINAL = $True    
+    }
     if ((Test-Path $Global:CONFFILE) -eq $True ) {
         $read_conf = read_config_file $Global:CONFFILE
         if ( $read_conf -eq $null ) {
@@ -2107,7 +2178,11 @@ if ( $RestoreObject ){
         clean_and_exit 1	
     }
     Write-Log "Select Backup Date for [$Vserver]"
-    $BackupAvailable = Get-ChildItem $($SVMTOOL_DB + "\" + $Vserver) | Sort-Object -Property CreationTime
+    if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){
+        $BackupAvailable = Get-ChildItem $($SVMTOOL_DB + "\" + $Vserver) | Sort-Object -Property CreationTime
+    }else{
+        $BackupAvailable = Get-ChildItem $($SVMTOOL_DB + "/" + $Vserver) | Sort-Object -Property CreationTime   
+    }
     if ($BackupAvailable -eq $null) {
         Write-Error "ERROR: No Backup available for [$Vserver]"
         clean_and_exit 1
@@ -2120,7 +2195,11 @@ if ( $RestoreObject ){
                 Write-Host "Select a Backup Date for [$Vserver] : "
                 $i = 1
                 foreach ($date in $listBackupAvailable) {
-                    $numFiles = (Get-ChildItem $($SVMTOOL_DB + "\" + $Vserver + "\" + $date + "\") | Measure-Object).Count
+                    if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){
+                        $numFiles = (Get-ChildItem $($SVMTOOL_DB + "\" + $Vserver + "\" + $date + "\") | Measure-Object).Count
+                    }else{
+                        $numFiles = (Get-ChildItem $($SVMTOOL_DB + "/" + $Vserver + "/" + $date + "/") | Measure-Object).Count    
+                    }
                     $datetime = [datetime]::parseexact($date, "yyyyMMddHHmmss", $null)
                     Format-ColorBrackets "`t[$i] : [$datetime] [$date] [$numFiles Files]" -FirstIsSpecial
                     $i++
@@ -2132,18 +2211,30 @@ if ( $RestoreObject ){
                     Write-Warning "Bad input"; $ans = $null
                 }
             }
-            $date = $listBackupAvailable[$ans - 1]
+            if($listBackupAvailable.count -gt 1){
+                $date = $listBackupAvailable[$ans - 1]
+            }else{
+                $date = $listBackupAvailable
+            }
         }
         else {
             # display lastbackup automatically selected for each SVM (with #files inside folder)
             $LastBackup = $BackupAvailable[-1]
             $date = $LastBackup.Name
             $datetime = [datetime]::parseexact($date, "yyyyMMddHHmmss", $null)
-            $numFiles = (Get-ChildItem $($SVMTOOL_DB + "\" + $Vserver + "\" + $date + "\") | Measure-Object).Count
+            if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){
+                $numFiles = (Get-ChildItem $($SVMTOOL_DB + "\" + $Vserver + "\" + $date + "\") | Measure-Object).Count
+            }else{
+                $numFiles = (Get-ChildItem $($SVMTOOL_DB + "/" + $Vserver + "/" + $date + "/") | Measure-Object).Count
+            }
             Write-Log "[$Vserver] Last Backup date is [$datetime] with [$numFiles Files]" -firstValueIsSpecial
         }
     }
-    $Global:JsonPath = $($SVMTOOL_DB + "\" + $Vserver + "\" + $date + "\")
+    if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){
+        $Global:JsonPath = $($SVMTOOL_DB + "\" + $Vserver + "\" + $date + "\")
+    }else{
+        $Global:JsonPath = $($SVMTOOL_DB + "/" + $Vserver + "/" + $date + "/")
+    }
     check_create_dir -FullPath $Global:JsonPath -Vserver $Vserver | Out-Null
 
     # Connect to the Cluster
@@ -2537,7 +2628,6 @@ if ($Migrate) {
     }
     $SecondaryClusterName = $NcSecondaryCtrl.Name
 
-    # TODO Add inside same metrocluster mode's tests
     Check_Running_Inside_Same_MCC -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl
 
     # if ( ( $ret=analyse_junction_path -myController $NcPrimaryCtrl -myVserver $Vserver ) -ne $True ) {
@@ -2568,7 +2658,7 @@ if ($Migrate) {
 
         if ( ($ret = update_vserver_dr -myDataAggr $DataAggr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR -DDR ($DRfromDR.IsPresent) -aggrMatchRegEx $AggrMatchRegex -nodeMatchRegEx $NodeMatchRegex -TemporarySecondaryCifsIp $TemporarySecondaryCifsIp -SecondaryCifsLifMaster $SecondaryCifsLifMaster -SecondaryCifsLifCustomVlan $SecondaryCifsLifCustomVlan ) -ne $True ) {
             Write-LogError "ERROR: update_vserver_dr failed" 
-            clean_and_exit 1
+            #clean_and_exit 1
 
         }
         if ( ( $ret = wait_snapmirror_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR ) -ne $True ) { 
@@ -2576,17 +2666,17 @@ if ($Migrate) {
         }
         if ( ( $ret = break_snapmirror_vserver_dr -myController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR ) -ne $True ) {
             Write-LogError "ERROR: Unable to break all relations from Vserver [$VserverDR] on [$SecondaryClusterName]"
-            clean_and_exit 1
+            #clean_and_exit 1
         }
         # Remove Reverse SnapMirror Relationship if exist
         if ( ( $ret = remove_snapmirror_dr -myPrimaryController $NcSecondaryCtrl -mySecondaryController $NcPrimaryCtrl -myPrimaryVserver $VserverDR -mySecondaryVserver $Vserver	 ) -ne $True ) { 
             Write-LogError "ERROR: remove_snapmirror_dr failed"
-            clean_and_exit 1
+            #clean_and_exit 1
         }
         # Remove SnapMirror Relationship 
         if ( ( $ret = remove_snapmirror_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR -NoRelease) -ne $True ) {
             Write-LogError "ERROR: remove_snapmirror_dr failed" 
-            clean_and_exit 1
+            #clean_and_exit 1
         }
         # Restamp MSID destination volume
 
@@ -2597,23 +2687,9 @@ if ($Migrate) {
         $ASK_MIGRATE = Read-HostOptions -question "[$Vserver] IP and Services will switch now. Ready to go ?" -options "y/n" -default "y"
 
         if ($ASK_MIGRATE -eq 'y') {
-            if ( ( $ret = migrate_lif -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR -PreserveIdentity $Global:PreserveIdentity) -ne $True ) {
-                Write-LogError "ERROR: migrate_lif failed"
-                clean_and_exit 1
-            }
+            
+            $mySourceVserverComment=(Get-NcVserver -Name $Vserver -Controller $NcPrimaryCtrl).Comment
 
-            if ( ( $ret = migrate_cifs_server -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR -NoInteractive -PreserveIdentity $Global:PreserveIdentity) -ne $True ) {
-                Write-LogError "ERROR: migrate_cifs_server failed"
-                clean_and_exit 1
-            }
-            if (($ret = set_all_lif -mySecondaryVserver $VserverDR -myPrimaryVserver $Vserver -mySecondaryController $NcSecondaryCtrl  -myPrimaryController $NcPrimaryCtrl -state up -AfterMigrate) -ne $True ) {
-                Write-LogError "ERROR: Failed to set all lif up on [$VserverDR]"
-                clean_and_exit 1
-            }
-            #if (($ret=set_all_lif -myVserver $VserverDR -myController $NcSecondaryCtrl -state down) -ne $True ) {
-            #    Write-LogError "ERROR: Failed to set all lif down on [$VserverDR]"
-            #    clean_and_exit 1
-            #}
             # Verify if NFS service is Running 
             Write-LogDebug "Get-NcNfsService -VserverContext $VserverDR -Controller $NcSecondaryCtrl"
             $NfsService = Get-NcNfsService -VserverContext $VserverDR -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar
@@ -2631,12 +2707,6 @@ if ($Migrate) {
                     if ( $? -ne $True ) {
                         Write-Warning "ERROR: Failed to enable NFS on Vserver [$VserverDR] [ErrorVar]"
                         Write-LogError "ERROR: Failed to enable NFS on Vserver [$VserverDR]" 
-                    }
-                    Write-LogDebug "Disable-NcNfs -VserverContext $VserverDR -Controller $NcPrimaryCtrl"
-                    $out = Disable-NcNfs -VserverContext $Vserver -Controller $NcPrimaryCtrl  -ErrorVariable ErrorVar -Confirm:$False
-                    if ( $? -ne $True ) {
-                        Write-Warning "ERROR: Failed to disable NFS on Vserver [$VserverDR] [ErrorVar]"
-                        Write-LogError "ERROR: Failed to disable NFS on Vserver [$VserverDR]" 
                     }
                 }
             }
@@ -2661,70 +2731,146 @@ if ($Migrate) {
                     }
                 }
             }
+
+            # Migrate CIFS server if it exists
+            <# if($Global:InsideMCC -eq $False){
+                if ( ( $ret = migrate_lif -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR -PreserveIdentity $Global:PreserveIdentity) -ne $True ) {
+                    Write-LogError "ERROR: migrate_lif failed"
+                    clean_and_exit 1
+                }
+
+                if ( ( $ret = migrate_cifs_server -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR -NoInteractive -PreserveIdentity $Global:PreserveIdentity) -ne $True ) {
+                    Write-LogError "ERROR: migrate_cifs_server failed"
+                    clean_and_exit 1
+                }
+                if (($ret = set_all_lif -mySecondaryVserver $VserverDR -myPrimaryVserver $Vserver -mySecondaryController $NcSecondaryCtrl  -myPrimaryController $NcPrimaryCtrl -state up -AfterMigrate) -ne $True ) {
+                    Write-LogError "ERROR: Failed to set all lif up on [$VserverDR]"
+                    clean_and_exit 1
+                }
+            }else{ #>
+                if($Global:InsideMCC -eq $False){
+                    if (($ret = set_all_lif -mySecondaryVserver $Vserver -myPrimaryVserver $VserverDR -mySecondaryController $NcPrimaryCtrl -myPrimaryController $NcSecondaryCtrl -state up -Force) -ne $True ) {
+                        Write-LogError "ERROR: Failed to set all lif up on [$VserverDR]"
+                        clean_and_exit 1
+                    }
+                }
+                if ( ( $ret = migrate_cifs_server -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR -NoInteractive -PreserveIdentity $Global:PreserveIdentity) -ne $True ) {
+                    Write-LogError "ERROR: migrate_cifs_server failed"
+                    clean_and_exit 1
+                }
+            #}
+            #if (($ret=set_all_lif -myVserver $VserverDR -myController $NcSecondaryCtrl -state down) -ne $True ) {
+            #    Write-LogError "ERROR: Failed to set all lif down on [$VserverDR]"
+            #    clean_and_exit 1
+            #}
+
+            # remove related snapmirror destination from source
+            Write-LogDebug "Get-NcSnapmirrorDestination -SourceVserver $Vserver -DestinationVserver $VserverDR -Controller $NcPrimaryCtrl | Invoke-NcSnapmirrorRelease -Controller $NcPrimaryCtrl -Confirm:$False"
+            Get-NcSnapmirrorDestination -SourceVserver $Vserver -DestinationVserver $VserverDR -Controller $NcPrimaryCtrl | Invoke-NcSnapmirrorRelease -Controller $NcPrimaryCtrl -Confirm:$False
+            # remove related vserver peer before rename vserver
+            Write-LogDebug "Get-NcVserverPeer -Vserver $VserverDR -PeerVserver $Vserver -Controller $NcSecondaryCtrl | Remove-NcVserverPeer -Controller $NcSecondaryCtrl -Confirm:$False"
+            Get-NcVserverPeer -Vserver $VserverDR -PeerVserver $Vserver -Controller $NcSecondaryCtrl | Remove-NcVserverPeer -Controller $NcSecondaryCtrl -Confirm:$False
+
+            Write-Log "[$VserverDR] Renamed to [$Vserver]"
+            Write-LogDebug "Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl"
+            $out = Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar
+            if ( $? -ne $True ) {
+                throw "ERROR: Rename-NcVserver failed [$ErrorVar]"
+            }
+            Write-LogDebug "Set-NcVserver -Name $Vserver -Controller $NcSecondaryCtrl -Comment $mySourceVserverComment"
+            $ret=Set-NcVserver -Name $Vserver -Controller $NcSecondaryCtrl -Comment $mySourceVserverComment
+            
+            #Write-Log "[$Vserver] completely removed on [$PrimaryClusterName]"
             Write-Log "[$Vserver] has been migrated on destination cluster [$SecondaryClusterName]"
             if($Global:PreserveIdentity -eq $True){
                 Write-Log "[$Vserver] Users can now connect on destination with source Identity (IP and CIFS server name)"
             }else{
                 Write-Log "[$Vserver] Users can now connect on destination with destination Identity"
             }
-            if ( ( $ret = set_vol_options_from_voldb -myController $NcSecondaryCtrl -myVserver $VserverDR -NoCheck) -ne $True ) {
+
+            if ( ( $ret = set_vol_options_from_voldb -myController $NcSecondaryCtrl -myVserver $Vserver -NoCheck) -ne $True ) {
                 Write-LogError "ERROR: set_vol_options_from_voldb failed"
             }
             #if ( ( $ret=set_shareacl_options_from_shareacldb -myController $NcSecondaryCtrl -myVserver $VserverDR -NoCheck) -ne $True ) {
             #    Write-LogError "ERROR: set_shareacl_options_from_shareacldb"
             #}
             if ( $AllowQuotaDR -eq "True" ) {
-                if ( ( $ret = create_quota_rules_from_quotadb -myController $NcSecondaryCtrl -myVserver $VserverDR -NoCheck ) -ne $True ) {
+                if ( ( $ret = create_quota_rules_from_quotadb -myController $NcSecondaryCtrl -myVserver $Vserver -NoCheck ) -ne $True ) {
                     Write-LogError "ERROR: create_quota_rules_from_quotadb failed"
                 }
             }
-            $defaultanswer = if ($DeleteSource) {
-                "y"
-            }
-            else {
-                "n"
-            }
-            $ASK_WAIT2 = Read-HostOptions -question "[$Vserver] Do you want to delete SVM on source cluster [$PrimaryClusterName] ?" -options "y/n" -default $defaultanswer
-            if ($ASK_WAIT2 -eq 'y') {
+            if($Global:InsideMCC -eq $False){
+                $defaultanswer = if ($DeleteSource) {
+                    "y"
+                }
+                else {
+                    "n"
+                }
+                $ASK_WAIT2 = Read-HostOptions -question "[$Vserver] Do you want to delete SVM on source cluster [$PrimaryClusterName] ?" -options "y/n" -default $defaultanswer -autoSelect
+                if ($ASK_WAIT2 -eq 'y') {
 
-                if ( ( $ret = remove_snapmirror_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR) -ne $True ) {
-                    Write-LogError "ERROR: remove_snapmirror_dr failed" 
-                    clean_and_exit 1
-                }
+                    <# if ( ( $ret = remove_snapmirror_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR) -ne $True ) {
+                        Write-LogError "ERROR: remove_snapmirror_dr failed" 
+                        clean_and_exit 1
+                    }
 
-                if ( ( remove_vserver_peer -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR ) -ne $True ) {
-                    Write-LogError "ERROR: remove_vserver_peer failed" 
-                    return $false
+                    if ( ( remove_vserver_peer -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR ) -ne $True ) {
+                        Write-LogError "ERROR: remove_vserver_peer failed" 
+                        return $false
+                    } #>
+
+                    $mySourceVserverComment=(Get-NcVserver -Name $Vserver -Controller $NcPrimaryCtrl).Comment
+
+                    Write-Log "Vserver [$Vserver] will be deleted on cluster [$PrimaryClusterName]"
+                    if ( ( $ret = remove_vserver_source -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR ) -eq $False ) {
+                        Write-LogError "ERROR: remove_vserver_dr: Unable to remove vserver [$Vserver]" 
+                        clean_and_exit 1
+                    }
+                    <# $StartTime=Get-Date
+                    $Good=$false
+                    while( ($Good -eq $false) ){
+                        Start-Sleep 1
+                        Write-LogDebug "Check if $Vserver-mc is completely deleted on Secondary Cluster [$NcSecondaryCtrl]"
+                        Write-LogDebug "Get-NcVserver -Vserver $Vserver-mc -Controller $NcSecondaryCtrl"
+                        $ret=Get-NcVserver -Vserver $($Vserver+"-mc") -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar
+                        if ( $? -ne $True ) {
+                            throw "ERROR: Get-NcVserver failed [$ErrorVar]"
+                        }
+                        if($null -eq $ret){$Good=$True}
+                        $CurrentTime=Get-date
+                        $TimeoutTime = ($CurrentTime - $StartTime).TotalSeconds
+                        if ( $TimeOutTime -gt $Global:STOP_TIMEOUT ) {
+                            $Return = $false
+                            throw "ERROR: Timeout waiting Deletion of $myPrimaryVserver-mc"
+                        }
+                    } #>
+
+                    # Write-Log "[$VserverDR] Renamed to [$Vserver]"
+                    # Write-LogDebug "Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl"
+                    # $out = Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar
+                    # if ( $? -ne $True ) {
+                    #     throw "ERROR: Rename-NcVserver failed [$ErrorVar]"
+                    # }
+                    # Write-LogDebug "Set-NcVserver -Name $Vserver -Controller $NcSecondaryCtrl -Comment $mySourceVserverComment"
+                    # Set-NcVserver -Name $Vserver -Controller $NcSecondaryCtrl -Comment $mySourceVserverComment
+                    
+                    Write-Log "[$Vserver] completely removed on [$PrimaryClusterName]"
+                    clean_and_exit 0
                 }
-                $mySourceVserverComment=(Get-NcVserver -Name $Vserver -Controller $NcPrimaryCtrl).Comment
-                Write-Log "[$VserverDR] Renamed to [$Vserver]"
-                Write-LogDebug "Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl"
-                $out = Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar
-                if ( $? -ne $True ) {
-                    throw "ERROR: Rename-NcVserver failed [$ErrorVar]"
+                else {
+                    Write-Log "[$Vserver] User chose not to delete source SVM on Source Cluster [$PrimaryClusterName]"
+                    Write-Log "[$Vserver] will only be stopped on [$PrimaryClusterName]"
+                    Write-Log "In this case the SVM object name on Destination Cluster [$SecondaryClusterName] is still [$VserverDR]"
+                    Write-Log "But CIFS identity is correctly migrated to [$Vserver]"
+                    Write-Log "Final rename will be done when [-DeleteSource] step will be executed, once you are ready to completely delete [$Vserver] on Source Cluster [$PrimaryClusterName]"
+                    Write-LogDebug "Stop-NcVserver -Name $Vserver -Controller $NcPrimaryCtrl -Confirm:$False"
+                    $ret = Stop-NcVserver -Name $Vserver -Controller $NcPrimaryCtrl -Confirm:$False -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) {
+                        throw "ERROR: Stop-NcVerser failed [$ErrorVar]"
+                        clean_and_exit 1
+                    } 
+                    Start-Sleep 1
                 }
-                Write-LogDebug "Set-NcVserver -Name $Vserver -Controller $NcSecondaryCtrl -Comment $mySourceVserverComment"
-                Set-NcVserver -Name $Vserver -Controller $NcSecondaryCtrl -Comment $mySourceVserverComment
-                Write-Log "Vserver [$Vserver] will be deleted on cluster [$PrimaryClusterName]"
-                if ( ( $ret = remove_vserver_source -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR ) -eq $False ) {
-                    Write-LogError "ERROR: remove_vserver_dr: Unable to remove vserver [$VserverDR]" 
-                    clean_and_exit 1
-                }
-                Write-Log "[$Vserver] completely removed on [$PrimaryClusterName]"
-                clean_and_exit 0
-            }
-            else {
-                Write-Log "[$Vserver] User chose not to delete source SVM on Source Cluster [$PrimaryClusterName]"
-                Write-Log "[$Vserver] will only be stopped on [$PrimaryClusterName]"
-                Write-Log "In this case the SVM object name on Destination Cluster [$SecondaryClusterName] is still [$VserverDR]"
-                Write-Log "But CIFS identity is correctly migrated to [$Vserver]"
-                Write-Log "Final rename will be done when [-DeleteSource] step will be executed, once you are ready to completely delete [$Vserver] on Source Cluster [$PrimaryClusterName]"
-                Write-LogDebug "Stop-NcVserver -Name $Vserver -Controller $NcPrimaryCtrl -Confirm:$False"
-                $ret = Stop-NcVserver -Name $Vserver -Controller $NcPrimaryCtrl -Confirm:$False -ErrorVariable ErrorVar
-                if ( $? -ne $True ) {
-                    throw "ERROR: Stop-NcVerser failed [$ErrorVar]"
-                    clean_and_exit 1
-                } 
             }
         }
         else {
@@ -2740,10 +2886,11 @@ if ($Migrate) {
     }
     clean_and_exit 0
 }
+
 ####################################################################################################
 
 if ( $DeleteSource ) {
-    $Global:Run_Mode = "DeleteSrouce"
+    $Global:Run_Mode = "DeleteSource"
     Write-LogOnly "SVMTOOL DeleteSource"
     # Connect to the Cluster
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
@@ -2763,7 +2910,6 @@ if ( $DeleteSource ) {
     }
     $SecondaryClusterName = $NcSecondaryCtrl.Name
 
-    # TODO Add inside same metrocluster mode's tests
     Check_Running_Inside_Same_MCC -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl
 
     $SourceVserver = Get-NcVserver -Name $Vserver -Controller $NcPrimaryCtrl -ErrorVariable ErrorVar
@@ -2774,7 +2920,7 @@ if ( $DeleteSource ) {
 
     $DestVserver = Get-NcVserver -Name $VserverDR -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar
     if ($? -ne $True) {
-        Write-LogError "ERROR : SVM [$Vserver] does not exist on [$SecondaryClusterName]"; clean_and_exit 1
+        Write-LogError "ERROR : SVM [$VserverDR] does not exist on [$SecondaryClusterName]"; clean_and_exit 1
     }
     $DestState = $DestVserver.State
     if ($SourceState -ne "stopped" -or $DestState -ne "running") {
@@ -2795,11 +2941,9 @@ if ( $DeleteSource ) {
                 return $false
             }
             
-            if($Global:InsideMCC -eq $True){
+            <# if($Global:InsideMCC -eq $True){
                 Write-LogDebug "In mode InsideMCC = True"
-                <# Write-LogDebug "Get-NcMetroclusterVserver -Controller $mySecondaryController -Vserver $myPrimaryVserver"
-                $ReplicatedSVM=(Get-NcMetroclusterVserver -Controller $mySecondaryController -Vserver $myPrimaryVserver).PartnerVserver
-                Write-LogDebug "Will override CIFS configuration on [$ReplicatedSVM]" #>
+                
                 $TemporarySVMName="TempBeforeDelete"
                 Write-Log "[$Vserver] Renamed temporary to [$TemporarySVMName] on [$NcPrimaryCtrl]"
                 Write-LogDebug "Rename-NcVserver -Name $Vserver -NewName $TemporarySVMName -Controller $NcPrimaryCtrl"
@@ -2820,7 +2964,7 @@ if ( $DeleteSource ) {
                     Write-LogError "ERROR: remove_vserver_dr: Unable to remove vserver [$VserverDR]" 
                     clean_and_exit 1
                 }
-            }else{
+            }else{ #>
                 Write-Log "[$VserverDR] Renamed to [$Vserver]"
                 Write-LogDebug "Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl"
                 $out = Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar
@@ -2833,7 +2977,7 @@ if ( $DeleteSource ) {
                     Write-LogError "ERROR: remove_vserver_dr: Unable to remove vserver [$VserverDR]" 
                     clean_and_exit 1
                 }
-            }
+            #}
             Write-Log "[$Vserver] completely deleted on [$PrimaryClusterName]"
             clean_and_exit 0
 
@@ -2844,6 +2988,7 @@ if ( $DeleteSource ) {
         }
     }
 }
+
 ####################################################################################################
 
 if ( $UpdateDR ) {

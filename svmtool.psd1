@@ -25,13 +25,15 @@
 #   1.1.3 : Fix some function's parameter
 #   1.1.4 : Add NonInteractive parameter to Restore-SvmDr
 #           Add ForceRestoreOriginal parameter to Restore-SvmDr
+#   1.1.5 : Add ForceRestoreOriginal parameter to Restore-ObjectSvmDr
+#           
 @{
 
     # Script module or binary module file associated with this manifest.
     RootModule        = '.\svmtool.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.1.4'
+    ModuleVersion     = '1.1.5'
 
     # Supported PSEditions
     # CompatiblePSEditions = @()

@@ -81,13 +81,16 @@
 #           Fix Restore-SvmDr for Qtree & VolumeOptions for Flexgroup volumes
 #           Set warning during Restore Flexgroup volume. Currently, could not restore missing Flexgroup volume, must be recreated manualy
 #   1.3.7:  Fix svmdr_db_switch_datafiles and save_quota_rules_to_quotadb to hide annexed snapmirror relationships
+#   1.3.8:  Compatible with PSTK Core under Windows, Linux and Macos
+#           Allow to migrate SVM inside one Metrocluster (between Cluster that compose this Metrocluster)
+#           Improve Cron replication with Powershell >=7
 @{
 
     # Script module or binary module file associated with this manifest.
     RootModule        = '.\svmtools.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.3.7'
+    ModuleVersion     = '1.3.8'
 
     # Supported PSEditions
     # CompatiblePSEditions = @()
