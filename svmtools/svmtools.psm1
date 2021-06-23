@@ -5,7 +5,7 @@
     This module contains several functions to manage SVMDR, Backup and Restore Configuration...
 .NOTES
     Authors  : Olivier Masson, Jerome Blanchet, Mirko Van Colen
-    Release  : April 16 2021
+    Release  : June 23 2021
 
 #>
 
@@ -12825,6 +12825,7 @@ try{
             # 2 Delete primary SVM (this will also delete replicated SVM-mc...but we have to wait this. not instantaneously)
 
             Write-Log "Preparing deletion of SVM [$myPrimaryVserver] on Cluster [$myPrimaryController]"
+            Write-LogDebug "Preparing deletion of SVM [$myPrimaryVserver] on Cluster [$myPrimaryController]"
             if ( ( $ret = remove_snapmirror_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver) -ne $True ) {
                 Write-LogError "ERROR: remove_snapmirror_dr failed" 
                 clean_and_exit 1
@@ -12834,8 +12835,8 @@ try{
                 Write-LogError "ERROR: remove_vserver_peer failed" 
                 return $false
             }
-
             Write-Log "Delete SVM [$myPrimaryVserver] on cluster [$myPrimaryController]"
+            Write-LogDebug "Delete SVM [$myPrimaryVserver] on cluster [$myPrimaryController]"
             if ( ( $ret = remove_vserver_source -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver ) -eq $False ) {
                 Write-LogError "ERROR: remove_vserver_dr: Unable to remove vserver [$myPrimaryVserver]" 
                 clean_and_exit 1
@@ -12844,6 +12845,7 @@ try{
                 $StartTime=Get-Date
                 $Good=$false
                 Write-Log "Wait deletion of SVM [$myPrimaryVserver-mc] on Cluster [$mySecondaryController]"
+                Write-LogDebug "Wait deletion of SVM [$myPrimaryVserver-mc] on Cluster [$mySecondaryController]"
                 while( ($Good -eq $false) ){
                     Start-Sleep 1
                     Write-LogDebug "Check if $myPrimaryVserver-mc is completely deleted on Secondary Cluster [$mySecondaryController]"
@@ -12861,6 +12863,7 @@ try{
                     }
                 }
                 Write-Log "SVM [$myPrimaryVserver-mc] deleted on Cluster [$mySecondaryController]"
+                Write-LogDebug "SVM [$myPrimaryVserver-mc] deleted on Cluster [$mySecondaryController]"
             }
 
             # 3 Delete Temporary CIFS on secondary SVM
@@ -12888,6 +12891,7 @@ try{
                 Write-LogDebug "Remove-NcNetInterface -Name $lifName -Vserver $mySecondaryVserver -Controller $mySecondaryController"
                 Remove-NcNetInterface -Name $lifName -Vserver $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False
             }
+            
             # 5 restore LIFs, CIFSServer Options, CIFS Shares and CIFS Symlinks
 
             if ( ( $ret= restore_object -myPrimaryController $myPrimaryController `
@@ -13013,11 +13017,12 @@ try{
                 if($InterfaceMaster){
                     $TempInterfaceName=("tmp_lif_to_join_in_ad_" + $InterfaceMaster.InterfaceName)
                     $TempIpAddress=$TemporarySecondaryCifsIp
-                    if($Global:NonInteractive -and $ForClone){
+                    $InterfaceMasterNetMask=$InterfaceMasterPrimary.Netmask
+                    <#if($Global:NonInteractive -and $ForClone){
                         $InterfaceMasterNetMask=$InterfaceMasterPrimary.Netmask
                     }else{
                         $InterfaceMasterNetMask=$InterfaceMaster.Netmask
-                    }
+                    } #>
                     $InterfaceMasterCurrentNode=$InterfaceMaster.CurrentNode
                     $InterfaceMasterCurrentPort=$InterfaceMaster.CurrentPort
                     if ($SecondaryCifsLifCustomVlan) {
@@ -13044,7 +13049,7 @@ try{
                             Write-LogDebug "Dns Domain will remain empty for temporary LIF"
                             $InterfaceMasterDnsDomainName=""    
                         }
-                        Write-Log "[$workOn] Create the LIF [$TempInterfaceName] (cloning from $SecondaryCifsLifMaster)"
+                        Write-Log "[$workOn] Create the LIF [$TempInterfaceName] (cloned from $SecondaryCifsLifMaster)"
                         Write-Log "[$workOn] LIF [$TempInterfaceName] is the Temp Cifs LIF, it must be in Administrative up status"
                         Write-LogDebug "New-NcNetInterface -Name $TempInterfaceName -Vserver $mySecondaryVserver -Role $InterfaceMasterRole -Node $InterfaceMasterCurrentNode -Port $InterfaceMasterCurrentPort -DataProtocols $InterfaceMasterDataProtocols -FirewallPolicy $InterfaceMasterFirewallPolicy -Address $TempIpAddress -Netmask $InterfaceMasterNetMask -DnsDomain $InterfaceMasterDnsDomainName -AdministrativeStatus up -AutoRevert $InterfaceMasterIsAutoRevert -Controller $mySecondaryController"
                         $SecondaryInterface=New-NcNetInterface -Name $TempInterfaceName -Vserver $mySecondaryVserver  -Role $InterfaceMasterRole -Node $InterfaceMasterCurrentNode -Port $InterfaceMasterCurrentPort -DataProtocols $InterfaceMasterDataProtocols -FirewallPolicy $InterfaceMasterFirewallPolicy -Address $TempIpAddress -Netmask $InterfaceMasterNetMask -DnsDomain $InterfaceMasterDnsDomainName -AdministrativeStatus up -AutoRevert $InterfaceMasterIsAutoRevert -Controller $mySecondaryController  -ErrorVariable ErrorVar
@@ -18222,7 +18227,7 @@ Try {
         $Global:InsideMCC=$True
     }else
     {
-        Write-Log "Not Working indide a Metrocluster"
+        Write-Log "Not Working inside a Metrocluster"
         $Global:InsideMCC=$False
     }
     Write-LogDebug "end"

@@ -553,6 +553,7 @@
         - 0.5.0 :   Compatible with PSTK Core under Windows, Linux and Macos
                     Allow to migrate SVM inside one Metrocluster (between the two Clusters that compose this Metrocluster)
                     Improve Cron replication with Powershell >=7
+        - 0.5.1     Use Netmask of the Primary Vserver LIF Master instead of Secondary one to create the Secondary Temporary Lif
 #>
 [CmdletBinding(HelpURI = "https://github.com/oliviermasson/svmtool", DefaultParameterSetName = "ListInstance")]
 Param (
@@ -1095,7 +1096,7 @@ $Global:MIN_MINOR = 5
 $Global:MIN_BUILD = 0
 $Global:MIN_REVISION = 0
 #############################################################################################
-$Global:RELEASE = "0.5.0"
+$Global:RELEASE = "0.5.1_EImodif"
 $Global:SCRIPT_RELEASE = "0.1.24"
 if($PSVersionTable.PSVersion.Major -lt 7){
     $Global:BASEDIR = 'C:\Scripts\SVMTOOL'      
@@ -2748,16 +2749,16 @@ if ($Migrate) {
                     clean_and_exit 1
                 }
             }else{ #>
-                if($Global:InsideMCC -eq $False){
-                    if (($ret = set_all_lif -mySecondaryVserver $Vserver -myPrimaryVserver $VserverDR -mySecondaryController $NcPrimaryCtrl -myPrimaryController $NcSecondaryCtrl -state up -Force) -ne $True ) {
-                        Write-LogError "ERROR: Failed to set all lif up on [$VserverDR]"
-                        clean_and_exit 1
-                    }
-                }
-                if ( ( $ret = migrate_cifs_server -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR -NoInteractive -PreserveIdentity $Global:PreserveIdentity) -ne $True ) {
-                    Write-LogError "ERROR: migrate_cifs_server failed"
+            if($Global:InsideMCC -eq $False){
+                if (($ret = set_all_lif -mySecondaryVserver $Vserver -myPrimaryVserver $VserverDR -mySecondaryController $NcPrimaryCtrl -myPrimaryController $NcSecondaryCtrl -state up -Force) -ne $True ) {
+                    Write-LogError "ERROR: Failed to set all lif up on [$VserverDR]"
                     clean_and_exit 1
                 }
+            }
+            if ( ( $ret = migrate_cifs_server -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR -NoInteractive -PreserveIdentity $Global:PreserveIdentity) -ne $True ) {
+                Write-LogError "ERROR: migrate_cifs_server failed"
+                clean_and_exit 1
+            }
             #}
             #if (($ret=set_all_lif -myVserver $VserverDR -myController $NcSecondaryCtrl -state down) -ne $True ) {
             #    Write-LogError "ERROR: Failed to set all lif down on [$VserverDR]"
@@ -2806,56 +2807,58 @@ if ($Migrate) {
                 else {
                     "n"
                 }
-                $ASK_WAIT2 = Read-HostOptions -question "[$Vserver] Do you want to delete SVM on source cluster [$PrimaryClusterName] ?" -options "y/n" -default $defaultanswer -autoSelect
-                if ($ASK_WAIT2 -eq 'y') {
+                if((Get-NcVserver -Name $Vserver -Controller $NcPrimaryCtrl) -ne $null){
+                    $ASK_WAIT2 = Read-HostOptions -question "[$Vserver] Do you want to delete SVM on source cluster [$PrimaryClusterName] ?" -options "y/n" -default $defaultanswer -autoSelect
+                    if ($ASK_WAIT2 -eq 'y') {
 
-                    <# if ( ( $ret = remove_snapmirror_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR) -ne $True ) {
-                        Write-LogError "ERROR: remove_snapmirror_dr failed" 
-                        clean_and_exit 1
-                    }
-
-                    if ( ( remove_vserver_peer -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR ) -ne $True ) {
-                        Write-LogError "ERROR: remove_vserver_peer failed" 
-                        return $false
-                    } #>
-
-                    $mySourceVserverComment=(Get-NcVserver -Name $Vserver -Controller $NcPrimaryCtrl).Comment
-
-                    Write-Log "Vserver [$Vserver] will be deleted on cluster [$PrimaryClusterName]"
-                    if ( ( $ret = remove_vserver_source -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR ) -eq $False ) {
-                        Write-LogError "ERROR: remove_vserver_dr: Unable to remove vserver [$Vserver]" 
-                        clean_and_exit 1
-                    }
-                    <# $StartTime=Get-Date
-                    $Good=$false
-                    while( ($Good -eq $false) ){
-                        Start-Sleep 1
-                        Write-LogDebug "Check if $Vserver-mc is completely deleted on Secondary Cluster [$NcSecondaryCtrl]"
-                        Write-LogDebug "Get-NcVserver -Vserver $Vserver-mc -Controller $NcSecondaryCtrl"
-                        $ret=Get-NcVserver -Vserver $($Vserver+"-mc") -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar
-                        if ( $? -ne $True ) {
-                            throw "ERROR: Get-NcVserver failed [$ErrorVar]"
+                        <# if ( ( $ret = remove_snapmirror_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR) -ne $True ) {
+                            Write-LogError "ERROR: remove_snapmirror_dr failed" 
+                            clean_and_exit 1
                         }
-                        if($null -eq $ret){$Good=$True}
-                        $CurrentTime=Get-date
-                        $TimeoutTime = ($CurrentTime - $StartTime).TotalSeconds
-                        if ( $TimeOutTime -gt $Global:STOP_TIMEOUT ) {
-                            $Return = $false
-                            throw "ERROR: Timeout waiting Deletion of $myPrimaryVserver-mc"
-                        }
-                    } #>
 
-                    # Write-Log "[$VserverDR] Renamed to [$Vserver]"
-                    # Write-LogDebug "Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl"
-                    # $out = Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar
-                    # if ( $? -ne $True ) {
-                    #     throw "ERROR: Rename-NcVserver failed [$ErrorVar]"
-                    # }
-                    # Write-LogDebug "Set-NcVserver -Name $Vserver -Controller $NcSecondaryCtrl -Comment $mySourceVserverComment"
-                    # Set-NcVserver -Name $Vserver -Controller $NcSecondaryCtrl -Comment $mySourceVserverComment
-                    
-                    Write-Log "[$Vserver] completely removed on [$PrimaryClusterName]"
-                    clean_and_exit 0
+                        if ( ( remove_vserver_peer -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR ) -ne $True ) {
+                            Write-LogError "ERROR: remove_vserver_peer failed" 
+                            return $false
+                        } #>
+
+                        $mySourceVserverComment=(Get-NcVserver -Name $Vserver -Controller $NcPrimaryCtrl).Comment
+
+                        Write-Log "Vserver [$Vserver] will be deleted on cluster [$PrimaryClusterName]"
+                        if ( ( $ret = remove_vserver_source -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR ) -eq $False ) {
+                            Write-LogError "ERROR: remove_vserver_dr: Unable to remove vserver [$Vserver]" 
+                            clean_and_exit 1
+                        }
+                        <# $StartTime=Get-Date
+                        $Good=$false
+                        while( ($Good -eq $false) ){
+                            Start-Sleep 1
+                            Write-LogDebug "Check if $Vserver-mc is completely deleted on Secondary Cluster [$NcSecondaryCtrl]"
+                            Write-LogDebug "Get-NcVserver -Vserver $Vserver-mc -Controller $NcSecondaryCtrl"
+                            $ret=Get-NcVserver -Vserver $($Vserver+"-mc") -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) {
+                                throw "ERROR: Get-NcVserver failed [$ErrorVar]"
+                            }
+                            if($null -eq $ret){$Good=$True}
+                            $CurrentTime=Get-date
+                            $TimeoutTime = ($CurrentTime - $StartTime).TotalSeconds
+                            if ( $TimeOutTime -gt $Global:STOP_TIMEOUT ) {
+                                $Return = $false
+                                throw "ERROR: Timeout waiting Deletion of $myPrimaryVserver-mc"
+                            }
+                        } #>
+
+                        # Write-Log "[$VserverDR] Renamed to [$Vserver]"
+                        # Write-LogDebug "Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl"
+                        # $out = Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar
+                        # if ( $? -ne $True ) {
+                        #     throw "ERROR: Rename-NcVserver failed [$ErrorVar]"
+                        # }
+                        # Write-LogDebug "Set-NcVserver -Name $Vserver -Controller $NcSecondaryCtrl -Comment $mySourceVserverComment"
+                        # Set-NcVserver -Name $Vserver -Controller $NcSecondaryCtrl -Comment $mySourceVserverComment
+                        
+                        Write-Log "[$Vserver] completely removed on [$PrimaryClusterName]"
+                        clean_and_exit 0
+                    }
                 }
                 else {
                     Write-Log "[$Vserver] User chose not to delete source SVM on Source Cluster [$PrimaryClusterName]"

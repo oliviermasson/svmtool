@@ -84,13 +84,14 @@
 #   1.3.8:  Compatible with PSTK Core under Windows, Linux and Macos
 #           Allow to migrate SVM inside one Metrocluster (between Cluster that compose this Metrocluster)
 #           Improve Cron replication with Powershell >=7
+#   1.3.9   Use Netmask of the Primary Vserver LIF Master instead of Secondary one to create the Secondary Temporary Lif
 @{
 
     # Script module or binary module file associated with this manifest.
     RootModule        = '.\svmtools.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.3.8'
+    ModuleVersion     = '1.3.9'
 
     # Supported PSEditions
     # CompatiblePSEditions = @()
