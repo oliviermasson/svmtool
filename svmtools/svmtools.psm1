@@ -5,7 +5,7 @@
     This module contains several functions to manage SVMDR, Backup and Restore Configuration...
 .NOTES
     Authors  : Olivier Masson, Jerome Blanchet, Mirko Van Colen
-    Release  : June 23 2021
+    Release  : June 25 2021
 
 #>
 
@@ -1729,6 +1729,7 @@ Function create_update_vscan_dr (
             if($Backup -eq $False){
                 foreach ( $PrimaryOnAccessPolicy in ( $PrimaryOnAccessPolicyList | Skip-Null ) ) {
                     $PrimaryOnAccessPolicyName=$PrimaryOnAccessPolicy.PolicyName
+                    $PrimaryOnAccessPolicyMandatory=$PrimaryOnAccessPolicy.IsScanMandatory
                     $PrimaryOnAccessPolicyEnabled=$PrimaryOnAccessPolicy.IsPolicyEnabled
                     $PrimaryOnAccessPolicyFileExtToExclude=$PrimaryOnAccessPolicy.FileExtToExclude
                     $PrimaryOnAccessPolicyFileExtToExclude_str=[string]$PrimaryOnAccessPolicyFileExtToExclude
@@ -1736,31 +1737,33 @@ Function create_update_vscan_dr (
                     $PrimaryOnAccessPolicyFilters_str=[string]$PrimaryOnAccessPolicyFilters
                     $PrimaryOnAccessPolicyProtocol=$PrimaryOnAccessPolicy.Protocol
                     $PrimaryOnAccessPolicyMaxFileSize=$PrimaryOnAccessPolicy.MaxFileSize
-                    $PrimaryOnAccessPolicyExcludePath=$PrimaryOnAccessPolicy.PathsToExclude
-                    $PrimaryOnAccessPolicyFileExcludePath_str=[string]$PrimaryOnAccessPolicyExcludePath
+                    $PrimaryOnAccessPolicyPathtoExclude=$PrimaryOnAccessPolicy.PathsToExclude
+                    $PrimaryOnAccessPolicyPathtoExclude_str=[string]$PrimaryOnAccessPolicyPathtoExclude
 
                     Write-logDebug "Get-NcVscanOnAccessPolicy -Name $PrimaryOnAccessPolicyName -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
                     $SecondaryOnAccessPolicy = Get-NcVscanOnAccessPolicy -Name $PrimaryOnAccessPolicyName -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVscanOnAccessPolicy failed on [$mySecondaryController] [$ErrorVar]" }
-                    if ( $SecondaryOnAccessPolicy -ne $null ) 
+                    if ( $null -ne $SecondaryOnAccessPolicy ) 
                     {
                         $SecondaryOnAccessPolicyEnabled=$SecondaryOnAccessPolicy.IsPolicyEnabled
+                        $SecondaryOnAccessPolicyMandatory=$SecondayOnAccessPolicy.IsScanMandatory
                         $SecondaryOnAccessPolicyFileExtToExclude=$SecondaryOnAccessPolicy.FileExtToExclude
                         $SecondaryOnAccessPolicyFileExtToExclude_str=[string]$SecondaryOnAccessPolicyFileExtToExclude
                         $SecondaryOnAccessPolicyFilters=$SecondaryOnAccessPolicy.Filters
                         $SecondaryOnAccessPolicyFilters_str=[string]$SecondaryOnAccessPolicyFilters
                         $SecondaryOnAccessPolicyMaxFileSize=$SecondaryOnAccessPolicy.MaxFileSize
-                        $SecondaryOnAccessPolicyExcludePath=$SecondaryOnAccessPolicy.PathsToExclude
-                        $SecondaryOnAccessPolicyExcludePath_str=[string]$SecondaryOnAccessPolicyExcludePath
+                        $SecondaryOnAccessPolicyPathtoExclude=$SecondaryOnAccessPolicy.PathsToExclude
+                        $SecondaryOnAccessPolicyPathtoExclude_str=[string]$SecondaryOnAccessPolicyPathtoExclude
                         $SecondaryOnAccessPolicyAdminOwner=$SecondaryOnAccessPolicy.AdminOwner
                         
                         if ( (($PrimaryOnAccessPolicyFilters_str -ne $SecondaryOnAccessPolicyFilters_str) `
-                            -and (($PrimaryOnAccessPolicyFilters -ne $null) -and ($SecondaryOnAccessPolicyFilters -ne $null))) `
+                            -and (($null -ne $PrimaryOnAccessPolicyFilters) -and ($null -ne $SecondaryOnAccessPolicyFilters))) `
                             -or ($PrimaryOnAccessPolicyMaxFileSize -ne $SecondaryOnAccessPolicyMaxFileSize) `
-                            -or (($PrimaryOnAccessPolicyExcludePath_str -ne $SecondaryOnAccessPolicyExcludePath_str) `
-                            -and (($PrimaryOnAccessPolicyExcludePath -ne $null) -and ($SecondaryOnAccessPolicyExcludePath -ne $null))) `
+                            -or (($PrimaryOnAccessPolicyPathtoExclude_str -ne $SecondaryOnAccessPolicyPathtoExclude_str) `
+                            -and (($null -ne $PrimaryOnAccessPolicyPathtoExclude) -and ($null -ne $SecondaryOnAccessPolicyPathtoExclude))) `
                             -or (($PrimaryOnAccessPolicyFileExtToExclude_str -ne $SecondaryOnAccessPolicyFileExtToExclude_str) `
-                            -and (($PrimaryOnAccessPolicyFileExtToExclude -ne $null) -and ($SecondaryOnAccessPolicyFileExtToExclude -ne $null))) )
+                            -and (($null -ne $PrimaryOnAccessPolicyFileExtToExclude) -and ($null -ne $SecondaryOnAccessPolicyFileExtToExclude)))`
+                            -or ($PrimaryOnAccessPolicyMandatory -ne $SecondaryOnAccessPolicyMandatory) )
                             #-or ($PrimaryOnAccessPolicyProtocol -ne $SecondaryOnAccessPolicyProtocol) ` 
                         {
                             if($PrimaryOnAccessPolicyFilters.count -eq 0 ){$PrimaryOnAccessPolicyFilters+="-"}
@@ -1771,11 +1774,12 @@ Function create_update_vscan_dr (
                                 $VserverContext=$mySecondaryVserver
                             }
                             Write-Log "[$workOn] Modify VscanOnAccessPolicy [$PrimaryOnAccessPolicyName]"
-                            Write-LogDebug "Set-NcVscanOnAccessPolicy -Name $PrimaryOnAccessPolicyName -Filter $PrimaryOnAccessPolicyFilters -MaxFileSize $PrimaryOnAccessPolicyMaxFileSize -ExcludePath $PrimaryOnAccessPolicyExcludePath -ExcludeExtension $PrimaryOnAccessPolicyFileExtToExclude -VserverContext $VserverContext -Controller $mySecondaryController  -ErrorVariable ErrorVar"
+                            Write-LogDebug "Set-NcVscanOnAccessPolicy -Name $PrimaryOnAccessPolicyName -IsScanMandatory $PrimaryOnAccessPolicyMandatory -Filter $PrimaryOnAccessPolicyFilters -MaxFileSize $PrimaryOnAccessPolicyMaxFileSize -ExcludePath $PrimaryOnAccessPolicyPathtoExclude -ExcludeExtension $PrimaryOnAccessPolicyFileExtToExclude -VserverContext $VserverContext -Controller $mySecondaryController  -ErrorVariable ErrorVar"
                             $out=Set-NcVscanOnAccessPolicy -Name $PrimaryOnAccessPolicyName `
+                            -IsScanMandatory $PrimaryOnAccessPolicyMandatory `
                             -Filter $PrimaryOnAccessPolicyFilters `
                             -MaxFileSize $PrimaryOnAccessPolicyMaxFileSize `
-                            -ExcludePath $PrimaryOnAccessPolicyExcludePath `
+                            -ExcludePath $PrimaryOnAccessPolicyPathtoExclude `
                             -ExcludeExtension $PrimaryOnAccessPolicyFileExtToExclude `
                             -VserverContext $VserverContext -Controller $mySecondaryController  -ErrorVariable ErrorVar
                             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcVscanOnAccessPolicy failed [$ErrorVar]" }
@@ -1788,15 +1792,17 @@ Function create_update_vscan_dr (
                         Write-LogDebug "New-NcVscanOnAccessPolicy -Name $PrimaryOnAccessPolicyName `
                         -Protocol $PrimaryOnAccessPolicyProtocol `
                         -Filter $PrimaryOnAccessPolicyFilters `
+                        -IsMandatory $PrimaryOnAccessPolicyMandatory `
                         -MaxFileSize $PrimaryOnAccessPolicyMaxFileSize `
-                        -ExcludePath $PrimaryOnAccessPolicyExcludePath `
+                        -ExcludePath $PrimaryOnAccessPolicyPathtoExclude `
                         -ExcludeExtension $PrimaryOnAccessPolicyFileExtToExclude `
                         -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
                         $out=New-NcVscanOnAccessPolicy -Name $PrimaryOnAccessPolicyName `
                         -Protocol $PrimaryOnAccessPolicyProtocol `
                         -Filter $PrimaryOnAccessPolicyFilters `
+                        -IsScanMandatory $PrimaryOnAccessPolicyMandatory `
                         -MaxFileSize $PrimaryOnAccessPolicyMaxFileSize `
-                        -ExcludePath $PrimaryOnAccessPolicyExcludePath `
+                        -ExcludePath $PrimaryOnAccessPolicyPathtoExclude `
                         -ExcludeExtension $PrimaryOnAccessPolicyFileExtToExclude `
                         -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcVscanOnAccessPolicy failed [$ErrorVar]" }
@@ -9759,19 +9765,20 @@ Try {
             if($TemporarySecondaryCifsIp -and $SecondaryCifsLifMaster){
                 Write-LogWarn "[$workOn] Create Temporary LIF to join AD [$SecondaryCifsLifMaster][$TemporarySecondaryCifsIp]"
                 $SecondaryCifsLifCreated=$false
-                if($Global:NonInteractive -or $ForClone -or $Global:PreserveIdentity -eq $True){
-                    Write-Log "[$workOn] getting master lif to clone"
-                    $InterfaceMasterPrimary = Get-NcNetInterface $SecondaryCifsLifMaster -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar 
-                    $InterfaceMaster = Get-NcNetInterface $SecondaryCifsLifMaster -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
-                }
+                #if($Global:NonInteractive -or $ForClone -or $Global:PreserveIdentity -eq $True){
+                Write-Log "[$workOn] getting master lif to clone"
+                $InterfaceMasterPrimary = Get-NcNetInterface $SecondaryCifsLifMaster -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar 
+                $InterfaceMaster = Get-NcNetInterface $SecondaryCifsLifMaster -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
+                #}
                 if($InterfaceMaster){
 			        $TempInterfaceName=("tmp_lif_to_join_in_ad_" + $InterfaceMaster.InterfaceName)
                     $TempIpAddress=$TemporarySecondaryCifsIp
-                    if($Global:NonInteractive -and $ForClone){
+                    $InterfaceMasterNetMask=$InterfaceMasterPrimary.Netmask
+                    <#if($Global:NonInteractive -and $ForClone){
                         $InterfaceMasterNetMask=$InterfaceMasterPrimary.Netmask
                     }else{
                         $InterfaceMasterNetMask=$InterfaceMaster.Netmask
-                    }
+                    } #>
 			        $InterfaceMasterCurrentNode=$InterfaceMaster.CurrentNode
                     $InterfaceMasterCurrentPort=$InterfaceMaster.CurrentPort
                     if ($SecondaryCifsLifCustomVlan) {
@@ -11799,10 +11806,10 @@ Try {
         } #>
         if($Global:NFSonly -eq $False){
             if($Backup -eq $False -and $Restore -eq $False){
-                Write-LogDebug "[$workOn] Removing Temporary LIF"
                 Write-LogDebug "Get-NcNetInterface -Vserver $mySecondaryVserver -Controller $mySecondaryController | Where-Object {$_.InterfaceName -match `"^tmp_lif_to_join_in_ad_`"}"
                 $TempCifsLif=Get-NcNetInterface -Vserver $mySecondaryVserver -Controller $mySecondaryController | Where-Object {$_.InterfaceName -match "^tmp_lif_to_join_in_ad_"}
                 if($null -ne $TempCifsLif){
+                    Write-LogDebug "[$workOn] Removing Temporary LIF"
                     Write-logDebug "Set-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController -ErrorVariable ErrorVar"
                     $out = Set-NcNetInterface -Name $TempCifsLif.InterfaceName -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController -ErrorVariable ErrorVar
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcNetInterface failed [$ErrorVar]" ; }
@@ -13009,11 +13016,14 @@ try{
             if($TemporarySecondaryCifsIp -and $SecondaryCifsLifMaster){
                 Write-LogWarn "[$workOn] Create tmp lif to join AD [$SecondaryCifsLifMaster][$TemporarySecondaryCifsIp]"
                 $SecondaryCifsLifCreated=$false
-                if($Global:NonInteractive -or $ForClone -or $Global:PreserveIdentity -eq $True){
-                    Write-Log "[$workOn] getting master lif to clone"
-                    $InterfaceMasterPrimary = Get-NcNetInterface $SecondaryCifsLifMaster -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar 
-                    $InterfaceMaster = Get-NcNetInterface $SecondaryCifsLifMaster -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
-                }
+                #if($Global:NonInteractive -or $ForClone -or $Global:PreserveIdentity -eq $True){
+                Write-Log "[$workOn] getting master lif to clone"*
+                Write-LogDebug "Get-NcNetInterface $SecondaryCifsLifMaster -VserverContext $myPrimaryVserver -Controller $myPrimaryController"
+                $InterfaceMasterPrimary = Get-NcNetInterface $SecondaryCifsLifMaster -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar 
+                Write-LogDebug "Get-NcNetInterface $SecondaryCifsLifMaster -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                $InterfaceMaster = Get-NcNetInterface $SecondaryCifsLifMaster -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                Write-LogDebug "InterfaceMasterPrimary [$InterfaceMasterPrimary] InterfaceMaster [$InterfaceMaster]" 
+                #}
                 if($InterfaceMaster){
                     $TempInterfaceName=("tmp_lif_to_join_in_ad_" + $InterfaceMaster.InterfaceName)
                     $TempIpAddress=$TemporarySecondaryCifsIp
@@ -13611,10 +13621,10 @@ Function update_vserver_dr (
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Remove-NcNetInterface failed [$ErrorVar]" ; }
     } #>
     if($Global:NFSonly -eq $False){
-        Write-Log "[$mySecondaryVserver] Removing Temporary LIF"
         Write-LogDebug "Get-NcNetInterface -Vserver $mySecondaryVserver -Controller $mySecondaryController | Where-Object {$_.InterfaceName -match `"^tmp_lif_to_join_in_ad_`"}"
         $TempCifsLif=Get-NcNetInterface -Vserver $mySecondaryVserver -Controller $mySecondaryController | Where-Object {$_.InterfaceName -match "^tmp_lif_to_join_in_ad_"}
         if($null -ne $TempCifsLif){
+            Write-Log "[$mySecondaryVserver] Removing Temporary LIF"
             Write-logDebug "Set-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController -ErrorVariable ErrorVar"
             $out = Set-NcNetInterface -Name $TempCifsLif.InterfaceName -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcNetInterface failed [$ErrorVar]" ; }
