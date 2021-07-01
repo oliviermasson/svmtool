@@ -75,13 +75,16 @@ Use an MCC for source or destination or both | Yes
 Two differents DR destination | Yes
 DR inside the same cluster, between HA pair in different rooms | Yes
 Use Version Flexible SnapMirror when necessary<br>(by example: build a DR from 8.3.2 to 9.X) | Yes
-Migrate an SVM and keep it identity<br>For CIFS, IP and Server Name will be the same,<br>so users will only have to reconnect just by refreshing explorer<br>or double-click on folder<br> | Yes 
+Migrate an SVM and keep it identity<br>For CIFS, IP and Server Name will be the same,<br>so users will only have to reconnect just by refreshing explorer<br>or double-click on folder<br><br>Migrate SVM inside one Metrocluster | Yes 
 Select subset of sources volumes that will be replicated | Yes
 Clone DR SVM<br>In order to test DR without interrupting SnapMirror relationships during the timeframe of the test | Yes
 FabricPool on Destination | Yes<br>
 Encrypt Destination's volumes (NVE)<br>with conversion support if running at least ONTAP 9.3 | Yes
 Compatible with SM-S (Sync and StrictSync Policy) for Data replication<br>Is able to convert from Async to Sync relationship and vice versa<br>Object replication cannot be Synchronous and is still an Asynchronous replication | Yes
 Preserve Network Identity<br>By default, svmtool will Preserve Network Identity between Source and DR<br>But you can, if needed, create a DR with its own Network Identity and preserve it during Activation | Yes
+Compatible with Powershell Core under Windows, Linux and MacOS<br>Requiere PSTK Core | Yes
+
+
 
 ### BACKUP & RESTORE Purpose
 In order to perform a restore operation a minimal config must exist on the destination Cluster:

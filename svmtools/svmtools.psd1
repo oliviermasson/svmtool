@@ -81,13 +81,22 @@
 #           Fix Restore-SvmDr for Qtree & VolumeOptions for Flexgroup volumes
 #           Set warning during Restore Flexgroup volume. Currently, could not restore missing Flexgroup volume, must be recreated manualy
 #   1.3.7:  Fix svmdr_db_switch_datafiles and save_quota_rules_to_quotadb to hide annexed snapmirror relationships
+#   1.3.8:  Compatible with PSTK Core under Windows, Linux and Macos
+#           Allow to migrate SVM inside one Metrocluster (between Cluster that compose this Metrocluster)
+#           Improve Cron replication with Powershell >=7
+#   1.3.9   Use Netmask of the Primary Vserver LIF Master instead of Secondary one to create the Secondary Temporary Lif
+#   1.4.0   Correct Vscan OnAccessPolicy replication
+#   1.4.1   Restore possibility during a Migrate to choose delete or not the source SVM. Not possible in the case of migration inside the same MCC, where source SVM must be delete during Migration
+#           Rename flexgroup with _dst suffix once migration done
+#           Correct ReActivate with SM-S
+#           Correct how to test if SVM source is alive to be compatible with and without Powershell Core
 @{
 
     # Script module or binary module file associated with this manifest.
     RootModule        = '.\svmtools.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.3.7'
+    ModuleVersion     = '1.4.1'
 
     # Supported PSEditions
     # CompatiblePSEditions = @()

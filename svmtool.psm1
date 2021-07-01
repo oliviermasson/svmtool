@@ -995,10 +995,10 @@ function Remove-SvmDr {
 
     [cot3] is alive
     Do You really want to activate SVM [OMSHIFT_DR] from cluster [aff] ? [y/n] : y
-    [OMSHIFT_DR] Break relation [OMSHIFT:oc_140_wordpress_mysql_disk_ce4c3] ---> [OMSHIFT_DR:oc_140_wordpress_mysql_disk_ce4c3]
-    [OMSHIFT_DR] Break relation [OMSHIFT:trident_demowordpress_mysql_disk_a8976] ---> [OMSHIFT_DR:trident_demowordpress_mysql_disk_a8976]
-    [OMSHIFT_DR] Break relation [OMSHIFT:trident_demowordpress_wordpress_disk_a89e4] ---> [OMSHIFT_DR:trident_demowordpress_wordpress_disk_a89e4]
-    [OMSHIFT_DR] Break relation [OMSHIFT:trident_etcd_trident] ---> [OMSHIFT_DR:trident_etcd_trident]
+    [OMSHIFT_DR] Break relation [OMSHIFT:oc_140_wordpress_mysql_disk_ce4c3] --> [OMSHIFT_DR:oc_140_wordpress_mysql_disk_ce4c3]
+    [OMSHIFT_DR] Break relation [OMSHIFT:trident_demowordpress_mysql_disk_a8976] --> [OMSHIFT_DR:trident_demowordpress_mysql_disk_a8976]
+    [OMSHIFT_DR] Break relation [OMSHIFT:trident_demowordpress_wordpress_disk_a89e4] --> [OMSHIFT_DR:trident_demowordpress_wordpress_disk_a89e4]
+    [OMSHIFT_DR] Break relation [OMSHIFT:trident_etcd_trident] --> [OMSHIFT_DR:trident_etcd_trident]
     [OMSHIFT] Remove LIF [data]
     [OMSHIFT] Remove LIF [iscsi]
     [OMSHIFT] stop Vserver
@@ -2704,6 +2704,16 @@ function Restore-ObjectSvmDr {
         # When restoring volumes allow to choose hosting aggregate for each volume
         [Parameter(Mandatory = $false)]
         [switch]$AlwaysChooseDataAggr,
+
+        # Enables Force Restore Original CIFS server Name Mode
+        # By default, will restore CIFS by adding -DR to source CIFS server name.
+        # With this switch parameter, it forces to restore CIFS server with same name as source.
+        # Make sure that there is no duplicate entry in Active Directory 
+        [switch]$ForceRestoreOriginal,
+
+        # Enables Non-Interactive Mode
+        # Is default enabled in Wfa-Integration Mode
+        [switch]$NonInteractive,
         
         # Enables the volumes to be restored as type RW (instead of DP)
         # Use this if you don't plan on using snapmirror technology to restore the data 
@@ -2948,6 +2958,17 @@ function Import-SvmDrConfiguration {
 #>
 function Show-SvmDrVersion {
     [CmdletBinding()]
+    param(
+
+        # Loglevel of the console output
+        [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
+        [string]$LogLevelConsole = "Info",
+
+        # Loglevel of the logfile output
+        [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
+        [string]$LogLevelLogFile = "Debug"
+    )
+
     $scriptPath = "$PSScriptRoot\svmtool.ps1"
     Invoke-Expression "& `"$scriptPath`" -Version"
 }
