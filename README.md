@@ -8,7 +8,15 @@ If you need to Encrypt your destination volumes you will need at least the versi
 
 It also require at least .Net Framework v3.5 and Windows Powershell at least v3.0.
 
-*This script currently not working with Powershell Core*
+SVMTOOL is now compatible with Powershell Core (Powershell version 7.x and upper)
+
+So SVMTOOL is now compatible under Windows, Linux and MacOS.
+
+To execute SVMTOOL under Linux or MacOS you must install the last PSTK v9.9.1 which compatible with Powershell Core.
+
+
+
+
 
 Mains objectives of this script are:
 - Create/Maintain/Manage SVM Disaster Relationship between NetApp MetroCluster for old version of **ONTAP** 8.3 to 9.X
@@ -83,6 +91,7 @@ Encrypt Destination's volumes (NVE)<br>with conversion support if running at lea
 Compatible with SM-S (Sync and StrictSync Policy) for Data replication<br>Is able to convert from Async to Sync relationship and vice versa<br>Object replication cannot be Synchronous and is still an Asynchronous replication | Yes
 Preserve Network Identity<br>By default, svmtool will Preserve Network Identity between Source and DR<br>But you can, if needed, create a DR with its own Network Identity and preserve it during Activation | Yes
 Compatible with Powershell Core under Windows, Linux and MacOS<br>Requiere PSTK Core | Yes
+Migrate inside the same MCC : Move SVM from one ClusterA to ClusterB inside the same Metrocluster | Yes
 
 
 
@@ -103,6 +112,6 @@ Currently compatible with following Objects:
 - Shares (CIFS shares)
 
 ### Documentation
-For more information download [Manual](https://github.com/oliviermasson/svmtool/blob/master/SVMTOOL_Manual_v2.3.pdf)
+For more information download [Manual](https://github.com/oliviermasson/svmtool/blob/master/SVMTOOL_Manual_v2.4.pdf)
 
 HTH
