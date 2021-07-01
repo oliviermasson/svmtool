@@ -20,8 +20,10 @@ $Global:VOLUME_TYPE="DP"
 function init_log4net{
     write-verbose "Loading log4net from path $PSScriptRoot\log4net.dll"
     $log4NetLocation = "$PSScriptRoot\log4net.dll" 
-    [Reflection.Assembly]::LoadFrom($log4NetLocation) | Out-Null
-    [log4net.LogManager]::ResetConfiguration();
+    if($null -eq ([System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object Location | Sort-Object -Property FullName | Select-Object -Property FullName, Location, GlobalAssemblyCache, IsFullyTrusted | Where-Object {$_.FullName -match "log4net"})){
+        [Reflection.Assembly]::LoadFrom($log4NetLocation) | Out-Null
+        [log4net.LogManager]::ResetConfiguration()
+    }
 }
 
 #############################################################################################
