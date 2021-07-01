@@ -91,7 +91,7 @@ Encrypt Destination's volumes (NVE)<br>with conversion support if running at lea
 Compatible with SM-S (Sync and StrictSync Policy) for Data replication<br>Is able to convert from Async to Sync relationship and vice versa<br>Object replication cannot be Synchronous and is still an Asynchronous replication | Yes
 Preserve Network Identity<br>By default, svmtool will Preserve Network Identity between Source and DR<br>But you can, if needed, create a DR with its own Network Identity and preserve it during Activation | Yes
 Compatible with Powershell Core under Windows, Linux and MacOS<br>Requiere PSTK Core | Yes
-Migrate inside the same MCC : Move SVM from one ClusterA to ClusterB inside the same Metrocluster | Yes
+Migrate inside the same MCC : Move SVM from ClusterA to ClusterB inside the same Metrocluster | Yes
 
 
 
