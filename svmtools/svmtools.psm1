@@ -1975,8 +1975,13 @@ Function create_update_firewallpolicy_dr(
                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Remove-NcNetFirewallPolicy failed [$ErrorVar]"  }
                     }elseif($diff.SideIndicator -eq "<="){
                         Write-Log "[$workOn] Create this Firewall Rule : [$Policy] [$Service] [$AllowList]"
-                        $out=New-NcNetFirewallPolicy -Name $Policy -Vserver $mySecondaryVserver -Service $Service -AllowAddress $AllowList -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcNetFirewallPolicy failed [$ErrorVar]"  }
+                        if($ONTAP96orGreater -and $Service -match "https"){
+                            Write-LogWarn "WARNING: For ONTAP 9.6 and upper HTTPS is no more managed through Firewall-Policy but Service-Policy"
+                        }else{
+                            Write-LogDebug "New-NcNetFirewallPolicy -Name $Policy -Vserver $mySecondaryVserver -Service $Service -AllowAddress $AllowList -Controller $mySecondaryController"
+                            $out=New-NcNetFirewallPolicy -Name $Policy -Vserver $mySecondaryVserver -Service $Service -AllowAddress $AllowList -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcNetFirewallPolicy failed [$ErrorVar]"  }
+                        }
                     }
                 }
             }else{
@@ -1989,8 +1994,12 @@ Function create_update_firewallpolicy_dr(
                         continue
                     }
                     Write-Log "[$workOn] Create Firewall Rule : [$Policy] [$Service] [$AllowList]"
-                    $out=New-NcNetFirewallPolicy -Name $Policy -Vserver $mySecondaryVserver -Service $Service -AllowAddress $AllowList -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcNetFirewallPolicy failed [$ErrorVar]"  }
+                    if($ONTAP96orGreater -and $Service -match "https"){
+                        Write-LogWarn "WARNING: For ONTAP 9.6 and upper HTTPS is no more managed through Firewall-Policy but Service-Policy"
+                    }else{
+                        $out=New-NcNetFirewallPolicy -Name $Policy -Vserver $mySecondaryVserver -Service $Service -AllowAddress $AllowList -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcNetFirewallPolicy failed [$ErrorVar]"  }
+                    }
                 }
             }
         }

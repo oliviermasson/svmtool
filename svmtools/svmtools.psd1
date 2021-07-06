@@ -90,13 +90,14 @@
 #           Rename flexgroup with _dst suffix once migration done
 #           Correct ReActivate with SM-S
 #           Correct how to test if SVM source is alive to be compatible with and without Powershell Core
+#   1.4.2   Detect when service-policy should be used instead of firewall-policy if ONTAP 9.6 or greater
 @{
 
     # Script module or binary module file associated with this manifest.
     RootModule        = '.\svmtools.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.4.1'
+    ModuleVersion     = '1.4.2'
 
     # Supported PSEditions
     # CompatiblePSEditions = @()

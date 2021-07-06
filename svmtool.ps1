@@ -559,6 +559,7 @@
                     Rename flexgroup with _dst suffix once migration done
                     Correct ReActivate with SM-S
                     Correct how to test if SVM source is alive to be compatible with and without Powershell Core
+        - 0.5.3     Detect when service-policy should be used instead of firewall-policy if ONTAP 9.6 or greater
 
 #>
 [CmdletBinding(HelpURI = "https://github.com/oliviermasson/svmtool", DefaultParameterSetName = "ListInstance")]
@@ -1102,7 +1103,7 @@ $Global:MIN_MINOR = 5
 $Global:MIN_BUILD = 0
 $Global:MIN_REVISION = 0
 #############################################################################################
-$Global:RELEASE = "0.5.2"
+$Global:RELEASE = "0.5.3"
 $Global:SCRIPT_RELEASE = "0.1.25"
 if($PSVersionTable.PSVersion.Major -lt 7){
     $Global:BASEDIR = 'C:\Scripts\SVMTOOL'      
