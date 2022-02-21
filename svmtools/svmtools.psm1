@@ -16680,7 +16680,6 @@ Function Set_CIFS_from_JSON (
             $oldCIFSNetbiosAliases=""
         }
         if($newCIFSName -ne $oldCIFSName){
-            test
             Write-LogDebug "Check if at least one lif is up and ready. This is mandatory to dialog with AD"
             Write-LogDebug "Get-NcNetInterface -Query `@`{Vserver=$ToVserver;OperationalStatus=up`;DataProtocols=cifs`} -Controller $ToNcController"
             $ret=Get-NcNetInterface -Query @{Vserver=$ToVserver;OperationalStatus="up";DataProtocols="cifs"} -Controller $ToNcController -ErrorVariable ErrorVar
