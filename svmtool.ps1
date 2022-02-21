@@ -304,8 +304,8 @@
 	If this option is present whith a valid TieringPolicy, destination volume will be created with this Policy
 	It not present, we will check if a TieringPolicy is used on Primary volume and use it on destination
     And if no TieringPolicy is defined on source volume then we will use auto as default TieringPolicy for secondary volumes
-.PARAMETER NoCifsDeleteMethod
-    Force to use CIFS modify method, instead of delete/recreate when CIFS server name need to be changed
+.PARAMETER UseCifsDeleteMethod
+    Force to use CIFS delete method, instead of modify existing CIFS server
 .INPUTS
     None. You cannot pipe objects to this script
 .OUTPUTS
@@ -692,7 +692,7 @@ Param (
     [string]$Vserver,
 
     [Parameter(Mandatory = $true, ParameterSetName = 'RestoreObject')]
-    [ValidateSet("Lifs", "Volumes", "Exports", "CifsServer", "Shares", "Symlinks", "Quotas","Users")]
+    [ValidateSet("Lifs", "Volumes", "Exports", "CifsServer", "NetBios", "Shares", "Symlinks", "Quotas","Users")]
     [string[]]$Objects=@(""),
 
     [Parameter(Mandatory = $false, ParameterSetName = 'RestoreObject')]
@@ -982,6 +982,9 @@ Param (
     [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
     [string]$LogLevelLogFile = "Debug",
 
+    [Parameter(Mandatory = $false, ParameterSetName = 'Version')]
+    [switch]$PSTKalpha,
+
     [Parameter(Mandatory = $false, ParameterSetName = 'Setup')]
     [Parameter(Mandatory = $false, ParameterSetName = 'ConfigureDR')]
     [Parameter(Mandatory = $false, ParameterSetName = 'UpdateDR')]
@@ -1007,7 +1010,7 @@ Param (
     [Parameter(Mandatory = $false, ParameterSetName = 'Backup')]
     [Parameter(Mandatory = $false, ParameterSetName = 'Restore')]
     [Parameter(Mandatory = $false, ParameterSetName = 'RestoreObject')]
-    [Int32]$Timeout = 60,
+    [Int32]$Timeout = 60,  #Timeout in seconds for dialog with controller
 
     [Parameter(Mandatory = $false, ParameterSetName = 'Setup')]
     [Parameter(Mandatory = $false, ParameterSetName = 'ConfigureDR')]
@@ -1033,13 +1036,15 @@ Param (
     
     [Parameter(Mandatory = $False, ParameterSetName = 'ConfigureDR')]
     [Parameter(Mandatory = $False, ParameterSetName = 'ActivateDR')]
-    [Parameter(Mandatory = $False, ParameterSetName = 'Migrate')]
+    #[Parameter(Mandatory = $False, ParameterSetName = 'Migrate')]  With Migrate PreserveIdentity is not an option, it is mandatory
     [bool]$PreserveIdentity=$True,
     
+    #By default ReActivate & ActivateDR will try not to delete existing CIFS server, but instead, modify them
+    #If you want to use the method which consist to first delete existing CIFS server, pass the switch parameter UseCifsDeleteMethod 
     [Parameter(Mandatory = $False, ParameterSetName = 'ReActivate')]
     [Parameter(Mandatory = $False, ParameterSetName = 'ActivateDR')]
-    [Parameter(Mandatory = $False, ParameterSetName = 'Migrate')]
-    [switch]$NoCifsDeleteMethod,
+    #[Parameter(Mandatory = $False, ParameterSetName = 'Migrate')] With Migrate NoCifsDeleteMethod is no more an option, it is decided by svmtool depending on the scenario (migration inside a Metrocluster or not)
+    [switch]$UseCifsDeleteMethod,
 
     [switch]$WfaIntegration,
 
@@ -1156,8 +1161,14 @@ $Global:ForceRestoreOriginal = $ForceRestoreOriginal
 $Global:BACKUPALLSVM = $False
 $Global:PreserveIdentity=$PreserveIdentity
 $Global:TieringPolicy=$TieringPolicy
+$Global:Timeout=$Timeout
+if($DeleteSource.IsPresent){
+    $Global:DeleteSource=$true
+}else{
+    $Global:DeleteSource=$False
+}
 # Force to use CIFS modify method, instead of delete/recreate when CIFS server name need to be changed
-$Global:NoCifsDeleteMethod=$NoCifsDeleteMethod
+$Global:UseCifsDeleteMethod=$UseCifsDeleteMethod
 if($PSVersionTable.PSVersion.Major -lt 7){
     $Global:NumberOfLogicalProcessor = (Get-CimInstance  Win32_Processor).NumberOfLogicalProcessors
 }
@@ -1283,16 +1294,13 @@ if($PSVersionTable.PSVersion.Major -le 5){
             $module = Import-Module -Name DataONTAP -PassThru
             $module = Get-Module DataONTAP
             if ( $module -eq $null ) {
-                Write-Error "ERROR: DataONTAP Core module not found" 
-                clean_and_exit 1
-            }
-            if ( $module -eq $null ) {
                 Write-Error "ERROR: DataONTAP module not found" 
                 clean_and_exit 1
             }
         }
         else {
             # dataontap was loaded externally
+            Write-LogDebug "DataONTAP module already loaded"
         }
     }
     else {
@@ -1308,10 +1316,16 @@ if($PSVersionTable.PSVersion.Major -le 5){
     Write-LogDebug "Import PSTK Core version"
     $module = Get-Module NetApp.ONTAP
     if ($module -eq $null) {
-        $module = Import-Module NetApp.ONTAP
-        # workaround for BURT 1385162
-        $DataONTAP_SkipEmsReport = $null
-        $DataONTAP_SkipUsageReport = $true
+        if($PSTKalpha.IsPresent){
+            Write-Log "Import PSTK Core Alpha"
+            $module = Import-Module 'C:\Users\masson\Downloads\PSTK REST ALPHA\NetApp.ONTAP\NetApp.ONTAP\NetApp.ONTAP.psd1'
+        }else{
+            #Write-Log "Import PSTK Core Standard"
+            $module = Import-Module NetApp.ONTAP
+            # workaround for BURT 1385162
+            $DataONTAP_SkipEmsReport = $null
+            $DataONTAP_SkipUsageReport = $true
+        }
     }
     <# if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){
         #$module = Import-Module "C:\Users\masson\Downloads\PSTK 9.8 CORE\NetApp.ONTAP\NetApp.ONTAP.psd1"
@@ -1503,8 +1517,8 @@ if ( $Backup ) {
     $myCred = get_local_cDotcred ($Backup)
     $tmp_str = $MyCred.UserName
     Write-LogDebug "Connect to cluster [$Backup] with login [$tmp_str]"
-    Write-LogDebug "connect_cluster -myController $Backup -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcPrimaryCtrl = connect_cluster -myController $Backup -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster -myController $Backup -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcPrimaryCtrl = connect_cluster -myController $Backup -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$Backup]" 
         clean_and_exit 1
     }
@@ -1806,8 +1820,8 @@ if ( $Restore ) {
     $myCred = get_local_cDotcred ($Destination)
     $tmp_str = $MyCred.UserName
     Write-LogDebug "Connect to cluster [$Destination] with login [$tmp_str]"
-    Write-LogDebug "connect_cluster -myController $Destination -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcSecondaryCtrl = connect_cluster -myController $Destination -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster -myController $Destination -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcSecondaryCtrl = connect_cluster -myController $Destination -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$Destination]" 
         clean_and_exit 1
     }
@@ -2213,7 +2227,7 @@ if ( $RestoreObject ){
                     $i++
                 }
                 $Query = "Please select Backup from (1.." + $listBackupAvailable.count + ")"
-                $ans = Read-HostDefault -question $Query -default $listBackupAvailable.count
+                $ans = Read-HostDefault -question $Query -default $listBackupAvailable.count -forceAsk $True
                 $ans = [int]$ans / 1
                 if (($ans -notmatch "[0-9]") -or ($ans -lt 1 -or $ans -gt $listBackupAvailable.count)) {
                     Write-Warning "Bad input"; $ans = $null
@@ -2249,14 +2263,14 @@ if ( $RestoreObject ){
     $myCred = get_local_cDotcred ($RESTORE_SRC_CLUSTER) 
     $tmp_str = $MyCred.UserName
     Write-LogDebug "Connect to cluster [$RESTORE_SRC_CLUSTER] with login [$tmp_str]"
-    Write-LogDebug "connect_cluster -myController $RESTORE_SRC_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcPrimaryCtrl = connect_cluster -myController $RESTORE_SRC_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster -myController $RESTORE_SRC_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcPrimaryCtrl = connect_cluster -myController $RESTORE_SRC_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$RESTORE_SRC_CLUSTER]" 
         clean_and_exit 1
     }
     $myCred = get_local_cDotcred ($RESTORE_DST_CLUSTER) 
-    Write-LogDebug "connect_cluster -myController $RESTORE_DST_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcSecondaryCtrl = connect_cluster -myController $RESTORE_DST_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster -myController $RESTORE_DST_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcSecondaryCtrl = connect_cluster -myController $RESTORE_DST_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$RESTORE_DST_CLUSTER]" 
         clean_and_exit 1
     } 
@@ -2354,14 +2368,14 @@ if ( ( $Setup ) -or ( $null -eq $read_vconf ) ) {
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
     $tmp_str = $MyCred.UserName
     Write-LogDebug "Connect to cluster [$PRIMARY_CLUSTER] with login [$tmp_str]"
-    Write-LogDebug "connect_cluster -myController $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcPrimaryCtrl = connect_cluster -myController $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster -myController $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcPrimaryCtrl = connect_cluster -myController $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$PRIMARY_CLUSTER]" 
         clean_and_exit 1 ;
     }
     $myCred = get_local_cDotcred ($SECONDARY_CLUSTER) 
-    Write-LogDebug "connect_cluster -myController $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcSecondaryCtrl = connect_cluster -myController $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster -myController $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcSecondaryCtrl = connect_cluster -myController $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$SECONDARY_CLUSTER]" 
         clean_and_exit 1 ;
     }
@@ -2438,14 +2452,14 @@ if ( $ShowDR ) {
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
     $tmp_str = $MyCred.UserName
     Write-LogDebug "Connect to cluster [$PRIMARY_CLUSTER] with login [$tmp_str]"
-    Write-LogDebug "connect_cluster -myController $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcPrimaryCtrl = connect_cluster -myController $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster -myController $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcPrimaryCtrl = connect_cluster -myController $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$PRIMARY_CLUSTER]" 
         $NcPrimaryCtrl = $null
     }
     $myCred = get_local_cDotcred ($SECONDARY_CLUSTER) 
-    Write-LogDebug "connect_cluster -myController $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcSecondaryCtrl = connect_cluster -myController $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster -myController $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcSecondaryCtrl = connect_cluster -myController $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$SECONDARY_CLUSTER]" 
         $NcSecondaryCtrl = $null
     }
@@ -2462,8 +2476,8 @@ if ( $ConfigureDR ) {
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
     $tmp_str = $MyCred.UserName
     Write-LogDebug "Connect to cluster [$PRIMARY_CLUSTER] with login [$tmp_str]"
-    Write-LogDebug "connect_cluster -myController $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcPrimaryCtrl = connect_cluster -myController $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster -myController $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcPrimaryCtrl = connect_cluster -myController $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$PRIMARY_CLUSTER]" 
         clean_and_exit 1
     }
@@ -2487,13 +2501,12 @@ if ( $ConfigureDR ) {
         $Global:NFSonly=$True
     }
     $myCred = get_local_cDotcred ($SECONDARY_CLUSTER) 
-    Write-LogDebug "connect_cluster -myController $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcSecondaryCtrl = connect_cluster -myController $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster -myController $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcSecondaryCtrl = connect_cluster -myController $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$SECONDARY_CLUSTER]" 
         clean_and_exit 1
     }
 
-    # TODO Add inside same metrocluster mode's tests
     Check_Running_Inside_Same_MCC -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl
 
     if ( ($ret = Save_Cluster_To_JSON -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl) -ne $True) {
@@ -2591,14 +2604,14 @@ if ( $DeleteDR ) {
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
     $tmp_str = $MyCred.UserName
     Write-LogDebug "Connect to cluster [$PRIMARY_CLUSTER] with login [$tmp_str]"
-    Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcPrimaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcPrimaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$PRIMARY_CLUSTER]" 
         clean_and_exit 1
     }
     $myCred = get_local_cDotcred ($SECONDARY_CLUSTER) 
-    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred  -myTimeout $Timeout"
-    if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred  -myTimeout $Global:Timeout"
+    if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$SECONDARY_CLUSTER]" 
         clean_and_exit 1
     }
@@ -2613,24 +2626,25 @@ if ( $DeleteDR ) {
     }
     clean_and_exit 0
 }
-####################################################################################################
 
-if ($Migrate) {
+####################################################################################################
+# Old Migrate code
+<# if ($Migrate) {
     $Global:Run_Mode = "Migrate"
     Write-LogOnly "SVMTOOL Migrate"
     # Connect to the Cluster
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
     $tmp_str = $MyCred.UserName
     Write-LogDebug "Connect to cluster [$PRIMARY_CLUSTER] with login [$tmp_str]"
-    Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcPrimaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcPrimaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$PRIMARY_CLUSTER]" 
         clean_and_exit 1
     }
     $PrimaryClusterName = $NcPrimaryCtrl.Name
     $myCred = get_local_cDotcred ($SECONDARY_CLUSTER) 
-    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$SECONDARY_CLUSTER]" 
         clean_and_exit 1
     }
@@ -2710,7 +2724,7 @@ if ($Migrate) {
             if ( $null -eq $NfsService ) {
                 Write-Log "[$VserverDR] No NFS services in vserver"
             }
-            else {
+            else {  # NFSservice exist on secondary, so activate it
                 if ( $NfsService.GeneralAccess -ne $True ) {
                     Write-Log "[$VserverDR] Enable NFS"
                     Write-LogDebug "Enable-NcNfs -VserverContext $VserverDR -Controller $NcSecondaryCtrl"
@@ -2744,21 +2758,21 @@ if ($Migrate) {
             }
 
             # Migrate CIFS server if it exists
-            <# if($Global:InsideMCC -eq $False){
-                if ( ( $ret = migrate_lif -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR -PreserveIdentity $Global:PreserveIdentity) -ne $True ) {
-                    Write-LogError "ERROR: migrate_lif failed"
-                    clean_and_exit 1
-                }
+            # if($Global:InsideMCC -eq $False){
+            #     if ( ( $ret = migrate_lif -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR -PreserveIdentity $Global:PreserveIdentity) -ne $True ) {
+            #         Write-LogError "ERROR: migrate_lif failed"
+            #         clean_and_exit 1
+            #     }
 
-                if ( ( $ret = migrate_cifs_server -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR -NoInteractive -PreserveIdentity $Global:PreserveIdentity) -ne $True ) {
-                    Write-LogError "ERROR: migrate_cifs_server failed"
-                    clean_and_exit 1
-                }
-                if (($ret = set_all_lif -mySecondaryVserver $VserverDR -myPrimaryVserver $Vserver -mySecondaryController $NcSecondaryCtrl  -myPrimaryController $NcPrimaryCtrl -state up -AfterMigrate) -ne $True ) {
-                    Write-LogError "ERROR: Failed to set all lif up on [$VserverDR]"
-                    clean_and_exit 1
-                }
-            }else{ #>
+            #     if ( ( $ret = migrate_cifs_server -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR -NoInteractive -PreserveIdentity $Global:PreserveIdentity) -ne $True ) {
+            #         Write-LogError "ERROR: migrate_cifs_server failed"
+            #         clean_and_exit 1
+            #     }
+            #     if (($ret = set_all_lif -mySecondaryVserver $VserverDR -myPrimaryVserver $Vserver -mySecondaryController $NcSecondaryCtrl  -myPrimaryController $NcPrimaryCtrl -state up -AfterMigrate) -ne $True ) {
+            #         Write-LogError "ERROR: Failed to set all lif up on [$VserverDR]"
+            #         clean_and_exit 1
+            #     }
+            # }else{ 
             if($Global:InsideMCC -eq $False){
                 if (($ret = set_all_lif -mySecondaryVserver $Vserver -myPrimaryVserver $VserverDR -mySecondaryController $NcPrimaryCtrl -myPrimaryController $NcSecondaryCtrl -state up -Force) -ne $True ) {
                     Write-LogError "ERROR: Failed to set all lif up on [$VserverDR]"
@@ -2832,15 +2846,15 @@ if ($Migrate) {
                     $ASK_WAIT2 = Read-HostOptions -question "[$Vserver] Do you want to delete SVM on source cluster [$PrimaryClusterName] ?" -options "y/n" -default $defaultanswer
                     if ($ASK_WAIT2 -eq 'y') {
 
-                        <# if ( ( $ret = remove_snapmirror_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR) -ne $True ) {
-                            Write-LogError "ERROR: remove_snapmirror_dr failed" 
-                            clean_and_exit 1
-                        }
+                        # if ( ( $ret = remove_snapmirror_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR) -ne $True ) {
+                        #     Write-LogError "ERROR: remove_snapmirror_dr failed" 
+                        #     clean_and_exit 1
+                        # }
 
-                        if ( ( remove_vserver_peer -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR ) -ne $True ) {
-                            Write-LogError "ERROR: remove_vserver_peer failed" 
-                            return $false
-                        } #>
+                        # if ( ( remove_vserver_peer -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR ) -ne $True ) {
+                        #     Write-LogError "ERROR: remove_vserver_peer failed" 
+                        #     return $false
+                        # }
 
                         $mySourceVserverComment=(Get-NcVserver -Name $Vserver -Controller $NcPrimaryCtrl).Comment
 
@@ -2849,24 +2863,24 @@ if ($Migrate) {
                             Write-LogError "ERROR: remove_vserver_dr: Unable to remove vserver [$Vserver]" 
                             clean_and_exit 1
                         }
-                        <# $StartTime=Get-Date
-                        $Good=$false
-                        while( ($Good -eq $false) ){
-                            Start-Sleep 1
-                            Write-LogDebug "Check if $Vserver-mc is completely deleted on Secondary Cluster [$NcSecondaryCtrl]"
-                            Write-LogDebug "Get-NcVserver -Vserver $Vserver-mc -Controller $NcSecondaryCtrl"
-                            $ret=Get-NcVserver -Vserver $($Vserver+"-mc") -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar
-                            if ( $? -ne $True ) {
-                                throw "ERROR: Get-NcVserver failed [$ErrorVar]"
-                            }
-                            if($null -eq $ret){$Good=$True}
-                            $CurrentTime=Get-date
-                            $TimeoutTime = ($CurrentTime - $StartTime).TotalSeconds
-                            if ( $TimeOutTime -gt $Global:STOP_TIMEOUT ) {
-                                $Return = $false
-                                throw "ERROR: Timeout waiting Deletion of $myPrimaryVserver-mc"
-                            }
-                        } #>
+                        # $StartTime=Get-Date
+                        # $Good=$false
+                        # while( ($Good -eq $false) ){
+                        #     Start-Sleep 1
+                        #     Write-LogDebug "Check if $Vserver-mc is completely deleted on Secondary Cluster [$NcSecondaryCtrl]"
+                        #     Write-LogDebug "Get-NcVserver -Vserver $Vserver-mc -Controller $NcSecondaryCtrl"
+                        #     $ret=Get-NcVserver -Vserver $($Vserver+"-mc") -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar
+                        #     if ( $? -ne $True ) {
+                        #         throw "ERROR: Get-NcVserver failed [$ErrorVar]"
+                        #     }
+                        #     if($null -eq $ret){$Good=$True}
+                        #     $CurrentTime=Get-date
+                        #     $Global:TimeoutTime = ($CurrentTime - $StartTime).TotalSeconds
+                        #     if ( $Global:TimeoutTime -gt $Global:STOP_TIMEOUT ) {
+                        #         $Return = $false
+                        #         throw "ERROR: Timeout waiting Deletion of $myPrimaryVserver-mc"
+                        #     }
+                        # } 
 
                         # Write-Log "[$VserverDR] Renamed to [$Vserver]"
                         # Write-LogDebug "Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl"
@@ -2885,16 +2899,212 @@ if ($Migrate) {
                         Write-Log "In this case the SVM object name on Destination Cluster [$SecondaryClusterName] is still [$VserverDR]"
                         Write-Log "But CIFS identity is correctly migrated to [$Vserver]"
                         Write-Log "Final rename will be done when [-DeleteSource] step will be executed, once you are ready to completely delete [$Vserver] on Source Cluster [$PrimaryClusterName]"
-                        <# Write-LogDebug "Stop-NcVserver -Name $Vserver -Controller $NcPrimaryCtrl -Confirm:$False"
-                        $ret = Stop-NcVserver -Name $Vserver -Controller $NcPrimaryCtrl -Confirm:$False -ErrorVariable ErrorVar
-                        if ( $? -ne $True ) {
-                            throw "ERROR: Stop-NcVerser failed [$ErrorVar]"
-                            clean_and_exit 1
-                        } 
-                        Start-Sleep 1 #>
+                        # Write-LogDebug "Stop-NcVserver -Name $Vserver -Controller $NcPrimaryCtrl -Confirm:$False"
+                        # $ret = Stop-NcVserver -Name $Vserver -Controller $NcPrimaryCtrl -Confirm:$False -ErrorVariable ErrorVar
+                        # if ( $? -ne $True ) {
+                        #     throw "ERROR: Stop-NcVerser failed [$ErrorVar]"
+                        #     clean_and_exit 1
+                        # } 
+                        # Start-Sleep 1 
                     }
                 }   
             }
+        }
+        else {
+            Write-Log "[$Vserver] Migration process has been stopped by user"
+            Write-Log "[$Vserver] You could restart the [Migrate] step when ready"
+            Write-Log "[$Vserver] Or resynchronize your DR by running a [Resync -ForceRecreate] then a [ConfigureDR] step"
+        }
+    }
+    else {
+        Write-LogDebug "Client not ready for Migrate"
+        Write-Log "[$Vserver] Migration canceled"
+        clean_and_exit 1
+    }
+    clean_and_exit 0
+}
+ #>
+####################################################################################################
+
+if ($Migrate) {
+    $Global:Run_Mode = "Migrate"
+    Write-LogOnly "SVMTOOL Migrate"
+    # Connect to the Cluster
+    $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
+    $tmp_str = $MyCred.UserName
+    Write-LogDebug "Connect to cluster [$PRIMARY_CLUSTER] with login [$tmp_str]"
+    Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcPrimaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
+        Write-LogError "ERROR: Unable to Connect to NcController [$PRIMARY_CLUSTER]" 
+        clean_and_exit 1
+    }
+    $PrimaryClusterName = $NcPrimaryCtrl.Name
+    $myCred = get_local_cDotcred ($SECONDARY_CLUSTER) 
+    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
+        Write-LogError "ERROR: Unable to Connect to NcController [$SECONDARY_CLUSTER]" 
+        clean_and_exit 1
+    }
+    $SecondaryClusterName = $NcSecondaryCtrl.Name
+
+    # if ( ( $ret=analyse_junction_path -myController $NcPrimaryCtrl -myVserver $Vserver ) -ne $True ) {
+    # Write-LogError "ERROR: analyse_junction_path" 
+    # clean_and_exit 1
+    # }
+    Write-Warning "SVMTOOL script does not manage FCP configuration"
+    Write-Warning "You will have to backup and recreate all these configurations manually after the Migrate step"
+    Write-Warning "Files Locks are not migrated during the Migration process"
+    $ASK_WAIT = Read-HostOptions -question "[$Vserver] Have all clients saved their work ?" -options "y/n" -default "y"
+    if ($ASK_WAIT -eq 'y') {
+        Write-LogDebug "Clients ready to migrate. User choose to continue migration procedure"
+        Write-Log "[$VserverDR] Run last UpdateDR" -firstValueIsSpecial
+        if ( ( $ret = create_update_cron_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl ) -ne $True ) {
+            Write-LogError "ERROR: create_update_cron_dr"
+        }
+        if ( ( $ret = create_update_snap_policy_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR) -ne $True ) {
+            Write-LogError "ERROR: create_update_snap_policy_dr"
+        }
+
+        if ( ( $ret = check_cluster_peer -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl ) -ne $True ) {
+            Write-LogError "ERROR: check_cluster_peer failed"
+            clean_and_exit 1
+        }
+
+        # This will set $Global:NEED_CIFS_SERVER
+        $ret=check_update_CIFS_server_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR
+
+        if ( ($ret = update_vserver_dr -myDataAggr $DataAggr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR -DDR ($DRfromDR.IsPresent) -aggrMatchRegEx $AggrMatchRegex -nodeMatchRegEx $NodeMatchRegex -TemporarySecondaryCifsIp $TemporarySecondaryCifsIp -SecondaryCifsLifMaster $SecondaryCifsLifMaster -SecondaryCifsLifCustomVlan $SecondaryCifsLifCustomVlan ) -ne $True ) {
+            Write-LogError "ERROR: update_vserver_dr failed" 
+            #clean_and_exit 1
+
+        }
+        if ( ( $ret = wait_snapmirror_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR ) -ne $True ) { 
+            Write-LogError  "ERROR: wait_snapmirror_dr failed"  
+        }
+        if ( ( $ret = break_snapmirror_vserver_dr -myController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR ) -ne $True ) {
+            Write-LogError "ERROR: Unable to break all relations from Vserver [$VserverDR] on [$SecondaryClusterName]"
+            #clean_and_exit 1
+        }
+
+        # Remove Reverse SnapMirror Relationship if exist
+        if ( ( $ret = remove_snapmirror_dr -myPrimaryController $NcSecondaryCtrl -mySecondaryController $NcPrimaryCtrl -myPrimaryVserver $VserverDR -mySecondaryVserver $Vserver	 ) -ne $True ) { 
+            Write-LogError "ERROR: remove_snapmirror_dr failed"
+            #clean_and_exit 1
+        }
+
+        # Remove SnapMirror Relationship 
+        if ( ( $ret = remove_snapmirror_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR -NoRelease) -ne $True ) {
+            Write-LogError "ERROR: remove_snapmirror_dr failed" 
+            #clean_and_exit 1
+        }
+
+        # Restamp MSID destination volume
+        # if ( ( $ret=restamp_msid -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDr) -ne $True) {
+        # 	Write-LogError "ERROR: restamp_msid failed"
+        # 	clean_and_exit 1
+        # }
+
+        Check_Running_Inside_Same_MCC -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl
+        if(($Global:InsideMCC -eq $True) -and (-not ($DeleteSource.IsPresent))){
+            Write-LogError("ERROR: When migrating from the same MCC, you must delete source SVM")
+            clean_and_exit 1
+        }
+
+        $ASK_MIGRATE = Read-HostOptions -question "[$Vserver] IP and Services will switch now. Ready to go ?" -options "y/n" -default "y"
+
+        if ($ASK_MIGRATE -eq 'y') {
+            
+            $mySourceVserverComment=(Get-NcVserver -Name $Vserver -Controller $NcPrimaryCtrl).Comment
+
+            # Call migrate CIFS function
+            if ( ( $ret = migrate_cifs_server -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR -NoInteractive -PreserveIdentity $Global:PreserveIdentity) -ne $True ) {
+                Write-LogError "ERROR: migrate_cifs_server failed"
+                clean_and_exit 1
+            }
+            
+            if ( ( $ret = set_vol_options_from_voldb -myController $NcSecondaryCtrl -myVserver $VserverDR -NoCheck) -ne $True ) {
+                Write-LogError "ERROR: set_vol_options_from_voldb failed"
+            }
+            #if ( ( $ret=set_shareacl_options_from_shareacldb -myController $NcSecondaryCtrl -myVserver $VserverDR -NoCheck) -ne $True ) {
+            #    Write-LogError "ERROR: set_shareacl_options_from_shareacldb"
+            #}
+
+            
+
+            if ( $AllowQuotaDR -eq "True" ) {
+                if ( ( $ret = create_quota_rules_from_quotadb -myController $NcSecondaryCtrl -myVserver $VserverDR -NoCheck ) -ne $True ) {
+                    Write-LogError "ERROR: create_quota_rules_from_quotadb failed"
+                }
+            }
+
+            #Rename flexgroup with _dst suffix generated by bug in snapmirror protect
+            foreach($volume in (Get-NcVol -Vserver $VserverDR -Controller $NcSecondaryCtrl)){
+                if($volume.VolumeIdAttributes.StyleExtended-eq "flexgroup"){
+                    Write-LogDebug "Rename volume $($volume.Name)"
+                    $ret=Rename-NcVol -Name $volume.Name -Controller $NcSecondaryCtrl -Confirm:$False -NewName $($volume.Name -replace "_dst","") -VserverContext $VserverDR
+                }
+            }
+
+            # Verify if NFS service is Running 
+            #Write-Log "Migrate NFS service if any"
+            Write-LogDebug "Get-NcNfsService -VserverContext $VserverDR -Controller $NcSecondaryCtrl"
+            $NfsService = Get-NcNfsService -VserverContext $VserverDR -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar
+            if ( $? -ne $True ) {
+                $Return = $False ; throw "ERROR: Get-NcNfsService failed [$ErrorVar]" 
+            }
+            if ( $null -eq $NfsService ) {
+                Write-Log "[$VserverDR] No NFS services in vserver"
+            }
+            else {  # NFSservice exist on secondary, so activate it
+                if ( $NfsService.GeneralAccess -ne $True ) {
+                    Write-Log "[$VserverDR] Enable NFS"
+                    Write-LogDebug "Enable-NcNfs -VserverContext $VserverDR -Controller $NcSecondaryCtrl"
+                    $out = Enable-NcNfs -VserverContext $VserverDR -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar -Confirm:$False
+                    if ( $? -ne $True ) {
+                        Write-Warning "ERROR: Failed to enable NFS on Vserver [$VserverDR] [ErrorVar]"
+                        Write-LogError "ERROR: Failed to enable NFS on Vserver [$VserverDR]" 
+                    }
+                }
+            }
+
+            # Verify if ISCSI service is Running 
+            #Write-Log "Migrate iSCSI service if any"
+            Write-LogDebug "Get-NcIscsiService -VserverContext $VserverDR -Controller $NcSecondaryCtrl"
+            $IscsiService = Get-NcIscsiService -VserverContext $VserverDR -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar
+            if ( $? -ne $True ) {
+                $Return = $False ; throw "ERROR: Get-NcIscsiService failed [$ErrorVar]" 
+            }
+            if ( $null -eq $IscsiService ) {
+                Write-Log "[$VserverDR] No iSCSI services in Vserver"
+            }
+            else {
+                if ( $IscsiService.IsAvailable -ne $True ) {
+                    Write-Log "[$VserverDR] Enable iSCSI service on Vserver"
+                    Write-LogDebug "Enable-NcIscsi -VserverContext $VserverDR -Controller $NcSecondaryCtrl"
+                    $out = Enable-NcIscsi -VserverContext $VserverDR -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar -Confirm:$False
+                    if ( $? -ne $True ) {
+                        Write-Warning "ERROR: Failed to enable iSCSI on Vserver [$VserverDR] [ErrorVar]"
+                        Write-LogError "ERROR: Failed to enable iSCSI on Vserver [$VserverDR] [ErrorVar]" 
+                    }
+                }
+            }
+
+            if($Global:SVMSourceDeleted -eq $True){
+                Write-Log "[$VserverDR] Renamed to [$Vserver]"
+                Write-LogDebug "Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl"
+                $out = Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar
+                if ( $? -ne $True ) {
+                    throw "ERROR: Rename-NcVserver failed [$ErrorVar]"
+                }
+                if($mySourceVserverComment.lenght -gt 1){
+                    Write-LogDebug "Set-NcVserver -Name $Vserver -Controller $NcSecondaryCtrl -Comment $mySourceVserverComment"
+                    $ret=Set-NcVserver -Name $Vserver -Controller $NcSecondaryCtrl -Comment $mySourceVserverComment
+                }
+            }
+            
+            #Write-Log "[$Vserver] completely removed on [$PrimaryClusterName]"
+            Write-Log "[$Vserver] has been migrated on destination cluster [$SecondaryClusterName]"
+            Write-Log "[$Vserver] Users can now connect on destination with source Identity (IP and CIFS server name)"
         }
         else {
             Write-Log "[$Vserver] Migration process has been stopped by user"
@@ -2919,15 +3129,15 @@ if ( $DeleteSource ) {
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
     $tmp_str = $MyCred.UserName
     Write-LogDebug "Connect to cluster [$PRIMARY_CLUSTER] with login [$tmp_str]"
-    Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcPrimaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcPrimaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$PRIMARY_CLUSTER]" 
         clean_and_exit 1
     }
     $PrimaryClusterName = $NcPrimaryCtrl.Name
     $myCred = get_local_cDotcred ($SECONDARY_CLUSTER) 
-    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$SECONDARY_CLUSTER]" 
         clean_and_exit 1
     }
@@ -2947,7 +3157,7 @@ if ( $DeleteSource ) {
     }
     $DestState = $DestVserver.State
     if ($SourceState -ne "stopped" -or $DestState -ne "running") {
-        Write-Log "ERROR : SVM [$Vserver] not correctly migrated to destination [$SecondaryClusterName]. Failed to delete on source"
+        Write-LogError "ERROR : SVM [$Vserver] not correctly migrated to destination [$SecondaryClusterName]. Failed to delete on source"
         clean_and_exit 1
     }
     else {
@@ -3021,14 +3231,14 @@ if ( $UpdateDR ) {
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
     $tmp_str = $MyCred.UserName
     Write-LogDebug "Connect to cluster [$PRIMARY_CLUSTER] with login [$tmp_str]"
-    Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcPrimaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcPrimaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$PRIMARY_CLUSTER]" 
         clean_and_exit 1
     }
     $myCred = get_local_cDotcred ($SECONDARY_CLUSTER) 
-    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$SECONDARY_CLUSTER]" 
         clean_and_exit 1
     }
@@ -3144,14 +3354,14 @@ if ( $CloneDR ) {
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
     $tmp_str = $MyCred.UserName
     Write-LogDebug "Connect to cluster [$PRIMARY_CLUSTER] with login [$tmp_str]"
-    Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcPrimaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcPrimaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$PRIMARY_CLUSTER]" 
         clean_and_exit 1
     }
     $myCred = get_local_cDotcred ($SECONDARY_CLUSTER) 
-    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$SECONDARY_CLUSTER]" 
         clean_and_exit 1
     }
@@ -3208,8 +3418,8 @@ if ( $DeleteCloneDR ) {
     $Global:Run_Mode = "DeleteCloneDR"
     Write-LogOnly "SVMTOOL DeleteCloneDR"
     $myCred = get_local_cDotcred ($SECONDARY_CLUSTER) 
-    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$SECONDARY_CLUSTER]" 
         clean_and_exit 1
     }
@@ -3258,8 +3468,8 @@ if ( $ActivateDR ) {
 if ( $CreateQuotaDR ) {
     $Global:Run_Mode = "CreateQuotaDR"
     $myCred = get_local_cDotcred ($SECONDARY_CLUSTER) 
-    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$SECONDARY_CLUSTER]" 
         clean_and_exit 1
     }
@@ -3275,8 +3485,8 @@ if ( $CreateQuotaDR ) {
 if ( $ReCreateQuota ) {
     $Global:Run_Mode = "ReCreateQuota"
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
-    Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcPrimaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcPrimaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$PRIMARY_CLUSTER]" 
         clean_and_exit 1
     }
@@ -3295,14 +3505,14 @@ if ( $ReActivate ) {
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
     $tmp_str = $MyCred.UserName
     Write-LogDebug "Connect to cluster [$PRIMARY_CLUSTER] with login [$tmp_str]"
-    Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcPrimaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcPrimaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$PRIMARY_CLUSTER]" 
         clean_and_exit 1
     }
     $myCred = get_local_cDotcred ($SECONDARY_CLUSTER) 
-    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$SECONDARY_CLUSTER]" 
         clean_and_exit 1
     }
@@ -3432,14 +3642,14 @@ if ( $CleanReverse ) {
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
     $tmp_str = $MyCred.UserName
     Write-LogDebug "Connect to cluster [$PRIMARY_CLUSTER] with login [$tmp_str]"
-    Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcPrimaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcPrimaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$PRIMARY_CLUSTER]" 
         clean_and_exit 1
     }
     $myCred = get_local_cDotcred ($SECONDARY_CLUSTER) 
-    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$SECONDARY_CLUSTER]" 
         clean_and_exit 1
     }
@@ -3469,14 +3679,14 @@ if ( $Resync ) {
         clean_and_exit 0
     }
     Write-LogDebug "Connect to cluster [$PRIMARY_CLUSTER] with login [$tmp_str]"
-    Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred  -myTimeout $Timeout"
-    if ( ( $NcPrimaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred  -myTimeout $Global:Timeout"
+    if ( ( $NcPrimaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$PRIMARY_CLUSTER]" 
         clean_and_exit 1
     }
     $myCred = get_local_cDotcred ($SECONDARY_CLUSTER) 
-    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$SECONDARY_CLUSTER]" 
         clean_and_exit 1
     }
@@ -3515,14 +3725,14 @@ if ( $ResyncReverse ) {
     }
 
     Write-LogDebug "Connect to cluster [$PRIMARY_CLUSTER] with login [$tmp_str]"
-    Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcPrimaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcPrimaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$PRIMARY_CLUSTER]" 
         clean_and_exit 1
     }
     $myCred = get_local_cDotcred ($SECONDARY_CLUSTER) 
-    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$SECONDARY_CLUSTER]" 
         clean_and_exit 1
     }
@@ -3550,14 +3760,14 @@ if ( $UpdateReverse ) {
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
     $tmp_str = $MyCred.UserName
     Write-LogDebug "Connect to cluster [$PRIMARY_CLUSTER] with login [$tmp_str]"
-    Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcPrimaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcPrimaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$PRIMARY_CLUSTER]" 
         clean_and_exit 1
     }
     $myCred = get_local_cDotcred ($SECONDARY_CLUSTER) 
-    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$SECONDARY_CLUSTER]" 
         clean_and_exit 1
     }
@@ -3631,14 +3841,14 @@ if ( $MirrorSchedule ) {
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
     $tmp_str = $MyCred.UserName
     Write-LogDebug "Connect to cluster [$PRIMARY_CLUSTER] with login [$tmp_str]"
-    Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcPrimaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcPrimaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$PRIMARY_CLUSTER]" 
         clean_and_exit 1
     }
     $myCred = get_local_cDotcred ($SECONDARY_CLUSTER) 
-    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$SECONDARY_CLUSTER]" 
         clean_and_exit 1
     }
@@ -3667,14 +3877,14 @@ if ( $MirrorScheduleReverse ) {
     $myCred = get_local_cDotcred ($SECONDARY_CLUSTER) 
     $tmp_str = $MyCred.UserName
     Write-LogDebug "Connect to cluster [$SECONDARY_CLUSTER] with login [$tmp_str]"
-    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcPrimaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcPrimaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$SECONDARY_CLUSTER]" 
         clean_and_exit 1
     }
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
-    Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcSecondaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcSecondaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$PRIMARY_CLUSTER]" 
         clean_and_exit 1
     }
@@ -3702,16 +3912,16 @@ if ( $InternalTest ) {
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
     $tmp_str = $MyCred.UserName
     Write-Log "[test] Connect to cluster [$PRIMARY_CLUSTER] with login [$tmp_str]"
-    Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcPrimaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcPrimaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$PRIMARY_CLUSTER]" 
         clean_and_exit 1
     }
     $myCred = get_local_cDotcred ($SECONDARY_CLUSTER)
     $tmp_str = $myCred.Username
     Write-Log "[test] Connect to cluster [$SECONDARY_CLUSTER] with login [$tmp_str]"
-    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout"
-    if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Timeout ) -eq $False ) {
+    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$SECONDARY_CLUSTER]" 
         clean_and_exit 1
     }

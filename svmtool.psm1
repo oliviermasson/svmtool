@@ -1048,8 +1048,8 @@ function Invoke-SvmDrActivate {
         # Enables OnCommand Workflow Automation (WFA) Integration
         [switch]$WfaIntegration,
 
-        # Force to use CIFS modify method, instead of delete/recreate when CIFS server name need to be changed
-        [switch]$NoCifsDeleteMethod,
+        # Force to use CIFS delete method, instead of modifying existing CIFS server
+        [switch]$UseCifsDeleteMethod,
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
@@ -1469,8 +1469,8 @@ function Invoke-SvmDrRecoverFromDr {
         # Enables OnCommand Workflow Automation (WFA) Integration
         [switch]$WfaIntegration,
 
-        # Force to use CIFS modify method, instead of delete/recreate when CIFS server name need to be changed
-        [switch]$NoCifsDeleteMethod,
+        # Force to use CIFS delete method, instead of modifying existing CIFS server
+        [switch]$UseCifsDeleteMethod,
 
         # Optional, this SvmDr solution cannot transfer the passwords of local users (cifs, cluster)
         # In Non-Interactive Mode, the script cannot create missing users
@@ -1919,15 +1919,8 @@ function Invoke-SvmDrMigrate {
         # This parameter will override the vlan in which this temp lif is created
         [string]$SecondaryCifsLifCustomVlan,
 
-        # Preserve or not Network Identity (IP addresses and CIFS server name) of Source on Destination
-        [Parameter(Mandatory = $false)]
-        [bool]$PreserveIdentity=$True,
-
         # Enables OnCommand Workflow Automation (WFA) Integration
         [switch]$WfaIntegration,
-
-        # Force to use CIFS modify method, instead of delete/recreate when CIFS server name need to be changed
-        [switch]$NoCifsDeleteMethod,
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
@@ -2690,7 +2683,7 @@ function Restore-ObjectSvmDr {
 
         # Object to restore
         [Parameter(Mandatory = $true)]
-        [ValidateSet("Lifs", "Volumes", "Exports", "CifsServer", "Shares", "Symlinks", "Quotas", "Users")]
+        [ValidateSet("Lifs", "Volumes", "Exports", "CifsServer", "NetBios", "Shares", "Symlinks", "Quotas", "Users")]
         [string[]]$Objects=@(""),
 
         # The name of the destination cluster, if not provided, will restore on source cluster
