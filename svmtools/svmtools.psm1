@@ -5,7 +5,7 @@
     This module contains several functions to manage SVMDR, Backup and Restore Configuration...
 .NOTES
     Authors  : Olivier Masson, Jerome Blanchet, Mirko Van Colen
-    Release  : Jully 1th 2021
+    Release  : February 24th 2022
 
 #>
 
@@ -7382,7 +7382,7 @@ Try {
                 } 
                 else # relationship already existing
                 {
-                    Write-Log "[$workOn] Relation [${myPrimaryController}:${myPrimaryVserver}:${PrimaryVolName}] --> [${mySecondaryController}:${mySecondaryVserver}:${PrimaryVolName}] already exists"
+                    Write-Log "[$workOn] Relation [${myPrimaryController}/${myPrimaryVserver}:${PrimaryVolName}] --> [${mySecondaryController}/${mySecondaryVserver}:${PrimaryVolName}] already exists"
                     $PreviousRelationPolicy=$relation.Policy
                     $PreviousSchedule=$relation.Schedule
                     Write-LogDebug "Previous Relation Policy [$PreviousRelationPolicy]"
@@ -10021,7 +10021,6 @@ Try {
                 return $False    
             }
         }
-
     }
     $Global:SecondaryCifsLifCreated=$SecondaryCifsLifCreated
     if($Backup -eq $False -and $Restore -eq $False -and $ForClone -eq $False){
@@ -13269,7 +13268,7 @@ try{
         
         ###### 1 backup LIF, cifsserver, shares & symlinks from Source SVM
         
-        Write-LogDebug "use Config File [$Global:CONFFILE]"
+        <# Write-LogDebug "use Config File [$Global:CONFFILE]"
         $read_conf = read_config_file $Global:CONFFILE
         $myPrimaryControllerName=$myPrimaryController.Name
         $BACKUP_FOLDER=$read_conf.SVMTOOL_DB
@@ -13321,6 +13320,37 @@ try{
         if ( ( $ret=create_update_cifs_symlink_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $myPrimaryVserver  -Backup $True -Restore $False) -ne $True ) { 
             Write-LogError "ERROR: Failed to create all CIFS symlinks"
             $Return = $False 
+        } #>
+
+        # * backup_CIFSsymlink
+        # before changing CIFS server name, we need to backup & remove all cifs symlink
+        #Write-LogDebug "ActivateDR in CIFS Modify mode with PreserveIdentity"
+        Write-LogDebug "Backup all CIFS Symlink from current passive Vserver [$myPrimaryVserver]"
+        if ( ($ret=Save_Cifs_Symlink_To_JSON -myController $myPrimaryController -myVserver $myPrimaryVserver ) -eq $False){
+            Throw "ERROR: Failed to backup CIFS Symlink"    
+        }
+
+        # * backup_lif
+        $PrimaryInterfaceList = Get-NcNetInterface -Role DATA -VserverContext $myPrimaryVserver -DataProtocols cifs,nfs,none,iscsi -Controller $NcCurrentActiveCtrl  -ErrorVariable ErrorVar 
+        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
+        $SecondaryInterfaceList = Get-NcNetInterface -Role DATA -VserverContext $mySecondaryVserver -DataProtocols cifs,nfs,none,iscsi -Controller $mySecondaryController  -ErrorVariable ErrorVar 
+        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
+        if ( ($ret=Save_LIF_To_JSON -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryNetList $PrimaryInterfaceList -mySecondaryNetList $SecondaryInterfaceList -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver) -eq $False){
+            Write-Log "Failed to Backup LIF details to JSON"
+            return $False
+        }
+
+        # * backup CIFS
+        $SecondaryCifsServer=Get-NcCifsServer  -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsServer failed [$ErrorVar]" }
+        if ( ($ret=Save_CIFS_To_JSON -myPrimaryController $myPrimaryController `
+                                    -mySecondaryController $mySecondaryController `
+                                    -myPrimaryCIFS $PrimaryCifsServer `
+                                    -mySecondaryCIFS $SecondaryCifsServer `
+                                    -myPrimaryVserver $myPrimaryVserver `
+                                    -mySecondaryVserver $mySecondaryVserver) -eq $False){
+            Write-Log "Failed to Backup CIFS Server details to JSON"
+            return $False
         }
 
         ###### 2 Remove source vserver
@@ -13359,37 +13389,56 @@ try{
         Write-Log "SVM [$myPrimaryVserver-mc] deleted on Cluster [$mySecondaryController]"
         Write-LogDebug "SVM [$myPrimaryVserver-mc] deleted on Cluster [$mySecondaryController]"
 
-        ###### 3 Delete Temporary CIFS on secondary SVM
+        if($Global:UseCifsDeleteMethod.IsPresent -eq $True){
+            ###### 3 Delete Temporary CIFS on secondary SVM
 
-        Write-LogDebug "Remove all CIFS Symlink on current passive Vserver [$mySecondaryVserver]"
-        Write-LogDebug "Get-NcCifsSymlink -VserverContext $mySecondaryVserver -Controller $mySecondaryController | Remove-NcCifsSymlink -Controller $mySecondaryController -VserverContext $mySecondaryVserver"
-        Get-NcCifsSymlink -VserverContext $mySecondaryVserver -Controller $mySecondaryController | Remove-NcCifsSymlink -Controller $mySecondaryController -VserverContext $mySecondaryVserver -Confirm:$False
-        Write-Log "[$mySecondaryVserver] Recreate CIFS server with identity name [$PrimaryCIFSidentity]"
-        Write-LogDebug "Remove-NcCifsServer -ForceAccountDelete -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-        $out=Remove-NcCifsServer -ForceAccountDelete -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
+            Write-LogDebug "Remove all CIFS Symlink on current passive Vserver [$mySecondaryVserver]"
+            Write-LogDebug "Get-NcCifsSymlink -VserverContext $mySecondaryVserver -Controller $mySecondaryController | Remove-NcCifsSymlink -Controller $mySecondaryController -VserverContext $mySecondaryVserver"
+            Get-NcCifsSymlink -VserverContext $mySecondaryVserver -Controller $mySecondaryController | Remove-NcCifsSymlink -Controller $mySecondaryController -VserverContext $mySecondaryVserver -Confirm:$False
+            Write-Log "[$mySecondaryVserver] Recreate CIFS server with identity name [$PrimaryCIFSidentity]"
+            Write-LogDebug "Remove-NcCifsServer -ForceAccountDelete -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+            $out=Remove-NcCifsServer -ForceAccountDelete -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
 
-        ###### 4 Delete existing LIF on secondary SVM
+            ###### 4 Delete existing LIF on secondary SVM
 
-        Get-NcNetInterface -VserverContext $mySecondaryVserver -Controller $mySecondaryController | foreach {
-            $lif=$_
-            $lifName=$lif.InterfaceName
-            Write-LogDebug "Remove-NcNetInterface -Name $lifName -Vserver $mySecondaryVserver -Controller $mySecondaryController"
-            Remove-NcNetInterface -Name $lifName -Vserver $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False
-        }
-
-        ###### 5 restore LIFs, CIFSServer Options, CIFS Shares and CIFS Symlinks
-
-        if ( ( $ret= restore_object -myPrimaryController $myPrimaryController `
-            -mySecondaryController $mySecondaryController `
-            -myPrimaryVserver $myPrimaryVserver `
-            -mySecondaryVserver $mySecondaryVserver `
-            -workOn $mySecondaryVserver `
-            -ForceRestoreOriginal `
-            -objects @("Lifs","CifsServer","NetBios","Shares","Symlinks") ) -ne $True ) {
-                Write-LogError "ERROR : Failed to restore all objects on [$mySecondaryVserver]"
-                #clean_and_exit 1
+            Get-NcNetInterface -VserverContext $mySecondaryVserver -Controller $mySecondaryController | ForEach-Object {
+                $lif=$_
+                $lifName=$lif.InterfaceName
+                Write-LogDebug "Remove-NcNetInterface -Name $lifName -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+                Remove-NcNetInterface -Name $lifName -Vserver $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False
             }
 
+            ###### 5 restore LIFs, CIFSServer Options, CIFS Shares and CIFS Symlinks
+
+            if ( ( $ret= restore_object -myPrimaryController $myPrimaryController `
+                -mySecondaryController $mySecondaryController `
+                -myPrimaryVserver $myPrimaryVserver `
+                -mySecondaryVserver $mySecondaryVserver `
+                -workOn $mySecondaryVserver `
+                -ForceRestoreOriginal `
+                -objects @("Lifs","CifsServer","NetBios","Shares","Symlinks") ) -ne $True ) {
+                    Write-LogError "ERROR : Failed to restore all objects on [$mySecondaryVserver]"
+                    #clean_and_exit 1
+                }
+        
+        }else{
+            ###### Only modify LIF and CIFS on secondary to keep all CIFS shares that already exists on secondary
+            Write-LogDebug "Work with CIFS modify method"
+
+            # * set_lif_dst_with_source_identity
+            # modify active LIF on secondary with primary settings
+            Write-Log "[$mySecondaryVserver] Modify LIF"
+            if( ($ret=Set_LIF_from_JSON -ToNcController $mySecondaryController -ToVserver $mySecondaryVserver -fromSrc) -eq $False ){
+                Throw "ERROR: Failed to set IP address on [$mySecondaryVserver]"	
+            }
+
+            # * CIFS_modif_dest_to_source_name
+            # add new cifs server with primary identity on active svm
+            Write-Log "[$mySecondaryVserver] Modify existing CIFS server"
+            if( ($ret=Set_CIFS_from_JSON -ToNcController $mySecondaryController -ToVserver $mySecondaryVserver -fromSrc) -eq $False ){
+                Throw "ERROR: Failed to set new CIFS server on [$mySecondaryVserver]"
+            }
+        }
 
     }else{
     ###############################################################################
@@ -14258,10 +14307,11 @@ Try {
             return $Return
         }
     }
+    Write-Log "[$myVserver] Disable all services and LIF"
 	# Verify if ISCSI service is Running if yes the stop it
 	$IscsiService = Get-NcIscsiService -VserverContext  $myVserver -Controller $myController  -ErrorVariable ErrorVar
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcIscsiService failed [$ErrorVar]" }
-	if ( $IscsiService -eq $null ) {
+	if ( $null -eq $IscsiService ) {
 		Write-Log "[$myVserver] No ISCSI services in vserver"
 	} else {
 		if ( $IscsiService.IsAvailable -eq $True ) {
@@ -14277,10 +14327,10 @@ Try {
 	# Verify if NFS service is Running if yes the stop it
 	$NfsService = Get-NcNfsService -VserverContext  $myVserver -Controller $myController  -ErrorVariable ErrorVar
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNfsService failed [$ErrorVar]" }
-	if ( $NfsService -eq $null ) {
+	if ( $null -eq $NfsService ) {
 		Write-Log "[$myVserver] No NFS services in vserver"
 	} else {
-		if ( $NfsService.GeneralAccess -eq $True ) {
+		if ( ( $NfsService.IsNfsv3 -or $NfsService.IsNfsv4 -or $NfsService.GeneralAccess ) -eq $True ) {
             Write-Log "[$myVserver] Stop NFS"
 			Write-LogDebug "Disable-NcNfs -VserverContext $myVserver -Controller $myController -Confirm:$False"
 			$out=Disable-NcNfs -VserverContext $myVserver -Controller $myController  -ErrorVariable ErrorVar -Confirm:$False
@@ -14293,7 +14343,7 @@ Try {
 	# Verify if CIFS Service is Running if yes stop it
 	$CifService = Get-NcCifsServer  -VserverContext  $myVserver -Controller $myController  -ErrorVariable ErrorVar
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsServer failed [$ErrorVar]" }
-	if ( $CifService -eq $null ) {
+	if ( $null -eq $CifService ) {
 		Write-Log "[$myVserver] No CIFS services in vserver"
 	} else {
 		if ( $CifService.AdministrativeStatus -eq 'up' ) {
@@ -14313,7 +14363,10 @@ Try {
         $InterfaceName=$Interface.InterfaceName
         $PrimaryFirewallPolicy=$Interface.FirewallPolicy
         $PrimaryDataProtocols=$Interface.DataProtocols
-        if ( ( $PrimaryFirewallPolicy -eq "mgmt" ) -and ( $PrimaryDataProtocols -eq "none" ) ) {
+        $PrimaryAddress=$Interface.Address
+        # do not disable mgmt LIF unless it is created with APIPA address
+        #Write-Log "Treatment of LIF [$InterfaceName] [$PrimaryFirewallPolicy] [$PrimaryDataProtocols] [$PrimaryAddress]" 
+        if ( ( $PrimaryFirewallPolicy -eq "mgmt" ) -and ( $PrimaryDataProtocols -eq "none" ) -and ( $PrimaryAddress -notmatch "169.254")) {
             Write-LogDebug "Interface [$InterfaceName] is a management Interface must not be down"
         } else {
             Write-Log "[$myVserver] Stop LIF [$InterfaceName]"
@@ -14334,6 +14387,7 @@ Catch {
 	return $Return
 }
 }
+
 #############################################################################################
 Function enable_network_protocol_vserver_dr (
 	[NetApp.Ontapi.Filer.C.NcController] $myNcController,
@@ -14639,6 +14693,7 @@ Function activate_vserver_dr (
     
     #
     if( ($RunInPreserveIdentityMode = $True) -and ($Global:UseCifsDeleteMethod.IsPresent -eq $False) ){
+        Write-LogDebug "Work with CIFS modify method"
         # * backup_CIFSsymlink_on_src
         # before changing CIFS server name, we need to backup & remove all cifs symlink
         Write-LogDebug "ActivateDR in CIFS Modify mode with PreserveIdentity"
@@ -14705,7 +14760,7 @@ Function activate_vserver_dr (
 
         # * CIFS_modif_dest_to_source_name
         # add new cifs server with primary identity on active svm
-        Write-Log "[$currentPassiveVserver] Register new CIFS server"
+        Write-Log "[$currentPassiveVserver] Modify existing CIFS server"
         if( ($ret=Set_CIFS_from_JSON -ToNcController $NcCurrentPassiveCtrl -ToVserver $currentPassiveVserver -fromSrc) -eq $False ){
             Throw "ERROR: Failed to set new CIFS server on [$currentPassiveVserver]"
         }
@@ -14714,6 +14769,7 @@ Function activate_vserver_dr (
         # ! previous steps are managed inside Set_CIFS_from_JSON
     }
     if( ($RunInPreserveIdentityMode = $True) -and ($Global:UseCifsDeleteMethod.IsPresent -eq $True) ){
+        Write-LogDebug "Work with CIFS delete method"
         # * backup_CIFSsymlink_on_src
         # before changing CIFS server name, we need to backup & remove all cifs symlink
         Write-LogDebug "Backup all CIFS Symlink from current passive Vserver [$currentActiveVserver]"
@@ -14810,6 +14866,10 @@ Function activate_vserver_dr (
         if ( ( $ret=create_quota_rules_from_quotadb -myController $NcCurrentPassiveCtrl -myVserver $currentPassiveVserver  ) -ne $True ) {
             Write-LogError "ERROR: create_quota_rules_from_quotadb failed"
         }
+    }
+
+    if ( ($ret = disable_network_protocol_vserver_dr -myController $NcCurrentActiveCtrl -myVserver $currentActiveVserver -ForceDisable) -eq $False) {
+        Throw "ERROR: Failed to disable all services on [$currentActiveVserver]"
     }
 
     Write-LogDebug "end"
@@ -15031,7 +15091,7 @@ Function resync_reverse_vserver_dr (
                 Write-LogDebug "Get-NcSnapmirror -DestinationLocation $SourceLocation -Controller $myPrimaryController"
                 $ExistingReverseRelationShip=Get-NcSnapmirror -DestinationLocation $SourceLocation -Controller $myPrimaryController  -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
-                if($ExistingReverseRelationShip -ne $null)
+                if($null -ne $ExistingReverseRelationShip)
                 {
                     $ExistingReverseRelationShipDestVolume=$ExistingReverseRelationShip.DestinationVolume
                     $ExistingReverseRelationShipDestVserver=$ExistingReverseRelationShip.DestinationVserver
@@ -15164,19 +15224,19 @@ Function resync_reverse_vserver_dr (
         # usefull for flexgroup relationship only
 
         $NumberOfNormalRelationships=$relationList.count
-        $ExistingReverseRelationships=Get-NcSnapmirror -VserverContext $myPrimaryVserver -Query @{MirrorState="snapmirrored|broken-off";RelationshipStatus="idle"} -Controller $myPrimaryController  -ErrorVariable ErrorVar
-        $NumberOfReversedRelationships=$ExistingReverseRelationships.count
+        $AllExistingReverseRelationships=Get-NcSnapmirror -VserverContext $myPrimaryVserver -Query @{MirrorState="snapmirrored|broken-off";RelationshipStatus="idle"} -Controller $myPrimaryController  -ErrorVariable ErrorVar
+        $NumberOfReversedRelationships=$AllExistingReverseRelationships.count
         if( $null -ne $NumberOfReversedRelationships ){
             if($NumberOfNormalRelationships -ne $NumberOfReversedRelationships){
                 #$Difference=$NumberOfReversedRelationships-$NumberOfNormalRelationships
-                if(($null -ne $relationList) -and ($null -ne $ExistingReverseRelationships)){
-                $MissingRelationship=Compare-Object -ReferenceObject $relationList -DifferenceObject $ExistingReverseRelationships -Property DestinationVolume,SourceVolume
+                if(($null -ne $relationList) -and ($null -ne $AllExistingReverseRelationships)){
+                $MissingRelationship=Compare-Object -ReferenceObject $relationList -DifferenceObject $AllExistingReverseRelationships -Property DestinationVolume,SourceVolume
                 #if( ($MissingRelationship | Measure-Object).count -eq $Difference ){
                     foreach( $missing in $MissingRelationship | where-object {$_.SideIndicator -eq "=>"} ){
                         #if($missing.SideIndicator -eq "=>"){
                             $SourceVolume=$missing.SourceVolume
                             $DestinationVolume=$missing.DestinationVolume
-                            $relation=$ExistingReverseRelationships | where-object  {$_.SourceVolume -eq $SourceVolume -and $_.DestinationVolume -eq $DestinationVolume}
+                            $relation=$AllExistingReverseRelationships | where-object  {$_.SourceVolume -eq $SourceVolume -and $_.DestinationVolume -eq $DestinationVolume}
                             $SourceLocation=$relation.SourceLocation
                             $DestinationLocation=$relation.DestinationLocation
                             $DestinationVserver=$relation.DestinationVserver
@@ -15189,11 +15249,11 @@ Function resync_reverse_vserver_dr (
                             Write-LogDebug "[$missing]"
                         } #>
                     }
-                }elseif($null -ne $ExistingReverseRelationships){
+                }elseif($null -ne $AllExistingReverseRelationships){
                     $ret=($ExistingReverseRelationships | Invoke-NcSnapmirrorResync -Controller $myPrimaryController -ErrorVariable ErrorVar)   
                     #Get-NcSnapmirror -VserverContext $myPrimaryVserver -Query @{MirrorState="snapmirrored|broken-off";RelationshipStatus="idle"} -Controller $myPrimaryController  -ErrorVariable ErrorVar | Invoke-NcSnapmirrorResync -Controller $myPrimaryController -ErrorVariable ErrorVar    
                     $Return=$True
-                }else{
+                }elseif($null -ne $MissingRelationship){
                     Write-LogWarn "WARNING: Check missing relationships to resync"
                     Write-LogDebug "[$MissingRelationship]"
                     $Return=$False
@@ -16795,7 +16855,7 @@ Function Add_CIFS_from_JSON (
             $out = Start-NcCifsServer -VserverContext $ToVserver -Controller $ToNcController  -ErrorVariable ErrorVar
             if ( $? -ne $True ) { throw "ERROR: Add-NcCifsServer failed [$ErrorVar]" }else{Write-Log "[$ToVserver] Cifs server [$CIFSName] started"}    
         }elseif($CifsServerOnSource.CifsServer -ne $CIFSName){
-            Write-LogWarn "CIFS server on source is already started, but with different identity ["+$CifsServerOnSource.CifsServer+"]"    
+            Write-LogWarn "CIFS server on source is already started, but with different identity [$($CifsServerOnSource.CifsServer)]"    
         }
         Write-LogDebug "end"
         return $True

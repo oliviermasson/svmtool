@@ -560,6 +560,7 @@
                     Correct ReActivate with SM-S
                     Correct how to test if SVM source is alive to be compatible with and without Powershell Core
         - 0.5.3     Detect when service-policy should be used instead of firewall-policy if ONTAP 9.6 or greater
+        - 0.6.0     Complete rewrite of migrate, activateDR and ReActivate
 
 #>
 [CmdletBinding(HelpURI = "https://github.com/oliviermasson/svmtool", DefaultParameterSetName = "ListInstance")]
@@ -1108,8 +1109,8 @@ $Global:MIN_MINOR = 5
 $Global:MIN_BUILD = 0
 $Global:MIN_REVISION = 0
 #############################################################################################
-$Global:RELEASE = "0.5.3"
-$Global:SCRIPT_RELEASE = "0.1.25"
+$Global:RELEASE = "0.6.0"
+$Global:SCRIPT_RELEASE = "0.1.30"
 if($PSVersionTable.PSVersion.Major -lt 7){
     $Global:BASEDIR = 'C:\Scripts\SVMTOOL'      
 }
@@ -3100,6 +3101,12 @@ if ($Migrate) {
                     Write-LogDebug "Set-NcVserver -Name $Vserver -Controller $NcSecondaryCtrl -Comment $mySourceVserverComment"
                     $ret=Set-NcVserver -Name $Vserver -Controller $NcSecondaryCtrl -Comment $mySourceVserverComment
                 }
+            }else{
+                # stop primary SVM
+                Write-Log "[$Vserver] stop Vserver"
+                Write-LogDebug "Stop-NcVserver -Name $Vserver -Controller $NcPrimaryCtrl"
+                $ret=Stop-NcVserver -Name $Vserver -Controller $NcPrimaryCtrl -Confirm:$False
+                if($? -ne $True){Throw "ERROR: Failed to stop Vserver [$Vserver]"}
             }
             
             #Write-Log "[$Vserver] completely removed on [$PrimaryClusterName]"
@@ -3143,18 +3150,20 @@ if ( $DeleteSource ) {
     }
     $SecondaryClusterName = $NcSecondaryCtrl.Name
 
-    Check_Running_Inside_Same_MCC -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl
+    #Check_Running_Inside_Same_MCC -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl
 
     $SourceVserver = Get-NcVserver -Name $Vserver -Controller $NcPrimaryCtrl -ErrorVariable ErrorVar
     if ($? -ne $True) {
         Write-LogError "ERROR : SVM [$Vserver] does not exist on [$PrimaryClusterName]"; clean_and_exit 1
     }
     $SourceState = $SourceVserver.State
+    $SourceVserverComment=$SourceVserver.Comment
 
-    $DestVserver = Get-NcVserver -Name $Vserver -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar
+    $DestVserver = Get-NcVserver -Name $VserverDR -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar
     if ($? -ne $True) {
-        Write-LogError "ERROR : SVM [$Vserver] does not exist on [$SecondaryClusterName]"; clean_and_exit 1
+        Write-LogError "ERROR : SVM [$VserverDR] does not exist on [$SecondaryClusterName]"; clean_and_exit 1
     }
+    
     $DestState = $DestVserver.State
     if ($SourceState -ne "stopped" -or $DestState -ne "running") {
         Write-LogError "ERROR : SVM [$Vserver] not correctly migrated to destination [$SecondaryClusterName]. Failed to delete on source"
@@ -3174,6 +3183,17 @@ if ( $DeleteSource ) {
                 return $false
             }
             
+            Write-Log "[$VserverDR] Renamed to [$Vserver]"
+            Write-LogDebug "Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl"
+            $out = Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar
+            if ( $? -ne $True ) {
+                throw "ERROR: Rename-NcVserver failed [$ErrorVar]"
+            }
+            if($SourceVserverComment.lenght -gt 1){
+                Write-LogDebug "Set-NcVserver -Name $Vserver -Controller $NcSecondaryCtrl -Comment $SourceVserverComment"
+                $ret=Set-NcVserver -Name $Vserver -Controller $NcSecondaryCtrl -Comment $SourceVserverComment
+            }
+
             <# if($Global:InsideMCC -eq $True){
                 Write-LogDebug "In mode InsideMCC = True"
                 
@@ -3557,23 +3577,35 @@ if ( $ReActivate ) {
     if ( ($ret = Set_LIF_from_JSON -ToNcController $NcSecondaryCtrl -ToVserver $VserverDR) -eq $False ) {
         Throw "ERROR: Failed to set IP address on [$VserverDR]"	
     }
+
+    # disable all services on secondary SVM
     Write-Log "[$VserverDR] Disable services"
     if ( ($ret = disable_network_protocol_vserver_dr -myController $NcSecondaryCtrl -myVserver $VserverDR -ForceDisable) -eq $False) {
         Throw "ERROR: Failed to disable all services on [$VserverDR]"
     }
 
-    # restore all primary LIF address with info previously backed
+    # restore all LIF address on Primary with info previously backed
     Write-Log "[$Vserver] Restore LIF with Primary configuration"
     if ( ($ret = Set_LIF_from_JSON -ToNcController $NcPrimaryCtrl -ToVserver $Vserver -fromSrc) -eq $False ) {
         Throw "ERROR: Failed to set IP address on [$Vserver]"	
     }
 
-    # register primary cifs server with info previously backed
-    if ($NeedCIFS) {
-        #add primary cifs with primary identity
-        Write-Log "[$Vserver] Restore CIFS server with Primary configuration"
-        if ( ($ret = Add_CIFS_from_JSON -ToNcController $NcPrimaryCtrl -ToVserver $Vserver -fromSrc) -eq $False ) {
+    if($null -ne ($CurrentPrimaryCIFSServer=Get-NcCifsServer -VserverContext $Vserver -Controller $NcPrimaryCtrl)){
+        Write-Log "[$Vserver] Primary already have a CIFS server [$($CurrentPrimaryCIFSServer.CifsServer)] in state [$($CurrentPrimaryCIFSServer.AdministrativeStatus)]"
+        #add new secondary cifs with primary identity
+        Write-Log "[$Vserver] Restore CIFS server with previous configuration"
+        if ( ($ret = Set_CIFS_from_JSON -ToNcController $NcPrimaryCtrl -ToVserver $Vserver -fromSrc) -eq $False ) {
             Throw "ERROR: Failed to add new CIFS server on [$Vserver]"
+        }
+    }else{
+        Write-Log "No CIFS server on Primary Vserver [$Vserver]"
+        # register primary cifs server with info previously backed
+        if ($NeedCIFS) {
+            #add primary cifs with primary identity
+            Write-Log "[$Vserver] Restore CIFS server with Primary configuration"
+            if ( ($ret = Add_CIFS_from_JSON -ToNcController $NcPrimaryCtrl -ToVserver $Vserver -fromSrc) -eq $False ) {
+                Throw "ERROR: Failed to add new CIFS server on [$Vserver]"
+            }
         }
     }
 
