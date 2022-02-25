@@ -1036,7 +1036,6 @@ Param (
     [switch]$NonInteractive,
     
     [Parameter(Mandatory = $False, ParameterSetName = 'ConfigureDR')]
-    [Parameter(Mandatory = $False, ParameterSetName = 'ActivateDR')]
     #[Parameter(Mandatory = $False, ParameterSetName = 'Migrate')]  With Migrate PreserveIdentity is not an option, it is mandatory
     [bool]$PreserveIdentity=$True,
     
@@ -2304,6 +2303,8 @@ if ( $RestoreObject ){
     Write-Log "Finished restore object [$Objects] from [$RESTORE_SRC_CLUSTER]:[$Vserver] to [$RESTORE_DST_CLUSTER]:[$DestinationSVM]" -firstValueIsSpecial
     clean_and_exit 0  
 }
+
+
 ####################################################################################################
 ####################################################################################################
 ####################################################################################################
@@ -2629,303 +2630,6 @@ if ( $DeleteDR ) {
 }
 
 ####################################################################################################
-# Old Migrate code
-<# if ($Migrate) {
-    $Global:Run_Mode = "Migrate"
-    Write-LogOnly "SVMTOOL Migrate"
-    # Connect to the Cluster
-    $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
-    $tmp_str = $MyCred.UserName
-    Write-LogDebug "Connect to cluster [$PRIMARY_CLUSTER] with login [$tmp_str]"
-    Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
-    if ( ( $NcPrimaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
-        Write-LogError "ERROR: Unable to Connect to NcController [$PRIMARY_CLUSTER]" 
-        clean_and_exit 1
-    }
-    $PrimaryClusterName = $NcPrimaryCtrl.Name
-    $myCred = get_local_cDotcred ($SECONDARY_CLUSTER) 
-    Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
-    if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
-        Write-LogError "ERROR: Unable to Connect to NcController [$SECONDARY_CLUSTER]" 
-        clean_and_exit 1
-    }
-    $SecondaryClusterName = $NcSecondaryCtrl.Name
-
-    Check_Running_Inside_Same_MCC -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl
-    if(($Global:InsideMCC -eq $True) -and (-not ($DeleteSource.IsPresent))){
-        Write-LogError("ERROR: When migrating from the same MCC, you must delete source SVM")
-        clean_and_exit 1
-    }
-    # if ( ( $ret=analyse_junction_path -myController $NcPrimaryCtrl -myVserver $Vserver ) -ne $True ) {
-    # Write-LogError "ERROR: analyse_junction_path" 
-    # clean_and_exit 1
-    # }
-    Write-Warning "SVMTOOL script does not manage FCP configuration"
-    Write-Warning "You will have to backup and recreate all these configurations manually after the Migrate step"
-    Write-Warning "Files Locks are not migrated during the Migration process"
-    $ASK_WAIT = Read-HostOptions -question "[$Vserver] Have all clients saved their work ?" -options "y/n" -default "y"
-    if ($ASK_WAIT -eq 'y') {
-        Write-LogDebug "Clients ready to migrate. User choose to continue migration procedure"
-        Write-Log "[$VserverDR] Run last UpdateDR" -firstValueIsSpecial
-        if ( ( $ret = create_update_cron_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl ) -ne $True ) {
-            Write-LogError "ERROR: create_update_cron_dr"
-        }
-        if ( ( $ret = create_update_snap_policy_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR) -ne $True ) {
-            Write-LogError "ERROR: create_update_snap_policy_dr"
-        }
-
-        if ( ( $ret = check_cluster_peer -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl ) -ne $True ) {
-            Write-LogError "ERROR: check_cluster_peer failed"
-            clean_and_exit 1
-        }
-
-        # This will set $Global:NEED_CIFS_SERVER
-        $ret=check_update_CIFS_server_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR
-
-        if ( ($ret = update_vserver_dr -myDataAggr $DataAggr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR -DDR ($DRfromDR.IsPresent) -aggrMatchRegEx $AggrMatchRegex -nodeMatchRegEx $NodeMatchRegex -TemporarySecondaryCifsIp $TemporarySecondaryCifsIp -SecondaryCifsLifMaster $SecondaryCifsLifMaster -SecondaryCifsLifCustomVlan $SecondaryCifsLifCustomVlan ) -ne $True ) {
-            Write-LogError "ERROR: update_vserver_dr failed" 
-            #clean_and_exit 1
-
-        }
-        if ( ( $ret = wait_snapmirror_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR ) -ne $True ) { 
-            Write-LogError  "ERROR: wait_snapmirror_dr failed"  
-        }
-        if ( ( $ret = break_snapmirror_vserver_dr -myController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR ) -ne $True ) {
-            Write-LogError "ERROR: Unable to break all relations from Vserver [$VserverDR] on [$SecondaryClusterName]"
-            #clean_and_exit 1
-        }
-        # Remove Reverse SnapMirror Relationship if exist
-        if ( ( $ret = remove_snapmirror_dr -myPrimaryController $NcSecondaryCtrl -mySecondaryController $NcPrimaryCtrl -myPrimaryVserver $VserverDR -mySecondaryVserver $Vserver	 ) -ne $True ) { 
-            Write-LogError "ERROR: remove_snapmirror_dr failed"
-            #clean_and_exit 1
-        }
-        # Remove SnapMirror Relationship 
-        if ( ( $ret = remove_snapmirror_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR -NoRelease) -ne $True ) {
-            Write-LogError "ERROR: remove_snapmirror_dr failed" 
-            #clean_and_exit 1
-        }
-        # Restamp MSID destination volume
-
-        # if ( ( $ret=restamp_msid -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDr) -ne $True) {
-        # 	Write-LogError "ERROR: restamp_msid failed"
-        # 	clean_and_exit 1
-        # }
-        $ASK_MIGRATE = Read-HostOptions -question "[$Vserver] IP and Services will switch now. Ready to go ?" -options "y/n" -default "y"
-
-        if ($ASK_MIGRATE -eq 'y') {
-            
-            $mySourceVserverComment=(Get-NcVserver -Name $Vserver -Controller $NcPrimaryCtrl).Comment
-
-            # Verify if NFS service is Running 
-            Write-LogDebug "Get-NcNfsService -VserverContext $VserverDR -Controller $NcSecondaryCtrl"
-            $NfsService = Get-NcNfsService -VserverContext $VserverDR -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar
-            if ( $? -ne $True ) {
-                $Return = $False ; throw "ERROR: Get-NcNfsService failed [$ErrorVar]" 
-            }
-            if ( $null -eq $NfsService ) {
-                Write-Log "[$VserverDR] No NFS services in vserver"
-            }
-            else {  # NFSservice exist on secondary, so activate it
-                if ( $NfsService.GeneralAccess -ne $True ) {
-                    Write-Log "[$VserverDR] Enable NFS"
-                    Write-LogDebug "Enable-NcNfs -VserverContext $VserverDR -Controller $NcSecondaryCtrl"
-                    $out = Enable-NcNfs -VserverContext $VserverDR -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar -Confirm:$False
-                    if ( $? -ne $True ) {
-                        Write-Warning "ERROR: Failed to enable NFS on Vserver [$VserverDR] [ErrorVar]"
-                        Write-LogError "ERROR: Failed to enable NFS on Vserver [$VserverDR]" 
-                    }
-                }
-            }
-
-            # Verify if ISCSI service is Running 
-            Write-LogDebug "Get-NcIscsiService -VserverContext $VserverDR -Controller $NcSecondaryCtrl"
-            $IscsiService = Get-NcIscsiService -VserverContext $VserverDR -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar
-            if ( $? -ne $True ) {
-                $Return = $False ; throw "ERROR: Get-NcIscsiService failed [$ErrorVar]" 
-            }
-            if ( $null -eq $IscsiService ) {
-                Write-Log "[$VserverDR] No iSCSI services in Vserver"
-            }
-            else {
-                if ( $IscsiService.IsAvailable -ne $True ) {
-                    Write-Log "[$VserverDR] Enable iSCSI service on Vserver"
-                    Write-LogDebug "Enable-NcIscsi -VserverContext $VserverDR -Controller $NcSecondaryCtrl"
-                    $out = Enable-NcIscsi -VserverContext $VserverDR -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar -Confirm:$False
-                    if ( $? -ne $True ) {
-                        Write-Warning "ERROR: Failed to enable iSCSI on Vserver [$VserverDR] [ErrorVar]"
-                        Write-LogError "ERROR: Failed to enable iSCSI on Vserver [$VserverDR] [ErrorVar]" 
-                    }
-                }
-            }
-
-            # Migrate CIFS server if it exists
-            # if($Global:InsideMCC -eq $False){
-            #     if ( ( $ret = migrate_lif -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR -PreserveIdentity $Global:PreserveIdentity) -ne $True ) {
-            #         Write-LogError "ERROR: migrate_lif failed"
-            #         clean_and_exit 1
-            #     }
-
-            #     if ( ( $ret = migrate_cifs_server -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR -NoInteractive -PreserveIdentity $Global:PreserveIdentity) -ne $True ) {
-            #         Write-LogError "ERROR: migrate_cifs_server failed"
-            #         clean_and_exit 1
-            #     }
-            #     if (($ret = set_all_lif -mySecondaryVserver $VserverDR -myPrimaryVserver $Vserver -mySecondaryController $NcSecondaryCtrl  -myPrimaryController $NcPrimaryCtrl -state up -AfterMigrate) -ne $True ) {
-            #         Write-LogError "ERROR: Failed to set all lif up on [$VserverDR]"
-            #         clean_and_exit 1
-            #     }
-            # }else{ 
-            if($Global:InsideMCC -eq $False){
-                if (($ret = set_all_lif -mySecondaryVserver $Vserver -myPrimaryVserver $VserverDR -mySecondaryController $NcPrimaryCtrl -myPrimaryController $NcSecondaryCtrl -state up -Force) -ne $True ) {
-                    Write-LogError "ERROR: Failed to set all lif up on [$VserverDR]"
-                    clean_and_exit 1
-                }
-            }
-            if ( ( $ret = migrate_cifs_server -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR -NoInteractive -PreserveIdentity $Global:PreserveIdentity) -ne $True ) {
-                Write-LogError "ERROR: migrate_cifs_server failed"
-                clean_and_exit 1
-            }
-            #}
-            #if (($ret=set_all_lif -myVserver $VserverDR -myController $NcSecondaryCtrl -state down) -ne $True ) {
-            #    Write-LogError "ERROR: Failed to set all lif down on [$VserverDR]"
-            #    clean_and_exit 1
-            #}
-
-            # remove related snapmirror destination from source
-            Write-LogDebug "Get-NcSnapmirrorDestination -SourceVserver $Vserver -DestinationVserver $VserverDR -Controller $NcPrimaryCtrl | Invoke-NcSnapmirrorRelease -Controller $NcPrimaryCtrl -Confirm:$False"
-            Get-NcSnapmirrorDestination -SourceVserver $Vserver -DestinationVserver $VserverDR -Controller $NcPrimaryCtrl | Invoke-NcSnapmirrorRelease -Controller $NcPrimaryCtrl -Confirm:$False
-            # remove related vserver peer before rename vserver
-            Write-LogDebug "Get-NcVserverPeer -Vserver $VserverDR -PeerVserver $Vserver -Controller $NcSecondaryCtrl | Remove-NcVserverPeer -Controller $NcSecondaryCtrl -Confirm:$False"
-            Get-NcVserverPeer -Vserver $VserverDR -PeerVserver $Vserver -Controller $NcSecondaryCtrl | Remove-NcVserverPeer -Controller $NcSecondaryCtrl -Confirm:$False
-
-            Write-Log "[$VserverDR] Renamed to [$Vserver]"
-            Write-LogDebug "Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl"
-            $out = Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar
-            if ( $? -ne $True ) {
-                throw "ERROR: Rename-NcVserver failed [$ErrorVar]"
-            }
-            if($mySourceVserverComment.lenght -gt 1){
-                Write-LogDebug "Set-NcVserver -Name $Vserver -Controller $NcSecondaryCtrl -Comment $mySourceVserverComment"
-                $ret=Set-NcVserver -Name $Vserver -Controller $NcSecondaryCtrl -Comment $mySourceVserverComment
-            }
-            
-            #Write-Log "[$Vserver] completely removed on [$PrimaryClusterName]"
-            Write-Log "[$Vserver] has been migrated on destination cluster [$SecondaryClusterName]"
-            if($Global:PreserveIdentity -eq $True){
-                Write-Log "[$Vserver] Users can now connect on destination with source Identity (IP and CIFS server name)"
-            }else{
-                Write-Log "[$Vserver] Users can now connect on destination with destination Identity"
-            }
-            
-            if ( ( $ret = set_vol_options_from_voldb -myController $NcSecondaryCtrl -myVserver $Vserver -NoCheck) -ne $True ) {
-                Write-LogError "ERROR: set_vol_options_from_voldb failed"
-            }
-            #if ( ( $ret=set_shareacl_options_from_shareacldb -myController $NcSecondaryCtrl -myVserver $VserverDR -NoCheck) -ne $True ) {
-            #    Write-LogError "ERROR: set_shareacl_options_from_shareacldb"
-            #}
-
-            #Rename flexgroup with _dst suffix generated by bug in snapmirror protect
-            foreach($volume in (Get-NcVol -Vserver $Vserver -Controller $NcSecondaryCtrl)){
-                if($volume.VolumeIdAttributes.StyleExtended-eq "flexgroup"){
-                    Write-LogDebug "Rename volume $($volume.Name)"
-                    $ret=Rename-NcVol -Name $volume.Name -Controller $NcSecondaryCtrl -Confirm:$False -NewName $($volume.Name -replace "_dst","") -VserverContext $Vserver
-                }
-            }
-
-            if ( $AllowQuotaDR -eq "True" ) {
-                if ( ( $ret = create_quota_rules_from_quotadb -myController $NcSecondaryCtrl -myVserver $Vserver -NoCheck ) -ne $True ) {
-                    Write-LogError "ERROR: create_quota_rules_from_quotadb failed"
-                }
-            }
-            if($Global:InsideMCC -eq $False){
-                $defaultanswer = if ($DeleteSource) {
-                    "y"
-                }
-                else {
-                    "n"
-                }
-                if($null -ne (Get-NcVserver -Name $Vserver -Controller $NcPrimaryCtrl)){
-                    $ASK_WAIT2 = Read-HostOptions -question "[$Vserver] Do you want to delete SVM on source cluster [$PrimaryClusterName] ?" -options "y/n" -default $defaultanswer
-                    if ($ASK_WAIT2 -eq 'y') {
-
-                        # if ( ( $ret = remove_snapmirror_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR) -ne $True ) {
-                        #     Write-LogError "ERROR: remove_snapmirror_dr failed" 
-                        #     clean_and_exit 1
-                        # }
-
-                        # if ( ( remove_vserver_peer -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR ) -ne $True ) {
-                        #     Write-LogError "ERROR: remove_vserver_peer failed" 
-                        #     return $false
-                        # }
-
-                        $mySourceVserverComment=(Get-NcVserver -Name $Vserver -Controller $NcPrimaryCtrl).Comment
-
-                        Write-Log "Vserver [$Vserver] will be deleted on cluster [$PrimaryClusterName]"
-                        if ( ( $ret = remove_vserver_source -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR ) -eq $False ) {
-                            Write-LogError "ERROR: remove_vserver_dr: Unable to remove vserver [$Vserver]" 
-                            clean_and_exit 1
-                        }
-                        # $StartTime=Get-Date
-                        # $Good=$false
-                        # while( ($Good -eq $false) ){
-                        #     Start-Sleep 1
-                        #     Write-LogDebug "Check if $Vserver-mc is completely deleted on Secondary Cluster [$NcSecondaryCtrl]"
-                        #     Write-LogDebug "Get-NcVserver -Vserver $Vserver-mc -Controller $NcSecondaryCtrl"
-                        #     $ret=Get-NcVserver -Vserver $($Vserver+"-mc") -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar
-                        #     if ( $? -ne $True ) {
-                        #         throw "ERROR: Get-NcVserver failed [$ErrorVar]"
-                        #     }
-                        #     if($null -eq $ret){$Good=$True}
-                        #     $CurrentTime=Get-date
-                        #     $Global:TimeoutTime = ($CurrentTime - $StartTime).TotalSeconds
-                        #     if ( $Global:TimeoutTime -gt $Global:STOP_TIMEOUT ) {
-                        #         $Return = $false
-                        #         throw "ERROR: Timeout waiting Deletion of $myPrimaryVserver-mc"
-                        #     }
-                        # } 
-
-                        # Write-Log "[$VserverDR] Renamed to [$Vserver]"
-                        # Write-LogDebug "Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl"
-                        # $out = Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar
-                        # if ( $? -ne $True ) {
-                        #     throw "ERROR: Rename-NcVserver failed [$ErrorVar]"
-                        # }
-                        # Write-LogDebug "Set-NcVserver -Name $Vserver -Controller $NcSecondaryCtrl -Comment $mySourceVserverComment"
-                        # Set-NcVserver -Name $Vserver -Controller $NcSecondaryCtrl -Comment $mySourceVserverComment
-                        
-                        Write-Log "[$Vserver] completely removed on [$PrimaryClusterName]"
-                        clean_and_exit 0
-                    }else{
-                        Write-Log "[$Vserver] User chose not to delete source SVM on Source Cluster [$PrimaryClusterName]"
-                        Write-Log "[$Vserver] will only be stopped on [$PrimaryClusterName]"
-                        Write-Log "In this case the SVM object name on Destination Cluster [$SecondaryClusterName] is still [$VserverDR]"
-                        Write-Log "But CIFS identity is correctly migrated to [$Vserver]"
-                        Write-Log "Final rename will be done when [-DeleteSource] step will be executed, once you are ready to completely delete [$Vserver] on Source Cluster [$PrimaryClusterName]"
-                        # Write-LogDebug "Stop-NcVserver -Name $Vserver -Controller $NcPrimaryCtrl -Confirm:$False"
-                        # $ret = Stop-NcVserver -Name $Vserver -Controller $NcPrimaryCtrl -Confirm:$False -ErrorVariable ErrorVar
-                        # if ( $? -ne $True ) {
-                        #     throw "ERROR: Stop-NcVerser failed [$ErrorVar]"
-                        #     clean_and_exit 1
-                        # } 
-                        # Start-Sleep 1 
-                    }
-                }   
-            }
-        }
-        else {
-            Write-Log "[$Vserver] Migration process has been stopped by user"
-            Write-Log "[$Vserver] You could restart the [Migrate] step when ready"
-            Write-Log "[$Vserver] Or resynchronize your DR by running a [Resync -ForceRecreate] then a [ConfigureDR] step"
-        }
-    }
-    else {
-        Write-LogDebug "Client not ready for Migrate"
-        Write-Log "[$Vserver] Migration canceled"
-        clean_and_exit 1
-    }
-    clean_and_exit 0
-}
- #>
-####################################################################################################
 
 if ($Migrate) {
     $Global:Run_Mode = "Migrate"
@@ -3194,43 +2898,13 @@ if ( $DeleteSource ) {
                 $ret=Set-NcVserver -Name $Vserver -Controller $NcSecondaryCtrl -Comment $SourceVserverComment
             }
 
-            <# if($Global:InsideMCC -eq $True){
-                Write-LogDebug "In mode InsideMCC = True"
-                
-                $TemporarySVMName="TempBeforeDelete"
-                Write-Log "[$Vserver] Renamed temporary to [$TemporarySVMName] on [$NcPrimaryCtrl]"
-                Write-LogDebug "Rename-NcVserver -Name $Vserver -NewName $TemporarySVMName -Controller $NcPrimaryCtrl"
-                $out = Rename-NcVserver -Name $Vserver -NewName $TemporarySVMName -Controller $NcPrimaryCtrl  -ErrorVariable ErrorVar
-                if ( $? -ne $True ) {
-                    throw "ERROR: Rename-NcVserver failed [$ErrorVar]"
-                }
-                Start-Sleep 1
-                Write-Log "[$VserverDR] Renamed to [$Vserver] on [$NcSecondaryCtrl]"
-                Write-LogDebug "Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl"
-                $out = Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar
-                if ( $? -ne $True ) {
-                    throw "ERROR: Rename-NcVserver failed [$ErrorVar]"
-                } 
-                Write-Log "[$Vserver] will be deleted on cluster [$PrimaryClusterName]"
-                Write-LogDebug "remove_vserver_source -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $TemporarySVMName -mySecondaryVserver $Vserver"
-                if ( ( $ret = remove_vserver_source -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $TemporarySVMName -mySecondaryVserver $Vserver ) -eq $False ) {
-                    Write-LogError "ERROR: remove_vserver_dr: Unable to remove vserver [$VserverDR]" 
-                    clean_and_exit 1
-                }
-            }else{ #>
-                <# Write-Log "[$VserverDR] Renamed to [$Vserver]"
-                Write-LogDebug "Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl"
-                $out = Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar
-                if ( $? -ne $True ) {
-                    throw "ERROR: Rename-NcVserver failed [$ErrorVar]"
-                } #> 
             Write-Log "[$Vserver] will be deleted on cluster [$PrimaryClusterName]"
             Write-LogDebug "remove_vserver_source -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $Vserver"
             if ( ( $ret = remove_vserver_source -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $Vserver ) -eq $False ) {
                 Write-LogError "ERROR: remove_vserver_dr: Unable to remove vserver [$VserverDR]" 
                 clean_and_exit 1
             }
-            #}
+
             Write-Log "[$Vserver] completely deleted on [$PrimaryClusterName]"
             clean_and_exit 0
 
@@ -3337,39 +3011,13 @@ if ( $CloneDR ) {
     Write-LogOnly "SVMTOOL CloneDR"
     $Global:PreserveIdentity=$False
 
-    <# if ( ( ( $Global:NonInteractive.IsPresent ) -and ( -not $Global:ForceCloneOriginal.IsPresent ) ) -and ( ( $null -eq $Global:SecondaryCifsLifMaster ) -or ( $null -eq $Global:TemporarySecondaryCifsIp ) ) ){
-        Write-LogError "ERROR: With CloneDR in Interactive Mode you must provide a SecondaryCifsLifMaster and TemporarySecondaryCifsIp"
-        clean_and_exit 1
-    }
-    if( ( ( $Global:NonInteractive.IsPresent ) -and ( ( $null -eq $Global:SecondaryCifsLifMaster ) -or ( $null -eq $Global:TemporarySecondaryCifsIp ) ) ) ){
-        Write-LogError "ERROR: With CloneDR in NonInteractive Mode you must provide a SecondaryCifsLifMaster and TemporarySecondaryCifsIp"
-        clean_and_exit 1
-    } #>
     if( ( $Global:NonInteractive.IsPresent ) `
     -and ( -not ($Global:ForceCloneOriginal.IsPresent) ) `
     -and ( ( $SecondaryCifsLifMaster.Length -eq 0 ) -or ( $TemporarySecondaryCifsIp.length -eq 0 ) ) `
     ){
         Write-LogError "ERROR: With CloneDR in NonInteractive Mode you must provide a SecondaryCifsLifMaster and TemporarySecondaryCifsIp"
-        # $globalinter=$Global:NonInteractive.IsPresent
-        # $globaloriginal=($Global:ForceCloneOriginal.IsPresent)
-        # $secondarymaster=( $SecondaryCifsLifMaster.Length -eq 0 )
-        # $secondaryip=( $TemporarySecondaryCifsIp.length -eq 0 )
-        # write-log "interactive : $globalinter"
-        # write-log "not original : $globaloriginal"
-        # write-log "master vide : $secondarymaster $SecondaryCifsLifMaster"
-        # write-log "secondaryip vide : $secondaryip $TemporarySecondaryCifsIp"
         clean_and_exit 1
-    }<# else{
-        Write-host "ok to continue"
-        $globalinter=$Global:NonInteractive.IsPresent
-        $globaloriginal=($Global:ForceCloneOriginal.IsPresent)
-        $secondarymaster=( $SecondaryCifsLifMaster.Length -eq 0 )
-        $secondaryip=( $TemporarySecondaryCifsIp.length -eq 0 )
-        write-log "interactive : $globalinter"
-        write-log "not original : $globaloriginal"
-        write-log "master vide : $secondarymaster $SecondaryCifsLifMaster"
-        write-log "secondaryip vide : $secondaryip $TemporarySecondaryCifsIp"
-    } #>
+    }
     # Connect to the Cluster
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
     $tmp_str = $MyCred.UserName

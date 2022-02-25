@@ -984,9 +984,10 @@ function Remove-SvmDr {
     Activates Svm Dr
     Test if source vserver is still alive
     If still alive will prompt if you want to swith production from source to destination vserver
-    If not alive will switch automaticaly production on DR with source identity
+    Check if secondary SVM has been configured with Preserve Identity or not and then perform necessary actions to keep or not identity on secondary SVM
+    If not alive will switch automaticaly production on DR
     It will break all snapmirror relations
-    It will bring the DR vserver online (and the lifs) with source identity
+    It will bring the DR vserver online (and the lifs)
     It will bring the source vserver offline
 
 .EXAMPLE
@@ -1040,10 +1041,6 @@ function Invoke-SvmDrActivate {
         # Enables Non-Interactive Mode
         # Is default enabled in Wfa-Integration Mode
         [switch]$NonInteractive,
-
-        # Preserve or not Network Identity (IP addresses and CIFS server name) of Source on Destination
-        [Parameter(Mandatory = $false)]
-        [bool]$PreserveIdentity=$True,
 
         # Enables OnCommand Workflow Automation (WFA) Integration
         [switch]$WfaIntegration,

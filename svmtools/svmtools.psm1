@@ -13268,60 +13268,7 @@ try{
         
         ###### 1 backup LIF, cifsserver, shares & symlinks from Source SVM
         
-        <# Write-LogDebug "use Config File [$Global:CONFFILE]"
-        $read_conf = read_config_file $Global:CONFFILE
-        $myPrimaryControllerName=$myPrimaryController.Name
-        $BACKUP_FOLDER=$read_conf.SVMTOOL_DB
-        if($BACKUP_FOLDER -notmatch $("\\"+$myPrimaryControllerName+"$")){
-            Write-LogDebug "Backup directory [$BACKUP_FOLDER] does not contains subfolder with Cluster name [$myPrimaryControllerName]"
-            $BACKUP_FOLDER+=$("\"+$myPrimaryControllerName)
-        }else{
-            Write-LogDebug "Backup directory [$BACKUP_FOLDER] already contains subfolder with Cluster name [$myPrimaryControllerName]"    
-        }
-        if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){$BACKUP_FOLDER=$BACKUP_FOLDER -replace "/","\"}
-        else{$BACKUP_FOLDER=$BACKUP_FOLDER -replace "\\","/"}
-        Write-LogDebug "SVMTOOL Backup directory:  [$BACKUP_FOLDER]"
-        $BackupDate = Get-Date -UFormat "%Y%m%d%H%M%S"
-        if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){
-            $Global:JsonPath = $($BACKUP_FOLDER + "\" + $myPrimaryVserver + "\" + $BackupDate + "\")
-        }else{
-            $Global:JsonPath = $($BACKUP_FOLDER + "/" + $myPrimaryVserver + "/" + $BackupDate + "/")
-        }
-        Write-LogDebug "[$myPrimaryVserver] Backup Folder is [$Global:JsonPath]"
-        check_create_dir -FullPath $($Global:JsonPath + "backup.json") -Vserver $myPrimaryVserver | Out-Null
-        # backup LIF ################################################################################################################################################################
-        Write-Log "[$myPrimaryVserver] Backup LIF Object"
-        Write-LogDebug "create_lif_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $myPrimaryVserver -Backup $True -Restore $False"
-        $ret=create_lif_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $myPrimaryVserver -Backup $True -Restore $False
-        if ($ret.count -gt 0){
-            if ($ret[0] -ne $True){ Write-LogError "ERROR: Failed to backup all LIF" ; $Return = $True }
-        }else{
-            if ($ret -ne $True){ Write-LogError "ERROR: Failed to backup all LIF" ; $Return = $True }
-        }
-        # backup CIFS server ################################################################################################################################################################
-        Write-Log "[$myPrimaryVserver] Backup CIFS Server Object"
-        Write-LogDebug "create_update_CIFS_server_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $myPrimaryVserver -Backup $True -Restore $False"
-        if ( ( $ret=create_update_CIFS_server_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $myPrimaryVserver -Backup $True -Restore $False ) -ne $True ) {	Write-LogError "ERROR: create_update_CIFS_server_dr" ; $Return = $False } 
-        Write-LogDebug "update_CIFS_server_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $myPrimaryVserver  -Backup $True -Restore $False"
-        $ret=update_CIFS_server_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $myPrimaryVserver  -Backup $True -Restore $False
-        if ( $? -ne $True ) {
-            Write-LogWarn "Some CIFS options has not been backup on [$myPrimaryVserver]"    
-        }
-        # backup CIFS Shares ################################################################################################################################################################
-        Write-Log "[$myPrimaryVserver] Backup CIFS Shares Objects"
-        Write-LogDebug "create_update_CIFS_shares_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $myPrimaryVserver  -Backup $True -Restore $False"
-        if ( ( $ret=create_update_CIFS_shares_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $myPrimaryVserver  -Backup $True -Restore $False ) -ne $True ) { 
-            Write-LogError "ERROR: create_update_CIFS_share"
-            $Return = $False 
-        }
-        # backup Symlinks ################################################################################################################################################################
-        Write-Log "[$myPrimaryVserver] Backup CIFS Symlinks Objects"
-        Write-LogDebug "create_update_cifs_symlink_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $myPrimaryVserver  -Backup $True -Restore $False"
-        if ( ( $ret=create_update_cifs_symlink_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $myPrimaryVserver  -Backup $True -Restore $False) -ne $True ) { 
-            Write-LogError "ERROR: Failed to create all CIFS symlinks"
-            $Return = $False 
-        } #>
-
+        
         # * backup_CIFSsymlink
         # before changing CIFS server name, we need to backup & remove all cifs symlink
         #Write-LogDebug "ActivateDR in CIFS Modify mode with PreserveIdentity"
@@ -13619,7 +13566,7 @@ try{
 }
 
 #############################################################################################
-# this function return True if there is at least one CIFS LIF Up and Ready in a Vserver
+# return True if there is at least one CIFS LIF Up and Ready in a Vserver
 # and return False if it's not the case
 Function Is_One_LIF_Ready (
     [string] $myVserver,
@@ -17437,7 +17384,7 @@ Function set_vol_options_from_voldb (
                 }
                 $myVol = Get-NcVol -Controller $myController -Vserver $myVserver -Volume $VolName  -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
-                if ( $myVol -ne $null ) 
+                if ( $null -ne $myVol ) 
                 {
                     $myVolSnapshotPolicy=$myVol.VolumeSnapshotAttributes.SnapshotPolicy
                     if ( ($VolSnapshotPolicy -ne $myVolSnapshotPolicy) -and ($Global:ForceUpdateSnapPolicy -eq $True) ) 
@@ -18501,8 +18448,8 @@ Function create_quota_rules_from_quotadb (
                 return $False
             }
         }
-        if ( $myVserver -eq $null ) { $myVserver = "*" }
-        if ( $myVolume -eq $null ) { $myVolume  = "*" }
+        if ( $null -eq $myVserver ) { $myVserver = "*" }
+        if ( $null -eq $myVolume ) { $myVolume  = "*" }
         $NcCluster = Get-NcCluster -Controller $myController
         $ClusterName = $NcCluster.ClusterName
         Write-LogDebug "ClusterName [$ClusterName]"
@@ -18524,7 +18471,7 @@ Function create_quota_rules_from_quotadb (
         }
         Write-LogDebug "SVMTOOL_DB_CLUSTER [$SVMTOOL_DB_CLUSTER]"
         $VserverListItem = Get-Item "${SVMTOOL_DB_CLUSTER}/${myVserver}.vserver"
-        if ( $VserverListItem -eq $null ) 
+        if ( $null -eq $VserverListItem ) 
         {
             Write-Warning "Not Vserver File found in SVMTOOL_DB_CLUSTER [$SVMTOOL_DB_CLUSTER]"  
         } 
@@ -18536,7 +18483,7 @@ Function create_quota_rules_from_quotadb (
                 $QUOTA_DB_VSERVER=$SVMTOOL_DB_CLUSTER + '\' + $VserverItemName
                 $QUOTA_DB_FILE=$QUOTA_DB_VSERVER + '\quotarules.' + $myPolicy
                 $available_QUOTA_DB_FILE=(@(Get-Item $($QUOTA_DB_VSERVER + '\quotarules*') | Sort-Object -Property LastWriteTime))[-1]
-                if($available_QUOTA_DB_FILE -eq $null -or $available_QUOTA_DB_FILE.length -eq 0){
+                if(($null -eq $available_QUOTA_DB_FILE) -or ($available_QUOTA_DB_FILE.length -eq 0)){
                     Write-Warning "No quota activated on any Vserver's volume" 
                     Write-LogDebug "WARNING: No quota activated on any Vserver's volume"
                     Write-LogDebug "end"
@@ -18559,7 +18506,7 @@ Function create_quota_rules_from_quotadb (
                         $SVM=$myVserver
                     }
                     $CheckVserver=Get-NcVserver -Controller $myController -Name $SVM
-                    if ( $CheckVserver -eq $null ) 
+                    if ( $null -eq $CheckVserver ) 
                     {
                         
                         Write-LogError "ERROR: [$ClusterName] [$SVM] no such vserver" 
@@ -18574,7 +18521,7 @@ Function create_quota_rules_from_quotadb (
                             Write-LogDebug "Get-NcQuotaPolicy -VserverContext $SVM -PolicyName $myPolicy"
                             $checkQuotaPolicy=Get-NcQuotaPolicy -VserverContext $SVM -PolicyName $myPolicy -Controller $myController -ErrorVariable ErrorVar
                             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcQuotaPolicy failed [$ErrorVar]" }
-                            if ($checkQuotaPolicy -eq $null){
+                            if ($null -eq $checkQuotaPolicy){
                                 Write-Log "[$SVM] Need to create Quota Policy [$myPolicy]"
                                 Write-LogDebug "New-NcQuotaPolicy -PolicyName $myPolicy -Vserver $SVM -Controller $myController"
                                 $ret=New-NcQuotaPolicy -PolicyName $myPolicy -Vserver $SVM -Controller $myController -ErrorVariable ErrorVar
@@ -18774,12 +18721,12 @@ Try {
     $Return = $True
     Write-logDebug "start"
     # Restart Quota on Corrected volumes	
-    if ( $myVolumeList -ne $null ) { 
+    if ( $null -ne $myVolumeList ) { 
         $myVolumeList | Select-Object -uniq | ForEach-Object {
             $Vserver=$_.split(':')[0]
             $Volume=$_.split(':')[1]
             $status=Get-NcQuotaStatus -Controller $myController -Vserver $myVserver -Volume $Volume
-            if ( $status -eq $null ) {
+            if ( $null -eq $status ) {
                 Write-LogError "ERROR: Unable to get quota status for volume [$Vserver] [$Volume]"
             } else {
                 $VolQuotaStatus=$status.Status
@@ -18852,10 +18799,10 @@ Try {
 	$Return = $true
     Write-LogDebug "start"
 	$VolumeListToRestartQuota= @()
-	if ( $myVserver -eq $null ) { $myVserver = "*" }
-	if ( $myVolume -eq $null ) { $myVolume  = "*" }
+	if ( $null -eq $myVserver ) { $myVserver = "*" }
+	if ( $null -eq $myVolume ) { $myVolume  = "*" }
 	$NcQuotaList=Get-NcQuota -Controller $myController -Vserver $myVserver -Volume $myVolume -ErrorVariable ErrorVar
-	if ( $NcQuotaList -eq $null ) { 
+	if ( $null -eq $NcQuotaList ) { 
 		Write-LogDebug "No Quota found for volume [$myVserver] [$myVolume]" ;
 		return $false
     }
@@ -18934,7 +18881,7 @@ Try {
                         Write-LogError "Get-NcQuotaReport Failed to get Report: Unable to Know" 
                         $Return = $False ;
                     }
-                    if ( $NcQuotaReportList -eq $null ) {
+                    if ( $null -eq $NcQuotaReportList ) {
                         Write-LogError "No Quota Report Found for Volume $Volume"
                         $Return = $False ;
                     } else {
