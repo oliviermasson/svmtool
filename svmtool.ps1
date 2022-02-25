@@ -2862,13 +2862,14 @@ if ( $DeleteSource ) {
     }
     $SourceState = $SourceVserver.State
     $SourceVserverComment=$SourceVserver.Comment
-
+    Write-LogDebug "[$Vserver] state [$SourceState]"
     $DestVserver = Get-NcVserver -Name $VserverDR -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar
     if ($? -ne $True) {
         Write-LogError "ERROR : SVM [$VserverDR] does not exist on [$SecondaryClusterName]"; clean_and_exit 1
     }
-    
     $DestState = $DestVserver.State
+    Write-LogDebug "[$VserverDR] state [$DestState]"
+
     if ($SourceState -ne "stopped" -or $DestState -ne "running") {
         Write-LogError "ERROR : SVM [$Vserver] not correctly migrated to destination [$SecondaryClusterName]. Failed to delete on source"
         clean_and_exit 1

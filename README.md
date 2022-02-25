@@ -83,7 +83,7 @@ Use an MCC for source or destination or both | Yes
 Two differents DR destination | Yes
 DR inside the same cluster, between HA pair in different rooms | Yes
 Use Version Flexible SnapMirror when necessary<br>(by example: build a DR from 8.3.2 to 9.X) | Yes
-Migrate an SVM and keep it identity<br>For CIFS, IP and Server Name will be the same,<br>so users will only have to reconnect just by refreshing explorer<br>or double-click on folder<br><br>Migrate SVM inside one Metrocluster | Yes 
+Migrate an SVM and keep it identity<br>For CIFS, IP and Server Name will be the same,<br>so users will only have to reconnect just by refreshing explorer<br>or double-click on folder<br> | Yes 
 Select subset of sources volumes that will be replicated | Yes
 Clone DR SVM<br>In order to test DR without interrupting SnapMirror relationships during the timeframe of the test | Yes
 FabricPool on Destination | Yes<br>

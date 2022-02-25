@@ -1881,7 +1881,7 @@ function Invoke-SvmDrMigrate {
 
         # Optional, this SvmDr solution cannot transfer the passwords of local users (cifs, cluster)
         # In Non-Interactive Mode, the script cannot create missing users
-        # If you pass this parameter, the password will used to create missing users
+        # If you pass this parameter, the contained password will be used to create missing users
         [pscredential]$DefaultLocalUserCredentials,
 
         # Loglevel of the console output
@@ -1896,10 +1896,11 @@ function Invoke-SvmDrMigrate {
         # Is default enabled in Wfa-Integration Mode
         [switch]$NonInteractive,
 
-        # Optional, when the vserver dr is created, all lifs are taken offline (duplicate ip conflicts)
+        # Optional, when the vserver dr is created, all lifs are taken offline (to avoid duplicate ip conflicts)
         # Hence if the vserver needs to be joined in AD, there is no lif available
         # By passing an temporary ip-address and in combination with parameter "SecondaryCifsLifMaster"
-        # A temporary lif will be created to join the vserver dr in AD
+        # A temporary lif will be created to join the vserver dr into AD
+        # May be necessary for the last update before migrate, only if secondary SVM is configured with Preserve Identity
         [string]$TemporarySecondaryCifsIp,
 
         # Optional, when the vserver dr is created, all lifs are taken offline (duplicate ip conflicts)

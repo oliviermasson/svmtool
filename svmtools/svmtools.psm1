@@ -13262,6 +13262,7 @@ try{
     $PrimaryCIFSdomain=$PrimaryCIFSserver.Domain
     $PrimaryCIFSOU=$PrimaryCIFSserver.OrganizationalUnit
     $PrimaryClusterName = $myPrimaryController.Name
+    $SecondaryClusterName=$mySecondaryController.Name
     if($Global:InsideMCC -eq $True){
     ###############################################################################
     ###### Migration inside a Metrocluster
@@ -13396,6 +13397,7 @@ try{
         Write-LogDebug "use Config File [$Global:CONFFILE]"
         $read_conf = read_config_file $Global:CONFFILE
         $myPrimaryControllerName=$myPrimaryController.Name
+        
         $BACKUP_FOLDER=$read_conf.SVMTOOL_DB
         if($BACKUP_FOLDER -notmatch $("\\"+$myPrimaryControllerName+"$")){
             Write-LogDebug "Backup directory [$BACKUP_FOLDER] does not contains subfolder with Cluster name [$myPrimaryControllerName]"
@@ -13550,11 +13552,11 @@ try{
             }
             $Global:SVMSourceDeleted=$True
         }else{
-            Write-Log "[$Vserver] User chose not to delete source SVM on Source Cluster [$PrimaryClusterName]"
-            Write-Log "[$Vserver] Will only be stopped on [$PrimaryClusterName]"
-            Write-Log "In this case the SVM object name on Destination Cluster [$SecondaryClusterName] is still [$VserverDR]"
-            Write-Log "But CIFS identity is correctly migrated to [$Vserver] on [$mySecondaryController]"
-            Write-Log "Final rename will be done when [-DeleteSource] step will be executed, once you are ready to completely delete [$Vserver] on Source Cluster [$PrimaryClusterName]"
+            Write-Log "[$myPrimaryVserver] User chose not to delete source SVM on Source Cluster [$PrimaryClusterName]"
+            Write-Log "[$myPrimaryVserver] Will only be stopped on [$PrimaryClusterName]"
+            Write-Log "In this case the SVM name on Destination Cluster [$SecondaryClusterName] is still [$mySecondaryVserver]"
+            Write-Log "But CIFS identity is correctly migrated to [$PrimaryCIFSidentity] on [$SecondaryClusterName]"
+            Write-Log "Final rename will be done when [-DeleteSource] step will be executed, once you are ready to completely delete [$myPrimaryVserver] on Source Cluster [$PrimaryClusterName]"
             $Global:SVMSourceDeleted=$False
         }
     }
