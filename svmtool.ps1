@@ -1318,13 +1318,13 @@ if($PSVersionTable.PSVersion.Major -le 5){
     if ($null -eq $module) {
         if($PSTKalpha.IsPresent){
             Write-Log "Import PSTK Core Alpha"
-            $module = Import-Module DataONTAP
+            $module = Import-Module DataONTAP -MinimumVersion 9.11.1.2111
         }else{
             #Write-Log "Import PSTK Core Standard"
-            $module = Import-Module NetApp.ONTAP
+            $module = Import-Module NetApp.ONTAP -RequiredVersion 9.10.1.2111
             # workaround for BURT 1385162
             $DataONTAP_SkipEmsReport = $null
-            $DataONTAP_SkipUsageReport = $true
+            $DataONTAP_SkipUsageReport = $true 
         }
     }
     <# if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){
