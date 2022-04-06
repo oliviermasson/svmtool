@@ -1254,7 +1254,7 @@ if ($Path -notcontains $PSScriptRoot) {
 }
 Remove-Module -Name svmtools -ErrorAction SilentlyContinue
 if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){$module = Import-Module "$PSScriptRoot\svmtools" -PassThru}else{$module = Import-Module "$PSScriptRoot/svmtools" -PassThru}
-if ( $module -eq $null ) {
+if ( $null -eq $module ) {
     Write-Host "ERROR: Failed to load module SVMTOOLS" -ForegroundColor Red
     Write-Error "ERROR: Failed to load module SVMTOOLS"
     exit 1
@@ -1290,10 +1290,10 @@ if($PSVersionTable.PSVersion.Major -le 5){
     }
     if (-not $WfaIntegration) {
         $module = Get-Module DataONTAP
-        if ($module -eq $null) {
+        if ($null -eq $module) {
             $module = Import-Module -Name DataONTAP -PassThru
             $module = Get-Module DataONTAP
-            if ( $module -eq $null ) {
+            if ( $null -eq $module ) {
                 Write-Error "ERROR: DataONTAP module not found" 
                 clean_and_exit 1
             }
@@ -1306,7 +1306,7 @@ if($PSVersionTable.PSVersion.Major -le 5){
     else {
         $module = Import-Module "$PSScriptRoot\..\DataOntap" -PassThru
         $module = Get-Module DataONTAP
-        if ( $module -eq $null ) {
+        if ( $null -eq $module ) {
             Write-Error "ERROR: DataONTAP Core module not found" 
             clean_and_exit 1
         }
@@ -1314,11 +1314,11 @@ if($PSVersionTable.PSVersion.Major -le 5){
 }else{
     Write-LogDebug "Running svmtool with PWSH Core version [$PSVersion]"
     Write-LogDebug "Import PSTK Core version"
-    $module = Get-Module NetApp.ONTAP
-    if ($module -eq $null) {
+    $module = Get-Module NetApp.ONTAP,DataONTAP
+    if ($null -eq $module) {
         if($PSTKalpha.IsPresent){
             Write-Log "Import PSTK Core Alpha"
-            $module = Import-Module 'C:\Users\masson\Downloads\PSTK REST ALPHA\NetApp.ONTAP\NetApp.ONTAP\NetApp.ONTAP.psd1'
+            $module = Import-Module DataONTAP
         }else{
             #Write-Log "Import PSTK Core Standard"
             $module = Import-Module NetApp.ONTAP
@@ -1333,8 +1333,8 @@ if($PSVersionTable.PSVersion.Major -le 5){
     }else{
 
     } #>
-    $module = Get-Module NetApp.ONTAP
-    if ( $module -eq $null ) {
+    $module = Get-Module NetApp.ONTAP,DataONTAP
+    if ( $null -eq $module ) {
         Write-Error "ERROR: NetApp.ONTAP Core module not found" 
         clean_and_exit 1
     }
@@ -1387,11 +1387,11 @@ if ( $Version ) {
     $ModulesVersion = (Get-Module -Name svmtools).Version
     $ModulesVersion = $ModulesVersion.ToString()
     $ModuleVersion = (Get-Module -Name svmtool).Version
-    if ($ModuleVersion -eq $null) {
+    if ($null -eq $ModuleVersion) {
         $path = (Get-Variable -Name PSCommandPath).Value
         $path = Split-Path $path
         $module = Import-Module $($path+"\svmtool") -PassThru
-        if ($module -ne $null) {
+        if ($null -ne $module) {
             $ModuleVersion = (Get-Module -Name svmtool).Version
             $ModuleVersion = $ModuleVersion.ToString()
         }
@@ -1401,7 +1401,7 @@ if ( $Version ) {
     }
     Write-Log "[svmtool] Release [$RELEASE]"
     Write-Log "[Script] Version [$SCRIPT_RELEASE]"
-    if ($ModuleVersion -ne $null) {
+    if ($null -ne $ModuleVersion) {
         Write-Log "[Module svmtool] Version [$ModuleVersion]"
     }
     Write-Log "[Module svmtools] Version [$ModulesVersion]"
@@ -1467,7 +1467,7 @@ if ( $Backup ) {
     if ((Test-Path $Global:CONFFILE) -eq $True ) {
         Write-LogDebug "use Config File [$Global:CONFFILE]"
         $read_conf = read_config_file $Global:CONFFILE
-        if ( $read_conf -eq $null ) {
+        if ( $null -eq $read_conf ) {
             Write-LogError "ERROR: read configuration file $Global:CONFFILE failed"
             clean_and_exit 1 ;
         }
@@ -1739,7 +1739,7 @@ if ( $Backup ) {
             $Remaining = $Remaining.Substring(0, 80) + "..."
         }
         $numberRemaining = ($JobRemain | Measure-Object).Count
-        if ($numberRemaining -eq $null -or $numberRemaining -eq 0) {
+        if ($null -eq $numberRemaining -or $numberRemaining -eq 0) {
             $JobRemain
         }
         $percentage = [math]::round((($numJobBackup - $numberRemaining) / $numJobBackup) * 100)
@@ -1789,7 +1789,7 @@ if ( $Restore ) {
     Write-LogOnly "SVMTOOL Run Restore"
     if ((Test-Path $Global:CONFFILE) -eq $True ) {
         $read_conf = read_config_file $Global:CONFFILE
-        if ( $read_conf -eq $null ) {
+        if ( $null -eq $read_conf ) {
             Write-LogError "ERROR: read configuration file $Global:CONFFILE failed"
             clean_and_exit 1
         }
@@ -1826,7 +1826,7 @@ if ( $Restore ) {
         clean_and_exit 1
     }
     if ($RESTOREALLSVM -eq $True) {
-        if (($ALLSVM = (Get-ChildItem $SVMTOOL_DB).Name) -eq $null) {
+        if ($null -eq ($ALLSVM = (Get-ChildItem $SVMTOOL_DB).Name)) {
             $Return = $False ; throw "ERROR: Get-ChildItem failed for [$SVMTOOL_DB]`nERROR: no Backup available"
         }
         if ($AllSVM) {
@@ -1834,7 +1834,7 @@ if ( $Restore ) {
         }
     }
     else {
-        if ((Test-Path $SVMTOOL_DB) -eq $null) {
+        if ($null -eq (Test-Path $SVMTOOL_DB)) {
             $Return = $False ; throw "ERROR: no Backup available for [$Restore] inside [$SVMTOOL_DB]"	
         }
         else {
@@ -1857,7 +1857,7 @@ if ( $Restore ) {
         }else{
             $BackupAvailable = Get-ChildItem $($SVMTOOL_DB + "/" + $svm) -Directory | Sort-Object -Property CreationTime
         }
-        if ($BackupAvailable -eq $null) {
+        if ($null -eq $BackupAvailable) {
             Write-Error "ERROR: No Backup available for [$svm]"
             next
         }
@@ -1865,7 +1865,7 @@ if ( $Restore ) {
             $ans = $null
             if ($SelectBackupDate -eq $True) {
                 $listBackupAvailable = ($BackupAvailable | Select-Object Name).Name
-                while ($ans -eq $null) {
+                while ($null -eq $ans) {
                     Write-Host "Select a Backup Date for [$svm] : "
                     $i = 1
                     foreach ($date in $listBackupAvailable) {
@@ -2121,7 +2121,7 @@ if ( $Restore ) {
             $Remaining = $Remaining.Substring(0, 80) + "..."
         }
         $numberRemaining = ($JobRemain | Measure-Object).Count
-        if ($numberRemaining -eq $null -or $numberRemaining -eq 0) {
+        if ($null -eq $numberRemaining -or $numberRemaining -eq 0) {
             $JobRemain
         }
         $percentage = [math]::round((($numJobRestore - $numberRemaining) / $numJobRestore) * 100)
@@ -2182,7 +2182,7 @@ if ( $RestoreObject ){
     }
     if ((Test-Path $Global:CONFFILE) -eq $True ) {
         $read_conf = read_config_file $Global:CONFFILE
-        if ( $read_conf -eq $null ) {
+        if ( $null -eq $read_conf ) {
             Write-LogError "ERROR: read configuration file $Global:CONFFILE failed"
             clean_and_exit 1
         }
@@ -2195,7 +2195,7 @@ if ( $RestoreObject ){
         Write-Error "ERROR: No Backup Folder configured, check configuration file [$Global:CONFFILE] for item [SVMTOOL_DB]"
         clean_and_exit 1
     }
-    if ((Test-Path $SVMTOOL_DB) -eq $null) {
+    if ($null -eq (Test-Path $SVMTOOL_DB)) {
         Write-Error "ERROR: no Backup available for [$RESTORE_SRC_CLUSTER] inside [$SVMTOOL_DB]"
         clean_and_exit 1	
     }
@@ -2205,7 +2205,7 @@ if ( $RestoreObject ){
     }else{
         $BackupAvailable = Get-ChildItem $($SVMTOOL_DB + "/" + $Vserver) | Sort-Object -Property CreationTime   
     }
-    if ($BackupAvailable -eq $null) {
+    if ($null -eq $BackupAvailable) {
         Write-Error "ERROR: No Backup available for [$Vserver]"
         clean_and_exit 1
     }
@@ -2213,7 +2213,7 @@ if ( $RestoreObject ){
         $ans = $null
         if ($SelectBackupDate -eq $True) {
             $listBackupAvailable = ($BackupAvailable | Select-Object Name).Name
-            while ($ans -eq $null) {
+            while ($null -eq $ans) {
                 Write-Host "Select a Backup Date for [$Vserver] : "
                 $i = 1
                 foreach ($date in $listBackupAvailable) {
@@ -2332,12 +2332,12 @@ if ( $null -eq $read_conf ) {
 }
 
 $PRIMARY_CLUSTER = $read_conf.Get_Item("PRIMARY_CLUSTER") ;
-if ( $PRIMARY_CLUSTER -eq $Null ) {
+if ( $Null -eq $PRIMARY_CLUSTER ) {
     Write-LogError "ERROR: unable to find PRIMARY_CLUSTER in $Global:CONFFILE"
     clean_and_exit 1 ;
 }
 $SECONDARY_CLUSTER = $read_conf.Get_Item("SECONDARY_CLUSTER") ;
-if ( $SECONDARY_CLUSTER -eq $Null ) {
+if ( $Null -eq $SECONDARY_CLUSTER ) {
     Write-LogError "ERROR: unable to find SECONDARY_CLUSTER in $Global:CONFFILE"
     clean_and_exit 1 ;
 }
@@ -2407,7 +2407,7 @@ if ( $null -eq $Vserver ) {
 $Global:VserverDR=$VserverDR
 $AllowQuotaDR = $read_vconf.Get_Item("AllowQuotaDR")
 $AllowEncryption = $read_vconf.Get_Item("AllowEncrypt")
-if ($AllowEncryption -ne $null) {
+if ($null -ne $AllowEncryption) {
     $Global:AllowEncryption = $AllowEncryption
 }
 $SVMTOOL_DB = $read_conf.Get_Item("SVMTOOL_DB")
