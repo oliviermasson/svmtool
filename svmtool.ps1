@@ -1280,67 +1280,74 @@ add_appender -loggerinstance "console" $consoleAppender
 set_log_level -loggerinstance "console" -level "All"
 $Global:ConsoleLog = get_logger -name "console"
 
-
-$PSVersion=$PSVersionTable.PSVersion
-if($PSVersionTable.PSVersion.Major -le 5){
-    Write-LogDebug "Running svmtool with Powershell version [$PSVersion]"
-    Write-LogDebug "Import classical PSTK"
-    if (!($env:PSModulePath -match "NetApp PowerShell Toolkit")) {
-        $env:PSModulePath = $($env:PSModulePath + ";C:\Program Files (x86)\NetApp\NetApp PowerShell Toolkit\Modules")
-    }
-    if (-not $WfaIntegration) {
-        $module = Get-Module DataONTAP
-        if ($null -eq $module) {
-            $module = Import-Module -Name DataONTAP -PassThru
+# check if module is already imported
+$module=get-module netapp.ontap,dataontap
+if($null -eq $module){
+    $PSVersion=$PSVersionTable.PSVersion
+    if($PSVersionTable.PSVersion.Major -le 5){
+        Write-LogDebug "Running svmtool with Powershell version [$PSVersion]"
+        Write-LogDebug "Import classical PSTK"
+        if (!($env:PSModulePath -match "NetApp PowerShell Toolkit")) {
+            $env:PSModulePath = $($env:PSModulePath + ";C:\Program Files (x86)\NetApp\NetApp PowerShell Toolkit\Modules")
+        }
+        $Global:PSTKCall="Zapi"
+        if (-not $WfaIntegration) {
             $module = Get-Module DataONTAP
-            if ( $null -eq $module ) {
-                Write-Error "ERROR: DataONTAP module not found" 
-                clean_and_exit 1
+            if ($null -eq $module) {
+                $module = Import-Module -Name DataONTAP -PassThru
+                $module = Get-Module DataONTAP
+                if ( $null -eq $module ) {
+                    Write-Error "ERROR: DataONTAP module not found" 
+                    clean_and_exit 1
+                }
+            }
+            else {
+                # dataontap was loaded externally
+                Write-LogDebug "DataONTAP module already loaded"
             }
         }
         else {
-            # dataontap was loaded externally
-            Write-LogDebug "DataONTAP module already loaded"
+            $module = Import-Module "$PSScriptRoot\..\DataOntap" -PassThru
+            $module = Get-Module DataONTAP
+            if ( $null -eq $module ) {
+                Write-Error "ERROR: DataONTAP Core module not found" 
+                clean_and_exit 1
+            }
         }
-    }
-    else {
-        $module = Import-Module "$PSScriptRoot\..\DataOntap" -PassThru
-        $module = Get-Module DataONTAP
-        if ( $null -eq $module ) {
-            Write-Error "ERROR: DataONTAP Core module not found" 
+    }else{
+        Write-LogDebug "Running svmtool with PWSH Core version [$PSVersion]"
+        Write-LogDebug "Import PSTK Core version"
+        
+        $module = Get-Module NetApp.ONTAP,DataONTAP -ListAvailable
+        if ($null -ne $module) {
+            if($PSTKalpha.IsPresent){
+                Write-Log "Import PSTK Core Alpha"
+                $module = Import-Module DataONTAP -MinimumVersion 9.11.1.2111
+                $Global:PSTKCall="Rest"
+            }else{
+                Write-Log "Import PSTK Core Standard"
+                $module = Import-Module NetApp.ONTAP -RequiredVersion 9.10.1.2111
+                # workaround for BURT 1385162
+                #$DataONTAP_SkipEmsReport = $null
+                #$DataONTAP_SkipUsageReport = $true 
+                $Global:PSTKcall="Zapi"
+            }
+        }else{
+            Write-Error "ERROR: Firstly you must install PSTK module on your host"
             clean_and_exit 1
         }
     }
-}else{
-    Write-LogDebug "Running svmtool with PWSH Core version [$PSVersion]"
-    Write-LogDebug "Import PSTK Core version"
-    $module = Get-Module NetApp.ONTAP,DataONTAP
-    if ($null -eq $module) {
-        if($PSTKalpha.IsPresent){
-            Write-Log "Import PSTK Core Alpha"
-            $module = Import-Module DataONTAP -MinimumVersion 9.11.1.2111
-        }else{
-            #Write-Log "Import PSTK Core Standard"
-            $module = Import-Module NetApp.ONTAP -RequiredVersion 9.10.1.2111
-            # workaround for BURT 1385162
-            $DataONTAP_SkipEmsReport = $null
-            $DataONTAP_SkipUsageReport = $true 
-        }
-    }
-    <# if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){
-        #$module = Import-Module "C:\Users\masson\Downloads\PSTK 9.8 CORE\NetApp.ONTAP\NetApp.ONTAP.psd1"
-        
-    }else{
-
-    } #>
-    $module = Get-Module NetApp.ONTAP,DataONTAP
-    if ( $null -eq $module ) {
-        Write-Error "ERROR: NetApp.ONTAP Core module not found" 
-        clean_and_exit 1
-    }
 }
+<# if(($module.Version.Major -ge 9) -and ($module.Version.Minor -ge 11))
+{
+    # With PSTK core currently need to check if cmdlt was executed with REST or ZAPI call
+    # for this we will look in the logfile created by natoolkit
+    $Global:PSTKLOG=$($Global:ROOTLOGDIR+"PSTK.log")
+    # Set-NaToolkitConfiguration must be executed as admin...
+    Set-NaToolkitConfiguration -LogLevel Debug -LogToFile $Global:PSTKLOG -NoConsoleOutput
+} #>
 
-$PSTKVersion = Get-NaToolkitVersion
+#$PSTKVersion = Get-NaToolkitVersion
 <# if ($PSTKVersion.Major -lt $Global:MIN_MAJOR -and $PSTKVersion.Minor -lt $Global:MIN_MINOR -and $PSTKVersion.Minor -lt $Global:MIN_BUILD) {
     Write-LogWarn "Your PSTK version is lower than mandatory version (ToolkitVersion 4.5.0 / PSTK 4.7)"
     Write-LogWarn "You will not be able to manage volume encryption and other options may not work properly"
@@ -2514,7 +2521,7 @@ if ( $ConfigureDR ) {
     if ( ($ret = Save_Cluster_To_JSON -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl) -ne $True) {
         Write-Warning "FAILED to backup cluster information"
     }
-    $DestVserver = Get-NcVserver -Vserver $VserverDR -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar
+    $DestVserver = Get-NcVserver -Vserver $VserverDR -Controller $NcSecondaryCtrl -ErrorVariable SilentlyContinue | Out-Null
 
     if ( ( $Global:XDPPolicy -ne "" ) -and ( $Global:XDPPolicy -ne "MirrorAllSnapshots" ) ) {
         $ret = Get-NcSnapmirrorPolicy -Name $Global:XDPPolicy -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar

@@ -1486,11 +1486,25 @@ Function select_data_aggr_from_cli ([NetApp.Ontapi.Filer.C.NcController]$myContr
 		$AggrSelectedList = @()
  		$AggrList=Get-NcAggr -Controller $myController  -ErrorVariable ErrorVar
 		if ( $? -ne $True ) {throw "ERROR: Get-NcAggr failed [$ErrorVar]" }
-		if ( $AggrList -eq $null ) {
+		if ( $null -eq $AggrList ) {
             Write-LogError "ERROR: Unable list aggregates for Cluster $myController" 
              
 			clean_and_exit 1
 		}
+
+        # TODO When REST will be the only method available, Get-NcAggr will only return data aggr, so this test will need to be modified/deleted
+        # try to check if call was performed with REST by looking at same attribute that are empty with REST and populated with ZAPI
+        if($null -eq $AggrList[0].AggrRaidAttributes.HasLocalRoot)
+        {
+            $AggrList=Get-NcAggr -Controller $myController  -ErrorVariable ErrorVar -ZapiCall
+            if ( $? -ne $True ) {throw "ERROR: Get-NcAggr failed [$ErrorVar]" }
+            if ( $null -eq $AggrList ) {
+                Write-LogError "ERROR: Unable list aggregates for Cluster $myController" 
+                
+                clean_and_exit 1
+            }    
+        }
+
         Write-Log $myQuestion
 		$i = 0 
 		foreach ( $Aggr in ( $AggrList | Skip-Null | Sort-Object -Property Available -Descending ) ) {
@@ -11695,18 +11709,31 @@ Try {
     Write-LogDebug "Get-NcAggr -Controller $mySecondaryController -Name $RootAggr"
     $out = Get-NcAggr -Controller $mySecondaryController -Name $RootAggr  -ErrorVariable ErrorVar
     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcAggr failed [$ErrorVar]"}
-    if ( $out -eq $null ) {
+    if ( $null -eq $out ) {
         Write-LogError "ERROR: aggregate [$RootAggr] not found on cluster [$mySecondaryController]" 
         Write-LogError "ERROR: exit" 
         clean_and_exit 1 
     }
-    Write-Log "[$workOn] create Clone vserver : [$PrimaryRootVolume] [$PrimaryLanguage] [$mySecondaryController] [$RootAggr]"
-    Write-LogDebug "New-NcVserver -Name $mySecondaryVserver -RootVolume $PrimaryRootVolume -RootVolumeSecurityStyle $PrimaryRootVolumeSecurityStyle -Comment $PrimaryComment -Language $PrimaryLanguage -NameServerSwitch file -Controller $mySecondaryController -CachingPolicy auto -RootVolumeAggregate $RootAggr"
-    $NewVserver=New-NcVserver -Name $mySecondaryVserver -RootVolume $PrimaryRootVolume -RootVolumeSecurityStyle $PrimaryRootVolumeSecurityStyle -Comment $PrimaryComment -Language $PrimaryLanguage -NameServerSwitch file -Controller $mySecondaryController -RootVolumeAggregate $RootAggr -CachingPolicy "auto" -ErrorVariable ErrorVar
-    if ( $? -ne $True ) {
-        Write-LogError "ERROR: Failed to create vserver $mySecondaryVserver on $mySecondaryController"  
-        Write-LogError "ERROR: exit" 
-        clean_and_exit 1
+    if($Global:PSTKCall -eq "Zapi"){
+        Write-Log "[$workOn] create Clone vserver : [$PrimaryRootVolume] [$PrimaryLanguage] [$mySecondaryController] [$RootAggr]"
+        Write-LogDebug "New-NcVserver -Name $mySecondaryVserver -RootVolume $PrimaryRootVolume -RootVolumeSecurityStyle $PrimaryRootVolumeSecurityStyle -Comment $PrimaryComment -Language $PrimaryLanguage -NameServerSwitch file -Controller $mySecondaryController -CachingPolicy auto -RootVolumeAggregate $RootAggr"
+        $NewVserver=New-NcVserver -Name $mySecondaryVserver -RootVolume $PrimaryRootVolume -RootVolumeSecurityStyle $PrimaryRootVolumeSecurityStyle -Comment $PrimaryComment -Language $PrimaryLanguage -NameServerSwitch file -Controller $mySecondaryController -RootVolumeAggregate $RootAggr -CachingPolicy "auto" -ErrorVariable ErrorVar
+        if ( $? -ne $True ) {
+            Write-LogError "ERROR: Failed to create vserver $mySecondaryVserver on $mySecondaryController"  
+            Write-LogError "ERROR: exit" 
+            clean_and_exit 1
+        }
+    }else{
+        # * Set-NcVserver does not support -RootVolume -RootVolumeAggregate -RootVolumeSecurityStyle argument
+        # ? will need to check if an automaticaly created rootvolume name will not impact junction path volume by example
+        Write-Log "[$workOn] create Clone vserver : [$PrimaryLanguage] [$mySecondaryController] [$RootAggr]"
+        Write-LogDebug "New-NcVserver -Name $mySecondaryVserver -Comment $PrimaryComment -Language $PrimaryLanguage -NameServerSwitch file -Controller $mySecondaryController -CachingPolicy auto"
+        $NewVserver=New-NcVserver -Name $mySecondaryVserver -Comment $PrimaryComment -Language $PrimaryLanguage -NameServerSwitch file -Controller $mySecondaryController -CachingPolicy "auto" -ErrorVariable ErrorVar
+        if ( $? -ne $True ) {
+            Write-LogError "ERROR: Failed to create vserver $mySecondaryVserver on $mySecondaryController"  
+            Write-LogError "ERROR: exit" 
+            clean_and_exit 1
+        }
     }
     Write-LogDebug "Set-NcVserver -Name $mySecondaryVserver -AllowedProtocols $PrimaryAllowedProtocols -Controller $mySecondaryController"
     $NewVserver=Set-NcVserver -AllowedProtocols $PrimaryAllowedProtocols -Name $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
@@ -11717,7 +11744,7 @@ Try {
     }
     $SecondaryVserver = Get-NcVserver -Controller $mySecondaryController -Name $mySecondaryVserver  -ErrorVariable ErrorVar 
     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" }
-    if ( $SecondaryVserver -eq $null ) {
+    if ( $null -eq $SecondaryVserver ) {
         Write-LogError "ERROR: Failed Get vserver information $mySecondaryVserver on $mySecondaryController"  
         Write-LogError "ERROR: exit" 
         clean_and_exit 1
@@ -11821,6 +11848,15 @@ Try {
             Write-LogError "ERROR: Vserver $myPrimaryVserver not found" 
             clean_and_exit 1
         }
+        # ! to prevent information missing in REST retrun
+        if($null -eq $PrimaryVserver.RootVolume){
+            $PrimaryVserver = Get-NcVserver -Controller $myPrimaryController -Name $myPrimaryVserver  -ErrorVariable ErrorVar -ZapiCall 
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" }
+            if ( $null -eq $PrimaryVserver ) {
+                Write-LogError "ERROR: Vserver $myPrimaryVserver not found" 
+                clean_and_exit 1
+            }    
+        }
     }
     else{
         # Read JSON file for this SVM
@@ -11844,7 +11880,7 @@ Try {
 
     if($Backup -eq $False){
         $PrimaryRootVolume = $PrimaryVserver.RootVolume
-        $PrimaryRootVolumeAggr = $PrimaryRootVolume.Aggregate
+        $PrimaryRootVolumeAggr = (get-ncvol -Vserver $myPrimaryVserver -Controller $myPrimaryController -Name $PrimaryRootVolume).Aggregate
         $PrimaryRootVolumeSecurityStyle = $PrimaryVserver.RootVolumeSecurityStyle
         $PrimaryLanguage = $PrimaryVserver.Language
         $PrimaryIPSpace = $PrimaryVserver.Ipspace
@@ -11881,22 +11917,36 @@ Try {
             $out = Get-NcAggr -Controller $mySecondaryController -Name $RootAggr  -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcAggr failed [$ErrorVar]" ; }
 
-            if ( $out -eq $null ) {
+            if ( $null -eq $out ) {
                 Write-LogError "ERROR: aggregate [$RootAggr] not found on cluster [$mySecondaryController]" 
                 Write-LogError "ERROR: exit" 
                  
                 clean_and_exit 1 
             }
             $SecondaryComment=$(($PrimaryComment -replace " secondary SVMTOOL","")+" secondary SVMTOOL")
-            Write-Log "[$workOn] Create DR Vserver [$PrimaryRootVolume] [$PrimaryLanguage] [$mySecondaryController] [$RootAggr]"
-            Write-LogDebug "New-NcVserver -Name $mySecondaryVserver -RootVolume $PrimaryRootVolume -RootVolumeSecurityStyle $PrimaryRootVolumeSecurityStyle -Comment $SecondaryComment -Language $PrimaryLanguage -NameServerSwitch file -Ipspace $PrimaryIPSpace -Controller $mySecondaryController -RootVolumeAggregate $RootAggr"
-            $NewVserver=New-NcVserver -Name $mySecondaryVserver -RootVolume $PrimaryRootVolume -RootVolumeSecurityStyle $PrimaryRootVolumeSecurityStyle -Comment $SecondaryComment -Language $PrimaryLanguage -NameServerSwitch file -Ipspace $PrimaryIPSpace -Controller $mySecondaryController -RootVolumeAggregate $RootAggr  -ErrorVariable ErrorVar
+            if($Global:PSTKCall -eq "Zapi"){
+                Write-Log "[$workOn] Create DR Vserver [$PrimaryRootVolume] [$PrimaryLanguage] [$mySecondaryController] [$RootAggr]"
+                Write-LogDebug "New-NcVserver -Name $mySecondaryVserver -RootVolume $PrimaryRootVolume -RootVolumeSecurityStyle $PrimaryRootVolumeSecurityStyle -Comment $SecondaryComment -Language $PrimaryLanguage -NameServerSwitch file -Ipspace $PrimaryIPSpace -Controller $mySecondaryController -RootVolumeAggregate $RootAggr"
+                $NewVserver=New-NcVserver -Name $mySecondaryVserver -RootVolume $PrimaryRootVolume -RootVolumeSecurityStyle $PrimaryRootVolumeSecurityStyle -Comment $SecondaryComment -Language $PrimaryLanguage -NameServerSwitch file -Ipspace $PrimaryIPSpace -Controller $mySecondaryController -RootVolumeAggregate $RootAggr  -ErrorVariable ErrorVar
 
-            if ( $? -ne $True ) {
-                Write-LogError "ERROR: Failed to create vserver $mySecondaryVserver on $mySecondaryController"  
-                Write-LogError "ERROR: exit" 
-                clean_and_exit 1
-            }
+                if ( $? -ne $True ) {
+                    Write-LogError "ERROR: Failed to create vserver $mySecondaryVserver on $mySecondaryController"  
+                    Write-LogError "ERROR: exit" 
+                    clean_and_exit 1
+                }
+            }else{
+                # * Set-NcVserver does not support -RootVolume -RootVolumeAggregate -RootVolumeSecurityStyle argument
+                # ? will need to check if an automaticaly created rootvolume name will not impact junction path volume by example
+                Write-Log "[$workOn] Create DR Vserver [$PrimaryLanguage] [$mySecondaryController] [$RootAggr]"
+                Write-LogDebug "New-NcVserver -Name $mySecondaryVserver -Comment $SecondaryComment -Language $PrimaryLanguage -NameServerSwitch file -Ipspace $PrimaryIPSpace -Controller $mySecondaryController"
+                $NewVserver=New-NcVserver -Name $mySecondaryVserver -Comment $SecondaryComment -Language $PrimaryLanguage -NameServerSwitch file -Ipspace $PrimaryIPSpace -Controller $mySecondaryController -ErrorVariable ErrorVar
+
+                if ( $? -ne $True ) {
+                    Write-LogError "ERROR: Failed to create vserver $mySecondaryVserver on $mySecondaryController"  
+                    Write-LogError "ERROR: exit" 
+                    clean_and_exit 1
+                }    
+            } 
             Write-LogDebug "Set-NcVserver -Name $mySecondaryVserver -AllowedProtocols $PrimaryAllowedProtocols -Controller $mySecondaryController"
             $NewVserver=Set-NcVserver -AllowedProtocols $PrimaryAllowedProtocols -Name $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
             if ( $? -ne $True ) {
@@ -11906,7 +11956,7 @@ Try {
             }
             $SecondaryVserver = Get-NcVserver -Controller $mySecondaryController -Name $mySecondaryVserver  -ErrorVariable ErrorVar 
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" }
-            if ( $SecondaryVserver -eq $null ) {
+            if ( $null -eq $SecondaryVserver ) {
                 Write-LogError "ERROR: Failed Get vserver information $mySecondaryVserver on $mySecondaryController"  
                 Write-LogError "ERROR: exit" 
                 clean_and_exit 1
