@@ -1137,6 +1137,8 @@ $Global:RESTORE_ORIGINAL = $False
 $DebugPreference = "SilentlyContinue"
 $VerbosePreference = "SilentlyContinue"
 $ErrorActionPreference = "Continue"
+$WarningPreference="SilentlyContinue"   # ! this is related to REST call behavior when no records are found and to prevent a warnnig message from appearing
+                                        # ! all warning message triggered by write-logwarn are still displayed
 if ($WfaIntegration -or $UpdateDR -or $UpdateReverse) {
     $NonInteractive = $true
 }
@@ -1330,7 +1332,7 @@ if($null -eq $module){
                 # workaround for BURT 1385162
                 #$DataONTAP_SkipEmsReport = $null
                 #$DataONTAP_SkipUsageReport = $true 
-                $Global:PSTKcall="Zapi"
+                $Global:PSTKCall="Zapi"
             }
         }else{
             Write-Error "ERROR: Firstly you must install PSTK module on your host"
@@ -1549,7 +1551,6 @@ if ( $Backup ) {
     $RunspacePool_Backup = [runspacefactory]::CreateRunspacePool(1, $Global:NumberOfLogicalProcessor, $iss, $Host)
     $RunspacePool_Backup.Open()
     [System.Collections.ArrayList]$jobs = @()
-    $SVMcount = $SVMList.Count
     $Jobs_Backup = @()
     $stopwatch = [system.diagnostics.stopwatch]::StartNew()
     $numJobBackup = 0
@@ -1889,7 +1890,7 @@ if ( $Restore ) {
                     $ans = Read-HostDefault -question $Query -default $listBackupAvailable.count
                     $ans = [int]$ans / 1
                     if (($ans -notmatch "[0-9]") -or ($ans -lt 1 -or $ans -gt $listBackupAvailable.count)) {
-                        Write-Warning "Bad input"; $ans = $null
+                        Write-LogWarn "Bad input"; $ans = $null
                     }
                 }
                 if($listBackupAvailable.count -gt 1){
@@ -2237,7 +2238,7 @@ if ( $RestoreObject ){
                 $ans = Read-HostDefault -question $Query -default $listBackupAvailable.count -forceAsk $True
                 $ans = [int]$ans / 1
                 if (($ans -notmatch "[0-9]") -or ($ans -lt 1 -or $ans -gt $listBackupAvailable.count)) {
-                    Write-Warning "Bad input"; $ans = $null
+                    Write-LogWarn "Bad input"; $ans = $null
                 }
             }
             if($listBackupAvailable.count -gt 1){
@@ -2519,7 +2520,7 @@ if ( $ConfigureDR ) {
     Check_Running_Inside_Same_MCC -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl
 
     if ( ($ret = Save_Cluster_To_JSON -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl) -ne $True) {
-        Write-Warning "FAILED to backup cluster information"
+        Write-LogWarn "FAILED to backup cluster information"
     }
     $DestVserver = Get-NcVserver -Vserver $VserverDR -Controller $NcSecondaryCtrl -ErrorVariable SilentlyContinue | Out-Null
 
@@ -2527,7 +2528,7 @@ if ( $ConfigureDR ) {
         $ret = Get-NcSnapmirrorPolicy -Name $Global:XDPPolicy -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar
         if ( $? -ne $True -or $ret.count -eq 0 ) {
             Write-LogDebug "XDPPolicy [$Global:XDPPolicy] does not exist on [$SECONDARY_CLUSTER]. Will use MirrorAllSnapshots as default Policy"
-            Write-Warning "XDPPolicy [$Global:XDPPolicy] does not exist on [$SECONDARY_CLUSTER]. Will use [MirrorAllSnapshots] as default Policy for all XDP relationships"
+            Write-LogWarn "XDPPolicy [$Global:XDPPolicy] does not exist on [$SECONDARY_CLUSTER]. Will use [MirrorAllSnapshots] as default Policy for all XDP relationships"
             $Global:XDPPolicy = ""
         }
     }
@@ -2535,7 +2536,7 @@ if ( $ConfigureDR ) {
         $ret = Get-NcJobCronSchedule -Name $MirrorSchedule -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar
         if ( $? -ne $True -or $ret.count -eq 0 ) {
             Write-LogDebug "MirrorSchedule [$MirrorSchedule] does not exist on [$SECONDARY_CLUSTER]. Will use no schedule"
-            Write-Warning "MirrorSchedule [$MirrorSchedule] does not exist on [$SECONDARY_CLUSTER]. Will use no schedule"
+            Write-LogWarn "MirrorSchedule [$MirrorSchedule] does not exist on [$SECONDARY_CLUSTER]. Will use no schedule"
             $Global:MirrorSchedule = "none"
         }
     } 
@@ -2663,9 +2664,9 @@ if ($Migrate) {
     # Write-LogError "ERROR: analyse_junction_path" 
     # clean_and_exit 1
     # }
-    Write-Warning "SVMTOOL script does not manage FCP configuration"
-    Write-Warning "You will have to backup and recreate all these configurations manually after the Migrate step"
-    Write-Warning "Files Locks are not migrated during the Migration process"
+    Write-LogWarn "SVMTOOL script does not manage FCP configuration"
+    Write-LogWarn "You will have to backup and recreate all these configurations manually after the Migrate step"
+    Write-LogWarn "Files Locks are not migrated during the Migration process"
     $ASK_WAIT = Read-HostOptions -question "[$Vserver] Have all clients saved their work ?" -options "y/n" -default "y"
     if ($ASK_WAIT -eq 'y') {
         Write-LogDebug "Clients ready to migrate. User choose to continue migration procedure"
@@ -2773,7 +2774,7 @@ if ($Migrate) {
                     Write-LogDebug "Enable-NcNfs -VserverContext $VserverDR -Controller $NcSecondaryCtrl"
                     $out = Enable-NcNfs -VserverContext $VserverDR -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar -Confirm:$False
                     if ( $? -ne $True ) {
-                        Write-Warning "ERROR: Failed to enable NFS on Vserver [$VserverDR] [ErrorVar]"
+                        Write-LogWarn "Failed to enable NFS on Vserver [$VserverDR] [ErrorVar]"
                         Write-LogError "ERROR: Failed to enable NFS on Vserver [$VserverDR]" 
                     }
                 }
@@ -2795,7 +2796,7 @@ if ($Migrate) {
                     Write-LogDebug "Enable-NcIscsi -VserverContext $VserverDR -Controller $NcSecondaryCtrl"
                     $out = Enable-NcIscsi -VserverContext $VserverDR -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar -Confirm:$False
                     if ( $? -ne $True ) {
-                        Write-Warning "ERROR: Failed to enable iSCSI on Vserver [$VserverDR] [ErrorVar]"
+                        Write-LogWarn "Failed to enable iSCSI on Vserver [$VserverDR] [ErrorVar]"
                         Write-LogError "ERROR: Failed to enable iSCSI on Vserver [$VserverDR] [ErrorVar]" 
                     }
                 }
@@ -2882,7 +2883,7 @@ if ( $DeleteSource ) {
         clean_and_exit 1
     }
     else {
-        Write-Warning "[$Vserver] Delete Source SVM cannot be interrupted or rolled back"
+        Write-LogWarn "[$Vserver] Delete Source SVM cannot be interrupted or rolled back"
         $ASK_WAIT = Read-HostOptions -question "Do you want to completely delete [$Vserver] on [$PrimaryClusterName] ?" -options "y/n" -default "y"
         if ($ASK_WAIT -eq 'y'){
             if ( ( $ret = remove_snapmirror_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR) -ne $True ) {
@@ -2949,7 +2950,7 @@ if ( $UpdateDR ) {
         $ret = Get-NcSnapmirrorPolicy -Name $XDPPolicy -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar
         if ( $? -ne $True -or $ret.count -eq 0 ) {
             Write-LogDebug "XDPPolicy [$XDPPolicy] does not exist on [$SECONDARY_CLUSTER]. Will not change XDPPolicy"
-            Write-Warning "XDPPolicy [$XDPPolicy] does not exist on [$SECONDARY_CLUSTER]. Will not change XDPPolicy"
+            Write-LogWarn "XDPPolicy [$XDPPolicy] does not exist on [$SECONDARY_CLUSTER]. Will not change XDPPolicy"
             $Global:XDPPolicy = ""
         }
     }
@@ -2957,7 +2958,7 @@ if ( $UpdateDR ) {
         $ret = Get-NcJobCronSchedule -Name $MirrorSchedule -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar
         if ( $? -ne $True -or $ret.count -eq 0 ) {
             Write-LogDebug "MirrorSchedule [$MirrorSchedule] does not exist on [$SECONDARY_CLUSTER]. Will use no schedule"
-            Write-Warning "MirrorSchedule [$MirrorSchedule] does not exist on [$SECONDARY_CLUSTER]. Will use no schedule"
+            Write-LogWarn "MirrorSchedule [$MirrorSchedule] does not exist on [$SECONDARY_CLUSTER]. Will use no schedule"
             $Global:MirrorSchedule = "none"
         }
     } 
@@ -2993,7 +2994,7 @@ if ( $UpdateDR ) {
 
     }
     if ( ( $ret = update_CIFS_server_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR ) -ne $True ) {
-        Write-Warning "Some CIFS options has not been set on [$VserverDR]"
+        Write-LogWarn "Some CIFS options has not been set on [$VserverDR]"
     }
     if ( ( $ret = svmdr_db_switch_datafiles -myController $NcPrimaryCtrl -myVserver $Vserver -secondaryVserver $VserverDR) -eq $false ) {
         Write-LogError "ERROR: Failed to switch SVMTOOL_DB datafiles" 
@@ -3129,7 +3130,7 @@ if ( $ActivateDR ) {
     }
     else {
         $ForceActivate = $True
-        Write-Warning "[$PRIMARY_CLUSTER] is not alive"
+        Write-LogWarn "[$PRIMARY_CLUSTER] is not alive"
     }
     $ProgressPreference = 'Continue'
     #$ForceActivate = $True
@@ -3206,7 +3207,7 @@ if ( $ReActivate ) {
         $ret = Get-NcSnapmirrorPolicy -Name $XDPPolicy -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar
         if ( $? -ne $True -or $ret.count -eq 0 ) {
             Write-LogDebug "XDPPolicy [$XDPPolicy] does not exist on [$SECONDARY_CLUSTER]. Will not change XDPPolicy"
-            Write-Warning "XDPPolicy [$XDPPolicy] does not exist on [$SECONDARY_CLUSTER]. Will not change XDPPolicy"
+            Write-LogWarn "XDPPolicy [$XDPPolicy] does not exist on [$SECONDARY_CLUSTER]. Will not change XDPPolicy"
             $Global:XDPPolicy = ""
         }
     }
@@ -3308,7 +3309,7 @@ if ( $ReActivate ) {
     }
 	
     if ( ( $ret = update_CIFS_server_dr -myPrimaryController $NcSecondaryCtrl -mySecondaryController $NcPrimaryCtrl -myPrimaryVserver $VserverDR -mySecondaryVserver $Vserver ) -ne $True ) {
-        Write-Warning "Some CIFS options has not been set on [$Vserver]"
+        Write-LogWarn "Some CIFS options has not been set on [$Vserver]"
     }
     if ( $AllowQuotaDR -eq "True" ) {
         if ( ( $ret = create_quota_rules_from_quotadb -myController $NcPrimaryCtrl -myVserver $Vserver  ) -ne $True ) {
@@ -3382,7 +3383,7 @@ if ( $Resync ) {
         $ret = Get-NcSnapmirrorPolicy -Name $XDPPolicy -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar
         if ( $? -ne $True -or $ret.count -eq 0 ) {
             Write-LogDebug "XDPPolicy [$XDPPolicy] does not exist on [$SECONDARY_CLUSTER]. Will not change XDPPolicy"
-            Write-Warning "XDPPolicy [$XDPPolicy] does not exist on [$SECONDARY_CLUSTER]. Will not change XDPPolicy"
+            Write-LogWarn "XDPPolicy [$XDPPolicy] does not exist on [$SECONDARY_CLUSTER]. Will not change XDPPolicy"
             $Global:XDPPolicy = ""
         }
     }
@@ -3428,7 +3429,7 @@ if ( $ResyncReverse ) {
         $ret = Get-NcSnapmirrorPolicy -Name $XDPPolicy -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar
         if ( $? -ne $True -or $ret.count -eq 0 ) {
             Write-LogDebug "XDPPolicy [$XDPPolicy] does not exist on [$SECONDARY_CLUSTER]. Will not change XDPPolicy"
-            Write-Warning "XDPPolicy [$XDPPolicy] does not exist on [$SECONDARY_CLUSTER]. Will not change XDPPolicy"
+            Write-LogWarn "XDPPolicy [$XDPPolicy] does not exist on [$SECONDARY_CLUSTER]. Will not change XDPPolicy"
             $Global:XDPPolicy = ""
         }
     }
@@ -3463,7 +3464,7 @@ if ( $UpdateReverse ) {
         $ret = Get-NcSnapmirrorPolicy -Name $XDPPolicy -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar
         if ( $? -ne $True -or $ret.count -eq 0 ) {
             Write-LogDebug "XDPPolicy [$XDPPolicy] does not exist on [$SECONDARY_CLUSTER]. Will not change XDPPolicy"
-            Write-Warning "XDPPolicy [$XDPPolicy] does not exist on [$SECONDARY_CLUSTER]. Will not change XDPPolicy"
+            Write-LogWarn "XDPPolicy [$XDPPolicy] does not exist on [$SECONDARY_CLUSTER]. Will not change XDPPolicy"
             $Global:XDPPolicy = ""
         }
     }
@@ -3486,7 +3487,7 @@ if ( $UpdateReverse ) {
     }
 
     if ( ( $ret = update_CIFS_server_dr -myPrimaryController $NcSecondaryCtrl -mySecondaryController $NcPrimaryCtrl -myPrimaryVserver $VserverDR -mySecondaryVserver $Vserver ) -ne $True ) {
-        Write-Warning "Some CIFS options has not been set on [$Vserver]"
+        Write-LogWarn "Some CIFS options has not been set on [$Vserver]"
     }
     #if ( ( update_cifs_usergroup -myPrimaryController $NcSecondaryCtrl -mySecondaryController $NcPrimaryCtrl -myPrimaryVserver $VserverDR -mySecondaryVserver $Vserver ) -ne $True ) {
     #    Write-LogError "ERROR: update_cifs_usergroup failed"
@@ -3545,7 +3546,7 @@ if ( $MirrorSchedule ) {
         $ret = Get-NcJobCronSchedule -Name $MirrorSchedule -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar
         if ( $? -ne $True -or $ret.count -eq 0 ) {
             Write-LogDebug "MirrorSchedule [$MirrorSchedule] does not exist on [$SECONDARY_CLUSTER]."
-            Write-Warning "MirrorSchedule [$MirrorSchedule] does not exist on [$SECONDARY_CLUSTER]."
+            Write-LogWarn "MirrorSchedule [$MirrorSchedule] does not exist on [$SECONDARY_CLUSTER]."
             clean_and_exit 1
         }
     }
@@ -3581,7 +3582,7 @@ if ( $MirrorScheduleReverse ) {
         $ret = Get-NcJobCronSchedule -Name $MirrorScheduleReverse -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar
         if ( $? -ne $True -or $ret.count -eq 0 ) {
             Write-LogDebug "MirrorSchedule [$MirrorScheduleReverse] does not exist on [$SECONDARY_CLUSTER]."
-            Write-Warning "MirrorSchedule [$MirrorScheduleReverse] does not exist on [$SECONDARY_CLUSTER]."
+            Write-LogWarn "MirrorSchedule [$MirrorScheduleReverse] does not exist on [$SECONDARY_CLUSTER]."
             clean_and_exit 1
         }
     }
