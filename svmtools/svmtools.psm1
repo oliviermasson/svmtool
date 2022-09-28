@@ -2031,6 +2031,81 @@ Function create_update_firewallpolicy_dr(
     }
 }
 
+
+#############################################################################################
+# create_update_servicepolicy_dr
+# available only since ONTAP version 9.10.1
+# firewall policy will be deprecated soon
+# and only with PSTK Core with REST call
+Function create_update_servicepolicy_dr(
+    [NetApp.Ontapi.Filer.C.NcController] $myPrimaryController,
+    [NetApp.Ontapi.Filer.C.NcController] $mySecondaryController,
+    [string] $myPrimaryVserver,
+    [string] $mySecondaryVserver,
+    [string]$workOn=$mySecondaryVserver,
+    [bool]$Backup,
+    [bool]$Restore) 
+{
+    Try 
+    {
+        $Return=$True
+        Write-Log "[$workOn] Check SVM Service Policy"
+        Write-LogDebug "[$myPrimaryVserver]: start"
+        if($Backup -eq $True){Write-LogDebug "run in Backup mode [$myPrimaryVserver]"}
+        if($Restore -eq $True){Write-LogDebug "run in Restore mode [$myPrimaryVserver]"}
+
+        $VersionSecondary=Get-NcSystemVersionInfo -controller $mySecondaryController
+        $VersionPrimary=Get-NcSystemVersionInfo -controller $myPrimaryController
+        if((($VersionPrimary.VersionTuple.Major -lt 9) -and ($VersionPrimary.VersionTuple.Minor -lt 10)) -or (($VersionSecondary.VersionTuple.Major -lt 9) -and ($VersionSecondary.VersionTuple.Major -lt 10))){
+            Write-LogWarn "Your ctrl must at least run ONTAP version 9.10.1 to support Service Policy"
+            $Return=$True
+            Write-LogDebug "[$myPrimaryVserver]: end"
+            return $Return
+        }
+        if($Global:PSTKCall="Zapi"){
+            Write-LogWarn "You must PSTK core with REST call to support Service Policy"
+            $Return=$True
+            Write-LogDebug "[$myPrimaryVserver]: end"
+            return $Return    
+        }
+        if($Restore -eq $False -and $Backup -eq $False){
+            $mySecondaryCluster = (Get-NcCluster -Controller $mySecondaryController  -ErrorVariable ErrorVar).ClusterName 
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCluster failed [$ErrorVar]" }
+        }
+        if($Restore -eq $False){
+            $PrimaryServicePolicies=Get-NcNetServicePolicy -Controller $myPrimaryController -Vserver $myPrimaryVserver  -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetServicePolicy failed [$ErrorVar]" }
+        }else{
+            if(Test-Path $($Global:JsonPath+"Get-NcNetServicePolicy.json")){
+                $PrimaryServicePolicies=Get-Content $($Global:JsonPath+"Get-NcNetServicePolicy.json") -Raw | ConvertFrom-Json
+            }else{
+                $Return=$False
+                $filepath=$($Global:JsonPath+"Get-NcNetServicePolicy.json")
+                Throw "ERROR: failed to read $filepath"
+            }    
+        }
+        if($Backup -eq $True){
+            $PrimaryServicePolicies | ConvertTo-Json -Depth 5 | Out-File -FilePath $($Global:JsonPath+"Get-NcNetServicePolicy.json") -Encoding ASCII -Width 65535
+            if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcNetServicePolicy.json") -ErrorAction SilentlyContinue) ){
+                Write-LogDebug "$($Global:JsonPath+"Get-NcNetServicePolicy.json") saved successfully"
+            }else{
+                Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcNetServicePolicy.json")"
+                $Return=$False
+            }    
+        }
+        if($Backup -eq $False){
+            foreach ($policy in $PrimaryServicePolicies)
+        }
+        Write-LogDebug "[$myPrimaryVserver]: end"
+        return $Return
+    }
+    catch
+    {
+        handle_error $_ $myPrimaryVserver
+	    return $false        
+    }
+}
+
 #############################################################################################
 # get_vserver_clone used by show_dr
 Function get_vserver_clone(
@@ -3725,7 +3800,7 @@ Try {
     }
     if($Backup -eq $True){
         $PrimaryCronList | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcJobCronSchedule.json") -Encoding ASCII -Width 65535
-        if( ($ret=get-item $($Global:JsonPath+"Get-NcJobCronSchedule.json") -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcJobCronSchedule.json") -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$($Global:JsonPath+"Get-NcJobCronSchedule.json") saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcJobCronSchedule.json")"
@@ -3749,7 +3824,7 @@ Try {
                 Write-LogDebug "Working on [$PrimaryJobScheduleName]"
                 $SecondaryCron = Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController  -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcJobCronSchedule failed [$ErrorVar]" }
-                if ( $SecondaryCron -ne $null ) {
+                if ( $null -ne $SecondaryCron ) {
                     $SecondaryJobScheduleName = $Cron.JobScheduleName
                     $SecondaryJobScheduleDescription = $Cron.JobScheduleDescription
                     if ( $PrimaryJobScheduleDescription -ne $SecondaryJobScheduleDescription ) {
@@ -3812,7 +3887,7 @@ Try {
                 #Write-LogDebug "Working on [$PrimaryJobScheduleName]"
                 $SecondaryCron = Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $using:mySecondaryController  -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcJobCronSchedule failed [$ErrorVar]" }
-                if ( $SecondaryCron -ne $null ) {
+                if ( $null -ne $SecondaryCron ) {
                     $SecondaryJobScheduleName = $Cron.JobScheduleName
                     $SecondaryJobScheduleDescription = $Cron.JobScheduleDescription
                     if ( $PrimaryJobScheduleDescription -ne $SecondaryJobScheduleDescription ) {
@@ -4084,7 +4159,7 @@ Function create_update_efficiency_policy_dr(
         }
         if($Backup -eq $True){
             $SisPolicyList | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcSisPolicy.json") -Encoding ASCII -Width 65535
-            if( ($ret=get-item $($Global:JsonPath+"Get-NcSisPolicy.json") -ErrorAction SilentlyContinue) -ne $null ){
+            if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcSisPolicy.json") -ErrorAction SilentlyContinue) ){
                 Write-LogDebug "$($Global:JsonPath+"Get-NcSisPolicy.json") saved successfully"
             }else{
                 Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcSisPolicy.jsonn")"
@@ -4113,7 +4188,7 @@ Function create_update_efficiency_policy_dr(
                 Write-LogDebug "Get-NcSisPolicy -Controller $mySecondaryController -VserverContext $mySecondaryVserver -name $PrimaryPolicyName"
                 $SecondaryPolicy = Get-NcSisPolicy -Controller $mySecondaryController -VserverContext $mySecondaryVserver -name $PrimaryPolicyName  -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSisPolicy failed [$ErrorVar] on [$mySecondaryController] [$mySecondaryVserver]" }
-                if($SecondaryPolicy -ne $null){
+                if($null -ne $SecondaryPolicy){
                     $SecondaryPolicyDuration=$SecondaryPolicy.Duration
                     $SecondaryPolicySchedule=$SecondaryPolicy.Schedule
                     $SecondaryPolicyEnable=$SecondaryPolicy.Enabled
@@ -4131,9 +4206,9 @@ Function create_update_efficiency_policy_dr(
                         $SecondaryPolicyDuration=0       
                     }
                 }
-                if($SecondaryPolicy -eq $null) 
+                if($null -eq $SecondaryPolicy) 
                 {
-                    if($PrimaryPolicyName -eq "auto" -and $PrimaryPolicySchedule -eq $null -and $PrimaryPolicyQosPolicy -eq $null){
+                    if($PrimaryPolicyName -eq "auto" -and $null -eq $PrimaryPolicySchedule -and $null -eq $PrimaryPolicyQosPolicy){
                         if($Restore -eq $True){
                             if(Test-Path $($Global:JsonPath+"Get-NcSystemVersionInfo.json")){
                                 $PrimaryVersion=Get-Content $($Global:JsonPath+"Get-NcSystemVersionInfo.json") -Raw | ConvertFrom-Json
@@ -4239,7 +4314,7 @@ Try {
     }
     if($Backup -eq $True){
         $ExportPolicyList | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcExportPolicy.json") -Encoding ASCII -Width 65535    
-        if( ($ret=get-item $($Global:JsonPath+"Get-NcExportPolicy.json") -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcExportPolicy.json") -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$($Global:JsonPath+"Get-NcExportPolicy.json") saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcExportPolicy.json")"
@@ -4252,7 +4327,7 @@ Try {
 		    Write-LogDebug "check ExportPolicy $PolicyName"
 		    $out = Get-NcExportPolicy -Controller $mySecondaryController -VserverContext $mySecondaryVserver -name $PolicyName  -ErrorVariable ErrorVar
 		    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcExportPolicy failed [$ErrorVar]" }
-		    if ( $out -eq $null ) {
+		    if ( $null -eq $out ) {
 			    Write-LogDebug "New-NcExportPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Name $PolicyName"
 			    Write-Log "[$workOn] Export Policy [$PolicyName] create"
 			    $out=New-NcExportPolicy -Controller $mySecondaryController -VserverContext $mySecondaryVserver -Name $PolicyName  -ErrorVariable ErrorVar
@@ -4275,7 +4350,7 @@ Try {
         }
         if($Backup -eq $True){
             $ExportPolicyRulesList | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcExportRule-"+$PolicyName+".json") -Encoding ASCII -Width 65535    
-            if( ($ret=get-item $($Global:JsonPath+"Get-NcExportRule-"+$PolicyName+".json") -ErrorAction SilentlyContinue) -ne $null ){
+            if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcExportRule-"+$PolicyName+".json") -ErrorAction SilentlyContinue) ){
                 Write-LogDebug "$($Global:JsonPath+"Get-NcExportRule-"+$PolicyName+".json") saved successfully"
             }else{
                 Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcExportRule-"+$PolicyName+".json")"
@@ -4300,7 +4375,7 @@ Try {
                 $RuleIndexSpecified = $ExportPolicyRule.RuleIndexSpecified 
                 $Sc_ExportPolicyRules=Get-NcExportRule -VserverContext $mySecondaryVserver -Controller $mySecondaryController -PolicyName $PolicyName -Index $RuleIndex  -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcExportRule failed [$ErrorVar]" }
-                if ( $Sc_ExportPolicyRules -ne $null ) {
+                if ( $null -ne $Sc_ExportPolicyRules ) {
                     Write-LogDebug "Rules already Exists Remove it"
                     Write-LogDebug "Remove-NcExportRule -Policy $PolicyName -Index $RuleIndex -Vserver $mySecondaryVserver -Controller $mySecondaryController"
                     $out=Remove-NcExportRule -Policy $PolicyName -Index $RuleIndex -Vserver $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False  -ErrorVariable ErrorVar
@@ -6711,9 +6786,9 @@ Try {
     Write-LogDebug "Get-NcClusterPeer -Name $SecondaryCluster -Controller $SourceController"
     $ret=Get-NcClusterPeer -Name $SecondaryCluster -Controller $SourceController -ErrorVariable ErrorVar 
     if ( $? -ne $True ) { Write-LogDebug "ERROR: Get-NcClusterPeer failed [$ErrorVar]"; return $False }
-    if($ret -eq $null){
+    if($null -eq $ret){
         Write-LogWarn "Cluster [$SecondaryCluster] is not peered with Cluster [$SourceClusterName]"
-        Write-LogWarn "Create Cluster Peering manualy, before running the script"
+        Write-LogWarn "Create Cluster Peering manualy, before running svmtool"
         $Return = $False
     }
     Write-LogDebug "[$clustername]: end"
@@ -6749,10 +6824,10 @@ Try {
         $Peer = Get-NcVserverPeer -Vserver $myPrimaryVserver -PeerVserver $mySecondaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar	
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserverPeer failed [$ErrorVar]" }
         $Peer = $Peer | Where-Object {$_.PeerCluster -eq $mySecondaryCluster} 
-        if ( $Peer -eq $null ) {
+        if ( $null -eq $Peer ) {
             $Peer = Get-NcVserverPeer -Vserver $mySecondaryVserver  -PeerVserver $myPrimaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserverPeer failed [$ErrorVar]" } 
-            if ( $Peer -eq $null ) {
+            if ( $null -eq $Peer ) {
                 Write-Log "[$workOn] Create vserver peer: [$myPrimaryVserver]@[$myPrimaryController] <-> [$workOn]@[$mySecondaryController]"  
                 try{
                     if ( ($ret=check_create_cluster_peer -SourceController $myPrimaryController -PeerController $mySecondaryController) -eq $True){
@@ -6814,7 +6889,7 @@ Try {
         $Peers = Get-NcVserverPeer -VserverContext $myPrimaryVserver -PeerState @("!rejected","!suspended","!deleted") -Controller $myPrimaryController -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserverPeer failed [$ErrorVar]" }
         $Peers | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcVserverPeer.json") -Encoding ASCII -Width 65535
-        if( ($ret=get-item $($Global:JsonPath+"Get-NcVserverPeer.json") -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcVserverPeer.json") -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$($Global:JsonPath+"Get-NcVserverPeer.json") saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcVserverPeer.json")"
@@ -11943,7 +12018,7 @@ Try {
 
             }else{ # Rest Mode
                 # * Set-NcVserver does not support -RootVolume -RootVolumeAggregate -RootVolumeSecurityStyle argument
-                # TODO will need to check if an automaticaly created rootvolume name will not impact junction path volume by example
+                # TODO will need to check if an automaticaly created rootvolume name will not impact junction path volume, by example
                 Write-Log "[$workOn] Create DR Vserver [$PrimaryLanguage] [$mySecondaryController] [$RootAggr]"
                 Write-LogDebug "New-NcVserver -Name $mySecondaryVserver -Comment $SecondaryComment -Language $PrimaryLanguage -NameServerSwitch file -Ipspace $PrimaryIPSpace -Controller $mySecondaryController"
                 $NewVserver=New-NcVserver -Name $mySecondaryVserver -Comment $SecondaryComment -Language $PrimaryLanguage -NameServerSwitch files -Ipspace $PrimaryIPSpace -Controller $mySecondaryController -ErrorVariable ErrorVar
@@ -11981,6 +12056,7 @@ Try {
     if ( ( $ret=create_update_exportpolicy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all policy" ; $Return = $False }
     if ( ( $ret=create_update_efficiency_policy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all Efficiency policy" ; $Return = $False }
     if ( ( $ret=create_update_firewallpolicy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all Firewall policy" ; $Return = $False }
+    if ( ( $ret=create_update_servicepolicy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all Service policy" ; $Return = $False }
     if ( ( $ret=create_update_role_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all Role"}
     $ret=create_lif_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore -nodeMatchRegEx $nodeMatchRegEx
     if ($ret.count -gt 0){
