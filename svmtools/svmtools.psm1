@@ -1172,11 +1172,11 @@ Function get_local_cDotcred ([string]$myCluster) {
 	}
 
 	$cred=read_cred_from_file $Global:CRED_CONF_FILE
-	if ( $cred -eq $null ) {
+	if ( $null -eq $cred ) {
         if(-not $Global:NonInteractive){
         	$status = set_cDotcred_from_cli $myCluster $Global:CRED_CONF_FILE
 		    $cred=read_cred_from_file $Global:CRED_CONF_FILE
-		    if ( $cred -eq $null ) {
+		    if ( $null -eq $cred ) {
 			    Write-LogError "ERROR: Unable to set your credential for $myCluster Exit" 
         		    clean_and_exit 1
 		    }
@@ -2056,14 +2056,14 @@ Function create_update_servicepolicy_dr(
 
         $VersionSecondary=Get-NcSystemVersionInfo -controller $mySecondaryController
         $VersionPrimary=Get-NcSystemVersionInfo -controller $myPrimaryController
-        if((($VersionPrimary.VersionTuple.Major -lt 9) -and ($VersionPrimary.VersionTuple.Minor -lt 10)) -or (($VersionSecondary.VersionTuple.Major -lt 9) -and ($VersionSecondary.VersionTuple.Major -lt 10))){
+        if((($VersionPrimary[0].VersionTuple.Generation -lt 9) -and ($VersionPrimary[0].VersionTuple.Major -lt 10)) -or (($VersionSecondary[0].VersionTuple.Generation -lt 9) -and ($VersionSecondary[0].VersionTuple.Major -lt 10))){
             Write-LogWarn "Your ctrl must at least run ONTAP version 9.10.1 to support Service Policy"
             $Return=$True
             Write-LogDebug "[$myPrimaryVserver]: end"
             return $Return
         }
-        if($Global:PSTKCall="Zapi"){
-            Write-LogWarn "You must PSTK core with REST call to support Service Policy"
+        if($Global:PSTKCall -eq "Zapi"){
+            Write-LogWarn "You must use PSTK core with REST call to support Service Policy"
             $Return=$True
             Write-LogDebug "[$myPrimaryVserver]: end"
             return $Return    
@@ -2094,7 +2094,119 @@ Function create_update_servicepolicy_dr(
             }    
         }
         if($Backup -eq $False){
-            foreach ($policy in $PrimaryServicePolicies)
+            $CredPrimary=get_local_cDotcred($myPrimaryController)
+            $CredSecondary=get_local_cDotcred($mySecondaryController)
+            $headers=
+            @{Accept='application/json'
+            ContentType='application/json'}
+            foreach ($Policy in $PrimaryServicePolicies){
+                $PolicyName=$Policy.Name
+                Write-LogDebug "Analyse Policy [$PolicyName]"
+                $PolicyScope=$Policy.Scope
+                $PolicyIpSpace=$Policy.Ipspace
+                $PolicyServices=$Policy.Services
+                # there is no REST call for this yet
+                # perform a REST CLI passthrough call to get detailed information about service-policy allowed-addresses
+                
+                $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/network/interface/service-policy?vserver="+$myPrimaryVserver+"&policy="+$PolicyName+"&fields=service_allowed_addresses")
+                $DetailedPrimaryService=Invoke-RestMethod -Method 'get' -Uri $url -Credential $CredPrimary -SkipCertificateCheck -ErrorVariable ErrorVar
+                if($? -ne $True){
+                    Write-LogError "ERROR: Unable to get service-allowed-addresses. Reason [$ErrorVar]"
+                    Write-LogDebug "[$myPrimaryVserver]: end"
+                    return $False
+                }
+                $DetailedPrimaryService=$DetailedPrimaryService.records
+                #$PrimaryServices=@()
+                #$SecondaryServices=@()
+                # Get Service Allowed Addresses from Primary Vserver
+                #foreach($ServiceRecord in $DetailedPrimaryService){
+                    #$ServiceRecordName=$ServiceRecord.Substring(0,$ServiceRecord.IndexOf(':'))
+                    $PrimaryServiceAllowedAddresses=$DetailedPrimaryService[0].service_allowed_addresses
+                    #$PolicyRecordAllowedAddresses=($PolicyRecord -replace ($($PolicyRecordName+':'),'')).spit(',')
+                    #$PolicyRecordAllowedAddresses=$PolicyRecord -replace ($($PolicyRecordName+':'),'')
+                    #$myobj=New-Object -TypeName PSObject -Property @{'ServiceName'=$PolicyRecordName;'ServiceAddresses'=$PolicyRecordAllowedAddresses}
+                    #$PrimaryServices+=$myobj
+                #}
+                
+                $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/network/interface/service-policy?vserver="+$mySecondaryVserver+"&policy="+$PolicyName+"&fields=service_allowed_addresses")
+                $DetailedSecondaryService=Invoke-RestMethod -Method 'get' -Uri $url -Credential $CredSecondary -SkipCertificateCheck -ErrorVariable ErrorVar
+                if($? -ne $True){
+                    Write-LogError "ERROR: Unable to get service-allowed-addresses. Reason [$ErrorVar]"
+                    Write-LogDebug "[$myPrimaryVserver]: end"
+                    return $False
+                }
+                if($DetailedSecondaryService.num_record -eq 0){
+                    # Create a new policy on secondary
+                    Write-LogDebug "Policy $PolicyName does not exist on Secondary"
+                    Write-Log "Create missing Policy [$PolicyName] on secondary Vserver [$mySecondaryVserver]"
+                    Write-LogDebug "New-NcNetServicePolicy -Name $PolicyName -Scope $PolicyScope -IpSpaceName $PolicyIpSpace -Services $PolicyServices -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+                    $ret=New-NcNetServicePolicy -Name $PolicyName -Scope $PolicyScope -IpSpaceName $PolicyIpSpace -Services $PolicyServices -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                    $DetailedSecondaryService=Invoke-RestMethod -Method 'get' -Uri $url -Credential $cred -SkipCertificateCheck -ErrorVariable ErrorVar
+                    if($? -ne $True){
+                        Write-LogError "ERROR: Unable to get service-allowed-addresses. Reason [$ErrorVar]"
+                        Write-LogDebug "[$myPrimaryVserver]: end"
+                        return $False
+                    }
+                }
+                $DetailedSecondaryService=$DetailedSecondaryService.records
+                # Get Service Allowed Addresses from Secondary Vserver
+                $SecondaryServiceAllowedAddresses=$DetailedSecondaryService[0].service_allowed_addresses
+                <# foreach($PolicyRecord in $DetailedSecondaryPolicy){
+                    $PolicyRecordName=$PolicyRecord.Substring(0,$PolicyRecord.IndexOf(':'))
+                    #$PolicyRecordAllowedAddresses=($PolicyRecord -replace ($($PolicyRecordName+':'),'')).spit(',')
+                    $PolicyRecordAllowedAddresses=$PolicyRecord -replace ($($PolicyRecordName+':'),'')
+                    $myobj=New-Object -TypeName PSObject -Property @{'ServiceName'=$PolicyRecordName;'ServiceAddresses'=$PolicyRecordAllowedAddresses}
+                    $SecondaryServices+=$myobj
+                } #>
+                # Now Compare allowed addresses from primary and secondary vserver
+                foreach($ServiceAllowedAddresses in $PrimaryServiceAllowedAddresses){
+                    $Name=$ServiceAllowedAddresses.Substring(0,$ServiceAllowedAddresses.IndexOf(':'))
+                    $Addresses=($ServiceAllowedAddresses -replace ($($Name+':'),'')).split(',')
+                    if($ServiceAllowedAddresses -match "data-nfs|data-cifs|data-flexcache"){
+                        Write-LogDebug "Ignore service [$Name] because Allowed-Addresses cannot be modified for [data-cifs|data-nfs|data-flexcache]"
+                        continue
+                    }
+                    if($SecondaryServiceAllowedAddresses | where-object {$_ -match $Name}){
+                        # Service Name exist on secondary
+                        $DetailedSecondaryService=$SecondaryServiceAllowedAddresses | where-object {$_ -match $($Name+':')}
+                        if($DetailedSecondaryService -ne $ServiceAllowedAddresses){
+                            # Need to modify Allowed Addresses for this service on secondary
+                            Write-LogDebug "Primary [$ServiceAllowedAddresses] different than secondary [$DetailedSecondaryService]"
+                            $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/network/interface/service-policy/modify-service")
+                            $body=@{
+                                vserver=$mySecondaryVserver
+                                policy=$PolicyName
+                                service=$Name
+                                allowed_addresses=$Addresses
+                            } | ConvertTo-Json
+                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                            if($? -ne $True){
+                                Write-LogError "ERROR: Unable to modify a service [$Name] for policy [$PolicyName]. Reason [$ErrorVar]"
+                                Write-LogDebug "[$myPrimaryVserver]: end"
+                                return $False
+                            }
+                        }
+                        Write-LogDebug "Primary [$ServiceAllowedAddresses] identical on secondary [$DetailedSecondaryService]"
+                    }else{
+                        # Service does not exist on secondary
+                        # need to create it
+                        Write-LogDebug "Service [$Name][$DetailedSecondaryService] does not exist on secondary"
+                        $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/network/interface/service-policy/add-service")
+                        $body=@{
+                            vserver=$mySecondaryVserver
+                            policy=$PolicyName
+                            service=$Name
+                            allowed_addresses=$Addresses
+                        } | ConvertTo-Json
+                        $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                        if($? -ne $True){
+                            Write-LogError "ERROR: Unable to add a service [$Name] for policy [$PolicyName]. Reason [$ErrorVar]"
+                            Write-LogDebug "[$myPrimaryVserver]: end"
+                            return $False
+                        }
+                    }
+                }
+            }
         }
         Write-LogDebug "[$myPrimaryVserver]: end"
         return $Return
