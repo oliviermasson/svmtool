@@ -1340,14 +1340,14 @@ if($null -eq $module){
         }
     }
 }
-<# if(($module.Version.Major -ge 9) -and ($module.Version.Minor -ge 11))
+$Global:PSTKCall="Zapi"
+if(($module.Version.Major -ge 9) -and ($module.Version.Minor -ge 11))
 {
     # With PSTK core currently need to check if cmdlt was executed with REST or ZAPI call
     # for this we will look in the logfile created by natoolkit
-    $Global:PSTKLOG=$($Global:ROOTLOGDIR+"PSTK.log")
-    # Set-NaToolkitConfiguration must be executed as admin...
-    Set-NaToolkitConfiguration -LogLevel Debug -LogToFile $Global:PSTKLOG -NoConsoleOutput
-} #>
+    $Global:PSTKCall="Rest"
+}
+Write-Log "Running PSTK in $Global:PSTKCall mode"
 
 #$PSTKVersion = Get-NaToolkitVersion
 <# if ($PSTKVersion.Major -lt $Global:MIN_MAJOR -and $PSTKVersion.Minor -lt $Global:MIN_MINOR -and $PSTKVersion.Minor -lt $Global:MIN_BUILD) {
