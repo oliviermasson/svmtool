@@ -2033,192 +2033,6 @@ Function create_update_firewallpolicy_dr(
 
 
 #############################################################################################
-# create_update_servicepolicy_dr
-# available only since ONTAP version 9.10.1
-# firewall policy will be deprecated soon
-# and only with PSTK Core with REST call
-Function create_update_servicepolicy_dr(
-    [NetApp.Ontapi.Filer.C.NcController] $myPrimaryController,
-    [NetApp.Ontapi.Filer.C.NcController] $mySecondaryController,
-    [string] $myPrimaryVserver,
-    [string] $mySecondaryVserver,
-    [string]$workOn=$mySecondaryVserver,
-    [bool]$Backup,
-    [bool]$Restore) 
-{
-    Try 
-    {
-        $Return=$True
-        Write-Log "[$workOn] Check SVM Service Policy"
-        Write-LogDebug "[$myPrimaryVserver]: start"
-        if($Backup -eq $True){Write-LogDebug "run in Backup mode [$myPrimaryVserver]"}
-        if($Restore -eq $True){Write-LogDebug "run in Restore mode [$myPrimaryVserver]"}
-
-        $VersionSecondary=Get-NcSystemVersionInfo -controller $mySecondaryController
-        $VersionPrimary=Get-NcSystemVersionInfo -controller $myPrimaryController
-        if((($VersionPrimary[0].VersionTuple.Generation -lt 9) -and ($VersionPrimary[0].VersionTuple.Major -lt 10)) -or (($VersionSecondary[0].VersionTuple.Generation -lt 9) -and ($VersionSecondary[0].VersionTuple.Major -lt 10))){
-            Write-LogWarn "Your ctrl must at least run ONTAP version 9.10.1 to support Service Policy"
-            $Return=$True
-            Write-LogDebug "[$myPrimaryVserver]: end"
-            return $Return
-        }
-        if($Global:PSTKCall -eq "Zapi"){
-            Write-LogWarn "You must use PSTK core with REST call to support Service Policy"
-            $Return=$True
-            Write-LogDebug "[$myPrimaryVserver]: end"
-            return $Return    
-        }
-        if($Restore -eq $False -and $Backup -eq $False){
-            $mySecondaryCluster = (Get-NcCluster -Controller $mySecondaryController  -ErrorVariable ErrorVar).ClusterName 
-            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCluster failed [$ErrorVar]" }
-        }
-        if($Restore -eq $False){
-            $PrimaryServicePolicies=Get-NcNetServicePolicy -Controller $myPrimaryController -Vserver $myPrimaryVserver  -ErrorVariable ErrorVar
-            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetServicePolicy failed [$ErrorVar]" }
-        }else{
-            if(Test-Path $($Global:JsonPath+"Get-NcNetServicePolicy.json")){
-                $PrimaryServicePolicies=Get-Content $($Global:JsonPath+"Get-NcNetServicePolicy.json") -Raw | ConvertFrom-Json
-            }else{
-                $Return=$False
-                $filepath=$($Global:JsonPath+"Get-NcNetServicePolicy.json")
-                Throw "ERROR: failed to read $filepath"
-            }    
-        }
-        if($Backup -eq $True){
-            $PrimaryServicePolicies | ConvertTo-Json -Depth 5 | Out-File -FilePath $($Global:JsonPath+"Get-NcNetServicePolicy.json") -Encoding ASCII -Width 65535
-            if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcNetServicePolicy.json") -ErrorAction SilentlyContinue) ){
-                Write-LogDebug "$($Global:JsonPath+"Get-NcNetServicePolicy.json") saved successfully"
-            }else{
-                Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcNetServicePolicy.json")"
-                $Return=$False
-            }    
-        }
-        if($Backup -eq $False){
-            $CredPrimary=get_local_cDotcred($myPrimaryController)
-            $CredSecondary=get_local_cDotcred($mySecondaryController)
-            $headers=
-            @{Accept='application/json'
-            ContentType='application/json'}
-            foreach ($Policy in $PrimaryServicePolicies){
-                $PolicyName=$Policy.Name
-                Write-LogDebug "Analyse Policy [$PolicyName]"
-                $PolicyScope=$Policy.Scope
-                $PolicyIpSpace=$Policy.Ipspace
-                $PolicyServices=$Policy.Services
-                # there is no REST call for this yet
-                # perform a REST CLI passthrough call to get detailed information about service-policy allowed-addresses
-                
-                $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/network/interface/service-policy?vserver="+$myPrimaryVserver+"&policy="+$PolicyName+"&fields=service_allowed_addresses")
-                $DetailedPrimaryService=Invoke-RestMethod -Method 'get' -Uri $url -Credential $CredPrimary -SkipCertificateCheck -ErrorVariable ErrorVar
-                if($? -ne $True){
-                    Write-LogError "ERROR: Unable to get service-allowed-addresses. Reason [$ErrorVar]"
-                    Write-LogDebug "[$myPrimaryVserver]: end"
-                    return $False
-                }
-                $DetailedPrimaryService=$DetailedPrimaryService.records
-                #$PrimaryServices=@()
-                #$SecondaryServices=@()
-                # Get Service Allowed Addresses from Primary Vserver
-                #foreach($ServiceRecord in $DetailedPrimaryService){
-                    #$ServiceRecordName=$ServiceRecord.Substring(0,$ServiceRecord.IndexOf(':'))
-                    $PrimaryServiceAllowedAddresses=$DetailedPrimaryService[0].service_allowed_addresses
-                    #$PolicyRecordAllowedAddresses=($PolicyRecord -replace ($($PolicyRecordName+':'),'')).spit(',')
-                    #$PolicyRecordAllowedAddresses=$PolicyRecord -replace ($($PolicyRecordName+':'),'')
-                    #$myobj=New-Object -TypeName PSObject -Property @{'ServiceName'=$PolicyRecordName;'ServiceAddresses'=$PolicyRecordAllowedAddresses}
-                    #$PrimaryServices+=$myobj
-                #}
-                
-                $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/network/interface/service-policy?vserver="+$mySecondaryVserver+"&policy="+$PolicyName+"&fields=service_allowed_addresses")
-                $DetailedSecondaryService=Invoke-RestMethod -Method 'get' -Uri $url -Credential $CredSecondary -SkipCertificateCheck -ErrorVariable ErrorVar
-                if($? -ne $True){
-                    Write-LogError "ERROR: Unable to get service-allowed-addresses. Reason [$ErrorVar]"
-                    Write-LogDebug "[$myPrimaryVserver]: end"
-                    return $False
-                }
-                if($DetailedSecondaryService.num_record -eq 0){
-                    # Create a new policy on secondary
-                    Write-LogDebug "Policy $PolicyName does not exist on Secondary"
-                    Write-Log "Create missing Policy [$PolicyName] on secondary Vserver [$mySecondaryVserver]"
-                    Write-LogDebug "New-NcNetServicePolicy -Name $PolicyName -Scope $PolicyScope -IpSpaceName $PolicyIpSpace -Services $PolicyServices -Vserver $mySecondaryVserver -Controller $mySecondaryController"
-                    $ret=New-NcNetServicePolicy -Name $PolicyName -Scope $PolicyScope -IpSpaceName $PolicyIpSpace -Services $PolicyServices -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
-                    $DetailedSecondaryService=Invoke-RestMethod -Method 'get' -Uri $url -Credential $cred -SkipCertificateCheck -ErrorVariable ErrorVar
-                    if($? -ne $True){
-                        Write-LogError "ERROR: Unable to get service-allowed-addresses. Reason [$ErrorVar]"
-                        Write-LogDebug "[$myPrimaryVserver]: end"
-                        return $False
-                    }
-                }
-                $DetailedSecondaryService=$DetailedSecondaryService.records
-                # Get Service Allowed Addresses from Secondary Vserver
-                $SecondaryServiceAllowedAddresses=$DetailedSecondaryService[0].service_allowed_addresses
-                <# foreach($PolicyRecord in $DetailedSecondaryPolicy){
-                    $PolicyRecordName=$PolicyRecord.Substring(0,$PolicyRecord.IndexOf(':'))
-                    #$PolicyRecordAllowedAddresses=($PolicyRecord -replace ($($PolicyRecordName+':'),'')).spit(',')
-                    $PolicyRecordAllowedAddresses=$PolicyRecord -replace ($($PolicyRecordName+':'),'')
-                    $myobj=New-Object -TypeName PSObject -Property @{'ServiceName'=$PolicyRecordName;'ServiceAddresses'=$PolicyRecordAllowedAddresses}
-                    $SecondaryServices+=$myobj
-                } #>
-                # Now Compare allowed addresses from primary and secondary vserver
-                foreach($ServiceAllowedAddresses in $PrimaryServiceAllowedAddresses){
-                    $Name=$ServiceAllowedAddresses.Substring(0,$ServiceAllowedAddresses.IndexOf(':'))
-                    $Addresses=($ServiceAllowedAddresses -replace ($($Name+':'),'')).split(',')
-                    if($ServiceAllowedAddresses -match "data-nfs|data-cifs|data-flexcache"){
-                        Write-LogDebug "Ignore service [$Name] because Allowed-Addresses cannot be modified for [data-cifs|data-nfs|data-flexcache]"
-                        continue
-                    }
-                    if($SecondaryServiceAllowedAddresses | where-object {$_ -match $Name}){
-                        # Service Name exist on secondary
-                        $DetailedSecondaryService=$SecondaryServiceAllowedAddresses | where-object {$_ -match $($Name+':')}
-                        if($DetailedSecondaryService -ne $ServiceAllowedAddresses){
-                            # Need to modify Allowed Addresses for this service on secondary
-                            Write-LogDebug "Primary [$ServiceAllowedAddresses] different than secondary [$DetailedSecondaryService]"
-                            $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/network/interface/service-policy/modify-service")
-                            $body=@{
-                                vserver=$mySecondaryVserver
-                                policy=$PolicyName
-                                service=$Name
-                                allowed_addresses=$Addresses
-                            } | ConvertTo-Json
-                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
-                            if($? -ne $True){
-                                Write-LogError "ERROR: Unable to modify a service [$Name] for policy [$PolicyName]. Reason [$ErrorVar]"
-                                Write-LogDebug "[$myPrimaryVserver]: end"
-                                return $False
-                            }
-                        }
-                        Write-LogDebug "Primary [$ServiceAllowedAddresses] identical on secondary [$DetailedSecondaryService]"
-                    }else{
-                        # Service does not exist on secondary
-                        # need to create it
-                        Write-LogDebug "Service [$Name][$DetailedSecondaryService] does not exist on secondary"
-                        $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/network/interface/service-policy/add-service")
-                        $body=@{
-                            vserver=$mySecondaryVserver
-                            policy=$PolicyName
-                            service=$Name
-                            allowed_addresses=$Addresses
-                        } | ConvertTo-Json
-                        $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
-                        if($? -ne $True){
-                            Write-LogError "ERROR: Unable to add a service [$Name] for policy [$PolicyName]. Reason [$ErrorVar]"
-                            Write-LogDebug "[$myPrimaryVserver]: end"
-                            return $False
-                        }
-                    }
-                }
-            }
-        }
-        Write-LogDebug "[$myPrimaryVserver]: end"
-        return $Return
-    }
-    catch
-    {
-        handle_error $_ $myPrimaryVserver
-	    return $false        
-    }
-}
-
-#############################################################################################
 # get_vserver_clone used by show_dr
 Function get_vserver_clone(
     [NetApp.Ontapi.Filer.C.NcController] $mySecondaryController,
@@ -2257,6 +2071,10 @@ Function get_vserver_clone(
 
 #############################################################################################
 # create_update_usermapping_dr
+<#
+.SYNOPSIS
+Deals with name-mapping Windows<->Unix configuration
+#>
 Function create_update_usermapping_dr(
     [NetApp.Ontapi.Filer.C.NcController] $myPrimaryController,
     [NetApp.Ontapi.Filer.C.NcController] $mySecondaryController,
@@ -2289,7 +2107,7 @@ Function create_update_usermapping_dr(
         }
         if($Backup -eq $True){
             $PrimaryMapping | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcNameMapping.json") -Encoding ASCII -Width 65535
-            if( ($ret=get-item $($Global:JsonPath+"Get-NcNameMapping.json") -ErrorAction SilentlyContinue) -ne $null ){
+            if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcNameMapping.json") -ErrorAction SilentlyContinue) ){
                 Write-LogDebug "$($Global:JsonPath+"Get-NcNameMapping.json") saved successfully"
             }else{
                 Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcNameMapping.json")"
@@ -2308,10 +2126,15 @@ Function create_update_usermapping_dr(
                 $template.Vserver=$mySecondaryVserver
                 $template.Pattern=$MappingPattern
                 $template.Direction=$MappingDirection
-                Write-LogDebug "Get-NcNameMapping -Query $template -Controller $mySecondaryController"
-                $SecondaryMapping=Get-NcNameMapping -Query $template -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                Write-LogDebug "Get-NcNameMapping -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Pattern $MappingPattern -Direction $MappingDirection"
+                $SecondaryMapping=Get-NcNameMapping -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Pattern $MappingPattern -Direction $MappingDirection -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNameMapping failed [$ErrorVar]" }
                 if($SecondaryMapping.count -eq 0){
+                    $patternIpNetmask = "^([1-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])(\.([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])){3}\/([1-9]|1[0-9]|2[0-9]|3[0-2])$"
+                    if(-not ($MappingAddress -match $patternIpNetmask)){
+                        Write-LogDebug "Ignore MappingAddress [$MappingAddress] cause not in format [X.X.X.X/Netmask length]"
+                        $MappingAddress=""
+                    }
                     Write-Log "[$workOn] Add new User Mapping entry [$MappingDirection] [$MappingPosition] [$MappingPattern] [$MappingReplacement] [$MappingAddress] [$MappingHostname] on [$mySecondaryVserver]"
                     Write-LogDebug "New-NcNameMapping -Direction $MappingDirection -Position $MappingPosition -Pattern $MappingPattern -Replacement $MappingReplacement -Address $MappingAddress -Hostname $MappingHostname -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
                     $out=New-NcNameMapping -Direction $MappingDirection -Position $MappingPosition -Pattern $MappingPattern -Replacement $MappingReplacement -Address $MappingAddress -Hostname $MappingHostname -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
@@ -2348,6 +2171,10 @@ Function create_update_usermapping_dr(
 
 #############################################################################################
 # create_update_localuser_dr
+<#
+.SYNOPSIS
+Deals with security login user and group
+#>
 Function create_update_localuser_dr(
     [NetApp.Ontapi.Filer.C.NcController] $myPrimaryController,
     [NetApp.Ontapi.Filer.C.NcController] $mySecondaryController,
@@ -2380,7 +2207,7 @@ Function create_update_localuser_dr(
         }
         if($Backup -eq $True){
             $PrimaryUsers | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcUser.json") -Encoding ASCII -Width 65535
-            if( ($ret=get-item $($Global:JsonPath+"Get-NcUser.json") -ErrorAction SilentlyContinue) -ne $null ){
+            if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcUser.json") -ErrorAction SilentlyContinue) ){
                 Write-LogDebug "$($Global:JsonPath+"Get-NcUser.json") saved successfully"
             }else{
                 Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcUser.json")"
@@ -2395,7 +2222,7 @@ Function create_update_localuser_dr(
             if(($SecondaryUsers.count) -gt 0){
                 $PrimaryUsers=$PrimaryUsers | sort-object
                 $SecondaryUsers=$SecondaryUsers | sort-object
-                $differences=Compare-Object -ReferenceObject $PrimaryUsers -DifferenceObject $SecondaryUsers -Property UserName,Application,AuthMethod,RoleName,IsLocked | Sort-Object -Property SideIndicator -Descending
+                $differences=Compare-Object -ReferenceObject $PrimaryUsers -DifferenceObject $SecondaryUsers -Property UserName,Application,AuthMethod,RoleName,IsLocked,SecondAuthenticationMethod | Sort-Object -Property SideIndicator -Descending
                 $PasswordEntered=@()
                 foreach($user in $differences | where-object {$_.UserName -notin @("vsadmin","vsadmin-protocol","vsadmin-readonly","vsadmin-volume","vsadmin-backup","vsadmin-snaplock")}){
                     $Username=$user.UserName
@@ -2403,6 +2230,7 @@ Function create_update_localuser_dr(
                     $Authmet=$user.AuthMethod
                     $Rolename=$user.RoleName
                     $Islocked=$user.IsLocked
+                    $SecondMethod=$user.SecondAuthenticationMethod
                     if($user.SideIndicator -eq "=>"){
                         Write-Log "[$workOn] Remove user [$Username] [$Application] [$Authmet] [$Rolename] [$Islocked] from [$mySecondaryVserver]"
                         Write-LogDebug "Remove-NcUser -UserName $Username -Vserver $mySecondaryVserver -Application $Application -AuthMethod $Authmet -Controller $mySecondaryController"
@@ -2417,8 +2245,8 @@ Function create_update_localuser_dr(
                             $passwordIsGood=$False
                             do{ 
                                 $password=get_pwd_from_cli -workOn $workOn -for "user" -name $Username 
-                                Write-LogDebug "New-NcUser -UserName $Username -Role $Rolename -Vserver $mySecondaryVserver -Application $Application -AuthMethod $Authmet -Password xxxxxxxx -Controller $mySecondaryController"
-                                $out=New-NcUser -UserName $Username -Role $Rolename -Vserver $mySecondaryVserver -Application $Application -AuthMethod $Authmet -Password $password -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                Write-LogDebug "New-NcUser -UserName $Username -Role $Rolename -Vserver $mySecondaryVserver -Application $Application -AuthMethod $Authmet -Password xxxxxxxx -SecondAuthenticationMethod $SecondMethod -Controller $mySecondaryController"
+                                $out=New-NcUser -UserName $Username -Role $Rolename -Vserver $mySecondaryVserver -Application $Application -AuthMethod $Authmet -Password $password -SecondAuthenticationMethod $SecondMethod -Controller $mySecondaryController  -ErrorVariable ErrorVar
                                 if ( $? -ne $True ) { 
                                     if($ErrorVar -match "New password must be different than the old password"){
                                         Write-LogWarn "[$workOn] Password will not be changed`nPassword entered is already in use for user [$UserName]"
@@ -2499,13 +2327,13 @@ Function create_update_localuser_dr(
             Write-LogDebug "Check Factory User unlocked"
             $user=$PrimaryUsers | where-object {$_.UserName -in @("vsadmin") -and $_.Islocked -eq $False} | Sort-Object -Unique
             Write-LogDebug "user found = [$user]"
-            if($user -eq $null){
+            if($null -eq $user){
                 Write-LogDebug "No Factory user unlocked to create on destination"
             }else{
                 $userName=$User.UserName
                 Write-LogDebug "Check user [$userName] on [$mySecondaryVserver]"
                 $secUser=$SecondaryUsers | Where-Object {$_.UserName -eq $UserName -and $_.Islocked -eq $False}
-                if($secUser -eq $null){
+                if($null -eq $secUser){
                     Write-LogDebug "Need to unlock user [$userName] on [$mySecondaryVserver]"
                     $passwordIsGood=$False
                     do{
@@ -2548,6 +2376,10 @@ Function create_update_localuser_dr(
 }
 
 #############################################################################################
+<#
+.SYNOPSIS
+Deals with name-service unix-user and unix-group
+#>
 Function create_update_localunixgroupanduser_dr(
     [NetApp.Ontapi.Filer.C.NcController] $myPrimaryController,
     [NetApp.Ontapi.Filer.C.NcController] $mySecondaryController,
@@ -2580,7 +2412,7 @@ Function create_update_localunixgroupanduser_dr(
         }
         if($Backup -eq $True){
             $PrimaryUserList | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcNameMappingUnixUser.json") -Encoding ASCII -Width 65535
-            if( ($ret=get-item $($Global:JsonPath+"Get-NcNameMappingUnixUser.json") -ErrorAction SilentlyContinue) -ne $null ){
+            if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcNameMappingUnixUser.json") -ErrorAction SilentlyContinue) ){
                 Write-LogDebug "$($Global:JsonPath+"Get-NcNameMappingUnixUser.json") saved successfully"
             }else{
                 Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcNameMappingUnixUser.json")"
@@ -2629,7 +2461,7 @@ Function create_update_localunixgroupanduser_dr(
         }
         if($Backup -eq $True){
             $PrimaryGroupList | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcNameMappingUnixGroup.json") -Encoding ASCII -Width 65535
-            if( ($ret=get-item $($Global:JsonPath+"Get-NcNameMappingUnixGroup.json") -ErrorAction SilentlyContinue) -ne $null ){
+            if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcNameMappingUnixGroup.json") -ErrorAction SilentlyContinue) ){
                 Write-LogDebug "$($Global:JsonPath+"Get-NcNameMappingUnixGroup.json") saved successfully"
             }else{
                 Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcNameMappingUnixGroup.json")"
@@ -2728,10 +2560,12 @@ Function create_update_role_dr(
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCluster failed [$ErrorVar]" }
         }
         if($Restore -eq $False){
-            $template_source=Get-NcRole -Template -Controller $myPrimaryController
-            $template_source.Vserver=$myPrimaryVserver
-            Write-LogDebug "Get-NcRole -Query $template_source -Controller $myPrimaryController"
-            $source_roles=Get-NcRole -Query $template_source -Controller $myPrimaryController  -ErrorVariable ErrorVar
+            # $template_source=Get-NcRole -Template -Controller $myPrimaryController
+            # $template_source.Vserver=$myPrimaryVserver
+            # Write-LogDebug "Get-NcRole -Query $template_source -Controller $myPrimaryController"
+            # $source_roles=Get-NcRole -Query $template_source -Controller $myPrimaryController  -ErrorVariable ErrorVar
+            Write-LogDebug "Get-NcRole -vserver $myPrimaryVserver -role !vsadmin* -Controller $myPrimaryController"
+            $source_roles=Get-NcRole -vserver $myPrimaryVserver -role !vsadmin* -Controller $myPrimaryController -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return=$false; throw "ERROR: Get-NcRole [$ErrorVar]" }
         }else{
             if(Test-Path $($Global:JsonPath+"Get-NcRole.json")){
@@ -2744,21 +2578,24 @@ Function create_update_role_dr(
         }
         if($Backup -eq $True){
             $source_roles | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcRole.json") -Encoding ASCII -Width 65535
-            if( ($ret=get-item $($Global:JsonPath+"Get-NcRole.json") -ErrorAction SilentlyContinue) -ne $null ){
+            if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcRole.json") -ErrorAction SilentlyContinue) ){
                 Write-LogDebug "$($Global:JsonPath+"Get-NcRole.json") saved successfully"
             }else{
                 Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcRole.json")"
                 $Return=$False
             }    
         }else{
-            $template_dest=Get-NcRole -Template -Controller $mySecondaryController
-            $template_dest.Vserver=$mySecondaryVserver
-            $source_roles=$source_roles | Where-Object {$_.RoleName -notin @("vsadmin","vsadmin-protocol","vsadmin-readonly","vsadmin-volume","vsadmin-backup","vsadmin-snaplock")}
-            Write-LogDebug "Get-NcRole -Query $template_dest -Controller $mySecondaryController"
-            $dest_roles=Get-NcRole -Query $template_dest -Controller $mySecondaryController  -ErrorVariable ErrorVar
+            # $template_dest=Get-NcRole -Template -Controller $mySecondaryController
+            # $template_dest.Vserver=$mySecondaryVserver
+            #$source_roles=$source_roles | Where-Object {$_.RoleName -notin @("vsadmin","vsadmin-protocol","vsadmin-readonly","vsadmin-volume","vsadmin-backup","vsadmin-snaplock")}
+            # Write-LogDebug "Get-NcRole -Query $template_dest -Controller $mySecondaryController"
+            # $dest_roles=Get-NcRole -Query $template_dest -Controller $mySecondaryController  -ErrorVariable ErrorVar
+            Write-LogDebug "Get-NcRole -vserver $mySecondaryVserver -role !vsadmin* -Controller $mySecondaryController"
+            $dest_roles=Get-NcRole -vserver $mySecondaryVserver -role !vsadmin* -Controller $mySecondaryController -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return=$false; throw  "ERROR: Get-NcRole [$ErrorVar]" }
-            $dest_roles=$dest_roles | Where-Object {$_.RoleName -notin @("vsadmin","vsadmin-protocol","vsadmin-readonly","vsadmin-volume","vsadmin-backup","vsadmin-snaplock")}
-            if($dest_roles -ne $null){
+            #$dest_roles=$dest_roles | Where-Object {$_.RoleName -notin @("vsadmin","vsadmin-protocol","vsadmin-readonly","vsadmin-volume","vsadmin-backup","vsadmin-snaplock")}
+            # TODO Will have to validate if we continue to delete all existing role on dest, instead of only delete common role with source to recreate them from source configuration, which would allow to have additional role on secondary
+            if($null -ne $dest_roles){
                 foreach($role in $dest_roles){
                     $roleName=$role.RoleName
                     $roleAccessLevel=$role.AccessLevel
@@ -2777,14 +2614,27 @@ Function create_update_role_dr(
                 $roleCommandDirectoryName=$role.CommandDirectoryName
                 $roleQuery=$role.RoleQuery
                 $roleVserver=$mySecondaryVserver
-                Write-Log "[$workOn] Create this role : [$roleName] [$roleAccessLevel] [$roleCommandDirectoryName] [$roleQuery] on [$roleVserver]"
                 if($roleQuery.length -eq 0 -or $roleQuery.count -eq 0){
                     Write-LogDebug "Set roleQuery to null string"
                     $roleQuery=""
                 }
-                Write-LogDebug "New-NcRole -Role $roleName -Vserver $roleVserver -CommandDirectory $roleCommandDirectoryName -AccessLevel $roleAccessLevel -RoleQuery $roleQuery -Controller $mySecondaryCluster"
-                $out=New-NcRole -Role $roleName -Vserver $roleVserver -CommandDirectory $roleCommandDirectoryName -AccessLevel $roleAccessLevel -RoleQuery $roleQuery -Controller $mySecondaryController -ErrorVariable ErrorVar 
-                if ( $? -ne $True ) { $Return=$false; throw  "Failed to create role : [$roleName] [$roleAccessLevel] [$roleCommandDirectoryName] [$roleQuery] on [$roleVserver] [$ErrorVar]"}
+                if($null -eq (Get-NcRole -Role $roleName -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorAction SilentlyContinue)){
+                    Write-Log "[$workOn] Create this role privilege : [$roleName] [$roleAccessLevel] [$roleCommandDirectoryName] [$roleQuery] on [$roleVserver]"
+                    Write-LogDebug "New-NcRole -Role $roleName -Vserver $roleVserver -CommandDirectory $roleCommandDirectoryName -AccessLevel $roleAccessLevel -RoleQuery $roleQuery -Controller $mySecondaryCluster"
+                    $out=New-NcRole -Role $roleName -Vserver $roleVserver -CommandDirectory $roleCommandDirectoryName -AccessLevel $roleAccessLevel -RoleQuery $roleQuery -Controller $mySecondaryController -ErrorVariable ErrorVar 
+                    if ( $? -ne $True ) { $Return=$false; throw  "Failed to create role : [$roleName] [$roleAccessLevel] [$roleCommandDirectoryName] [$roleQuery] on [$roleVserver] [$ErrorVar]"}
+                }else{
+                    Write-Log "[$workOn] Add this role privilege : [$roleName] [$roleAccessLevel] [$roleCommandDirectoryName] [$roleQuery] on [$roleVserver]"
+                    if($Global:PSTKCall -eq "Rest"){
+                        Write-LogDebug "Role already exist"
+                        Write-LogDebug "New-NcRolePrivilege -Name $roleName -Path $roleCommandDirectoryName -Access $roleAccessLevel -OwnerName $mySecondaryVserver -Query $roleQuery -Controller $mySecondaryController"
+                        $out=New-NcRolePrivilege -Name $roleName -Path $roleCommandDirectoryName -Access $roleAccessLevel -OwnerName $mySecondaryVserver -Query $roleQuery -Controller $mySecondaryController -ErrorVariable ErrorVar
+                    }else{
+                        Write-LogDebug "New-NcRole -Role $roleName -Vserver $roleVserver -CommandDirectory $roleCommandDirectoryName -AccessLevel $roleAccessLevel -RoleQuery $roleQuery -Controller $mySecondaryCluster"
+                        $out=New-NcRole -Role $roleName -Vserver $roleVserver -CommandDirectory $roleCommandDirectoryName -AccessLevel $roleAccessLevel -RoleQuery $roleQuery -Controller $mySecondaryController -ErrorVariable ErrorVar 
+                    }
+                    if ( $? -ne $True ) { $Return=$false; throw  "Failed to create role : [$roleName] [$roleAccessLevel] [$roleCommandDirectoryName] [$roleQuery] on [$roleVserver] [$ErrorVar]"}
+                }
             }
         }   
         Write-LogDebug "Check Role config differences"
@@ -2803,7 +2653,7 @@ Function create_update_role_dr(
             }
             if($Backup -eq $True){
                 $PrimaryRoleConfig | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcRoleConfig-"+$role+".json") -Encoding ASCII -Width 65535
-                if( ($ret=get-item $($Global:JsonPath+"Get-NcRoleConfig-"+$role+".json") -ErrorAction SilentlyContinue) -ne $null ){
+                if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcRoleConfig-"+$role+".json") -ErrorAction SilentlyContinue) ){
                     Write-LogDebug "$($Global:JsonPath+"Get-NcRoleConfig-"+$role+".json") saved successfully"
                 }else{
                     Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcRoleConfig-"+$role+".json")"
@@ -2838,7 +2688,7 @@ Function create_update_role_dr(
                 Write-LogDebug "Get-NcRoleConfig -Role $role -Vserver $mySecondaryVserver -Controller $mySecondaryController"
                 $SecondaryRoleConfig=Get-NcRoleConfig -Role $role -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return=$false; throw  "Failed Get-NcRoleConfig [$ErrorVar]"}
-                if($PrimaryRoleConfig -ne $null -and $SecondaryRoleConfig -ne $null){
+                if($null -ne $PrimaryRoleConfig -and $null -ne $SecondaryRoleConfig){
                     $PrimaryRoleConfigSorted=$PrimaryRoleConfig | sort-object
                     $SecondaryRoleConfigSorted=$SecondaryRoleConfig | sort-object
                     $diff=Compare-Object -ReferenceObject $PrimaryRoleConfigSorted -DifferenceObject $SecondaryRoleConfigSorted -Property MinUsernameSize,RequireUsernameAlphaNumeric,MinPasswordSize,RequirePasswordAlphaNumeric,`
@@ -2900,7 +2750,7 @@ Function create_update_fpolicy_dr(
         }
         if($Backup -eq $True){
             $PrimaryFpolicyEngineList | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcFpolicyExternalEngine.json") -Encoding ASCII -Width 65535
-            if( ($ret=get-item $($Global:JsonPath+"Get-NcFpolicyExternalEngine.json") -ErrorAction SilentlyContinue) -ne $null ){
+            if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcFpolicyExternalEngine.json") -ErrorAction SilentlyContinue) ){
                 Write-LogDebug "$($Global:JsonPath+"Get-NcFpolicyExternalEngine.json") saved successfully"
             }else{
                 Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcFpolicyExternalEngine.json")"
@@ -7905,7 +7755,7 @@ Function create_lif_dr(
     [bool]$Restore,
     [switch]$ForClone,
     [string]$nodeMatchRegEx)
- {
+{
 Try {
     $Return = $True 
     Write-Log "[$workOn] Check SVM LIF"
@@ -7914,8 +7764,13 @@ Try {
     if($Restore -eq $True){Write-LogDebug "run in Restore mode [$myPrimaryVserver]";$lifRestored=@()}
     #backup or restore NetInterface List
     if($Restore -eq $False){
-        $PrimaryInterfaceList = Get-NcNetInterface -Role DATA -VserverContext $myPrimaryVserver -DataProtocols cifs,nfs,none,iscsi -Controller $myPrimaryController  -ErrorVariable ErrorVar 
-        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
+        if($Global:PSTKCall -eq "Rest"){
+            $PrimaryInterfaceList = Get-NcNetInterface -Vserver $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar 
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }  
+        }else{
+            $PrimaryInterfaceList = Get-NcNetInterface -Role DATA -VserverContext $myPrimaryVserver -DataProtocols cifs,nfs,none,iscsi -Controller $myPrimaryController  -ErrorVariable ErrorVar 
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
+        }
         $PrimaryNetPortList = Get-NcNetPort -Controller $myPrimaryController -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetPort failed [$ErrorVar]" }
     }else{
@@ -7964,6 +7819,7 @@ Try {
         $PrimaryDnsDomainName=$PrimaryInterface.DnsDomainName
         $PrimaryRole=$PrimaryInterface.Role
         $PrimaryCurrentNode=$PrimaryInterface.CurrentNode
+        if($Global:PSTKCall -eq "Rest"){$PrimaryServicePolicy=$PrimaryInterface.ServicePolicy}
         #$PrimaryCurrentPortObj=Get-NcNetPort -Name $PrimaryCurrentPort -Node $PrimaryCurrentNode -Controller $myPrimaryController -ErrorVariable ErrorVar
         $PrimaryCurrentPortObj=$PrimaryNetPortList | where-object {($_.Port -eq $PrimaryCurrentPort) -and ($_.Node -eq $PrimaryCurrentNode)}   
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: find Net Port failed [$ErrorVar]" }
@@ -8133,18 +7989,30 @@ Try {
                                     Write-LogDebug "Dns Domain will remain empty for temporary LIF"
                                     $PrimaryDnsDomainName=""    
                                 }
+                                if($APIPA_Mode){
+                                    $AdminStatus="down"
+                                }else{
+                                    $AdminStatus="up"
+                                }
                                 if ( ( $PrimaryFirewallPolicy -eq "mgmt" ) -and ( $PrimaryDataProtocols -eq "none" ) ){
                                     Write-Log "[$workOn] LIF [$LIF] is the Administration LIF it must be in Administrative up status"
-                                    Write-LogDebug "New-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver -Role $PrimaryRole -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -FirewallPolicy $PrimaryFirewallPolicy -Address $myIpAddr -Netmask $myNetMask -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus up -AutoRevert $PrimaryIsAutoRevert -Controller $mySecondaryController"
-                                    $SecondaryInterface=New-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver  -Role $PrimaryRole -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -FirewallPolicy $PrimaryFirewallPolicy -Address $myIpAddr -Netmask $myNetMask -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus up -AutoRevert $PrimaryIsAutoRevert -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                    # Write-LogDebug "New-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver -Role $PrimaryRole -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -FirewallPolicy $PrimaryFirewallPolicy -Address $myIpAddr -Netmask $myNetMask -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus up -AutoRevert $PrimaryIsAutoRevert -Controller $mySecondaryController"
+                                    # $SecondaryInterface=New-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver  -Role $PrimaryRole -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -FirewallPolicy $PrimaryFirewallPolicy -Address $myIpAddr -Netmask $myNetMask -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus up -AutoRevert $PrimaryIsAutoRevert -Controller $mySecondaryController  -ErrorVariable ErrorVar
                                 }elseif($Global:ForceRestoreOriginal.IsPresent){
                                     Write-LogDebug "ForceRestoreOriginal is Present, so force restored LIF to up"
-                                    Write-LogDebug "New-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver  -Role $PrimaryRole -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -FirewallPolicy $PrimaryFirewallPolicy -Address $myIpAddr -Netmask $myNetMask -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus up -AutoRevert $PrimaryIsAutoRevert  -Controller $mySecondaryController"
-                                    $SecondaryInterface=New-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver  -Role $PrimaryRole -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -FirewallPolicy $PrimaryFirewallPolicy -Address $myIpAddr -Netmask $myNetMask -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus up -AutoRevert $PrimaryIsAutoRevert  -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                    # Write-LogDebug "New-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver  -Role $PrimaryRole -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -FirewallPolicy $PrimaryFirewallPolicy -Address $myIpAddr -Netmask $myNetMask -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus up -AutoRevert $PrimaryIsAutoRevert  -Controller $mySecondaryController"
+                                    # $SecondaryInterface=New-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver  -Role $PrimaryRole -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -FirewallPolicy $PrimaryFirewallPolicy -Address $myIpAddr -Netmask $myNetMask -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus up -AutoRevert $PrimaryIsAutoRevert  -Controller $mySecondaryController  -ErrorVariable ErrorVar
                                 }else{
                                     Write-LogDebug "Normal behavior : Create LIF with admin-state set to down"
-                                    Write-LogDebug "New-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver  -Role $PrimaryRole -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -FirewallPolicy $PrimaryFirewallPolicy -Address $myIpAddr -Netmask $myNetMask -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus down -AutoRevert $PrimaryIsAutoRevert  -Controller $mySecondaryController"
-                                    $SecondaryInterface=New-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver  -Role $PrimaryRole -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -FirewallPolicy $PrimaryFirewallPolicy -Address $myIpAddr -Netmask $myNetMask -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus down -AutoRevert $PrimaryIsAutoRevert  -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                    # Write-LogDebug "New-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver  -Role $PrimaryRole -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -FirewallPolicy $PrimaryFirewallPolicy -Address $myIpAddr -Netmask $myNetMask -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus down -AutoRevert $PrimaryIsAutoRevert  -Controller $mySecondaryController"
+                                    # $SecondaryInterface=New-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver  -Role $PrimaryRole -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -FirewallPolicy $PrimaryFirewallPolicy -Address $myIpAddr -Netmask $myNetMask -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus down -AutoRevert $PrimaryIsAutoRevert  -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                }
+                                if($Global:PSTKCall -eq "Rest"){
+                                    Write-LogDebug "New-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver -ServicePolicy $PrimaryServicePolicy -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -Address $myIpAddr -Netmask $myNetMask -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus $AdminStatus -AutoRevert $PrimaryIsAutoRevert -Controller $mySecondaryController -ErrorVariable ErrorVar"
+                                    $SecondaryInterface=New-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver -ServicePolicy $PrimaryServicePolicy -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -Address $myIpAddr -Netmask $myNetMask -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus $AdminStatus -AutoRevert $PrimaryIsAutoRevert -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                }else{
+                                    Write-LogDebug "New-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver  -Role $PrimaryRole -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -FirewallPolicy $PrimaryFirewallPolicy -Address $myIpAddr -Netmask $myNetMask -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus $AdminStatus -AutoRevert $PrimaryIsAutoRevert  -Controller $mySecondaryController"
+                                    $SecondaryInterface=New-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver  -Role $PrimaryRole -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -FirewallPolicy $PrimaryFirewallPolicy -Address $myIpAddr -Netmask $myNetMask -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus $AdminStatus -AutoRevert $PrimaryIsAutoRevert  -Controller $mySecondaryController -ErrorVariable ErrorVar
                                 }
                                 #exit 0
                                 if($BackupOfGateway){
@@ -8384,14 +8252,14 @@ Try {
     }
     if($Backup -eq $True){
         $PrimaryDNS | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcNetDns.json") -Encoding ASCII -Width 65535
-        if( ($ret=get-item $($Global:JsonPath+"Get-NcNetDns.json") -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcNetDns.json") -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$($Global:JsonPath+"Get-NcNetDns.json") saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcNetDns.json")"
             $Return=$False
         }
     }
-	if ( $PrimaryDNS -eq $null ) {
+	if ( $null -eq $PrimaryDNS ) {
 		Write-Log "[$workOn] No DNS service found on Vserver [$myPrimaryVserver]"
         Write-LogDebug "[$myPrimaryVserver]: end"
 		return $True
@@ -8405,9 +8273,11 @@ Try {
             $SecondaryDNS=Get-NcNetDns -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetDns failed [$ErrorVar]" }
             if ( $null -eq $SecondaryDNS ) {
-                if($Global:Run_Mode -eq "ConfigureDR" -or $Global:Run_Mode -eq "Migrate"){
-                    Write-LogDebug "New-NcNetDns -Domains $PrimaryDomains -NameServers $PrimaryNameServers -State $PrimaryDnsState -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                    $out=New-NcNetDns -Domains $PrimaryDomains -NameServers $PrimaryNameServers -State $PrimaryDnsState -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ErrorAction SilentlyContinue
+                <# if($Global:Run_Mode -eq "ConfigureDR" -or $Global:Run_Mode -eq "Migrate"){
+                    # Write-LogDebug "New-NcNetDns -Domains $PrimaryDomains -NameServers $PrimaryNameServers -State $PrimaryDnsState -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                    # $out=New-NcNetDns -Domains $PrimaryDomains -NameServers $PrimaryNameServers -State $PrimaryDnsState -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ErrorAction SilentlyContinue
+                    Write-LogDebug "New-NcNetDns -Domains $PrimaryDomains -NameServers $PrimaryNameServers -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                    $out=New-NcNetDns -Domains $PrimaryDomains -NameServers $PrimaryNameServers -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ErrorAction SilentlyContinue
                     if ( $? -ne $True ) {
                         if($ErrorVar[0].ToString() -match "skip-config-validation"){
 
@@ -8415,24 +8285,30 @@ Try {
                             Write-LogDebug "Force creation of DNS without verify config on destination"
                             $out=New-NcNetDns -Domains $PrimaryDomains -NameServers $PrimaryNameServers -State $PrimaryDnsState -SkipConfigValidation -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcNetDns failed [$ErrorVar]" }
-                            <# Write-LogDebug "Do you want to force creation of DNS without verify config on destination?"
-                            $ans=Read-HostOptions -question "[$myPrimaryVserver] Do you want to force creation of DNS without verify config on destination?" -options "y/n" -default "y"
+                            #  Write-LogDebug "Do you want to force creation of DNS without verify config on destination?"
+                            # $ans=Read-HostOptions -question "[$myPrimaryVserver] Do you want to force creation of DNS without verify config on destination?" -options "y/n" -default "y"
 
-                            if($ans -eq "y"){
-                                Write-LogDebug "New-NcNetDns -Domains $PrimaryDomains -NameServers $PrimaryNameServers -State $PrimaryDnsState -SkipConfigValidation -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                                $out=New-NcNetDns -Domains $PrimaryDomains -NameServers $PrimaryNameServers -State $PrimaryDnsState -SkipConfigValidation -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcNetDns failed [$ErrorVar]" }
-                            } #>    
+                            # if($ans -eq "y"){
+                            #     Write-LogDebug "New-NcNetDns -Domains $PrimaryDomains -NameServers $PrimaryNameServers -State $PrimaryDnsState -SkipConfigValidation -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                            #     $out=New-NcNetDns -Domains $PrimaryDomains -NameServers $PrimaryNameServers -State $PrimaryDnsState -SkipConfigValidation -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                            #     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcNetDns failed [$ErrorVar]" }
+                            # }     
                         }else{ 
                             $Return = $False
                             throw "[$myPrimaryVserver] ERROR: New-NcNetDns failed [$ErrorVar]" 
                         }
-                    }  
-                }else{
-                    Write-LogDebug "New-NcNetDns -Domains $PrimaryDomains -NameServers $PrimaryNameServers -State $PrimaryDnsState -SkipConfigValidation -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                    $out=New-NcNetDns -Domains $PrimaryDomains -NameServers $PrimaryNameServers -State $PrimaryDnsState -SkipConfigValidation -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                    } #>  
+                # }else{
+                    if($Global:PSTKCall -eq "Rest"){
+                        Write-LogDebug "New-NcNetDns -Domains $PrimaryDomains -NameServers $PrimaryNameServers -SkipConfigValidation -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                        $out=New-NcNetDns -Domains $PrimaryDomains -NameServers $PrimaryNameServers -SkipConfigValidation -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                    }else{
+                        Write-LogDebug "New-NcNetDns -Domains $PrimaryDomains -NameServers $PrimaryNameServers -State $PrimaryDnsState -SkipConfigValidation -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                        $out=New-NcNetDns -Domains $PrimaryDomains -NameServers $PrimaryNameServers -State $PrimaryDnsState -SkipConfigValidation -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                    }
+                    
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcNetDns failed [$ErrorVar]" }
-                }
+                # }
             }else{
                 $SecondaryDnsState=$SecondaryDNS.DnsState 
                 $SecondaryDomains=$SecondaryDNS.Domains
@@ -9404,6 +9280,10 @@ Catch {
 
 
 #############################################################################################
+<#
+.SYNOPSIS
+Deal with LDAP Client config, LDAP schema
+#>
 Function create_update_LDAP_dr (
     [NetApp.Ontapi.Filer.C.NcController] $myPrimaryController,
     [NetApp.Ontapi.Filer.C.NcController] $mySecondaryController,
@@ -9434,14 +9314,14 @@ Try {
     }
     if($Backup -eq $True){
         $PrimaryLDAP | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcLdapConfig.json") -Encoding ASCII -Width 65535
-        if( ($ret=get-item $($Global:JsonPath+"Get-NcLdapConfig.json") -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcLdapConfig.json") -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$($Global:JsonPath+"Get-NcLdapConfig.json") saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcLdapConfig.json")"
             $Return=$False
         }
     }
-    if ($PrimaryLDAP -ne $null){
+    if ($null -ne $PrimaryLDAP){
         $PrimClient=$PrimaryLDAP.ClientConfig
         $PrimClientEnabled=$PrimaryLDAP.ClientEnabled
         Write-Log "[$workOn] LDAP client [$PrimClient] on [$myPrimaryVserver]"
@@ -9460,14 +9340,14 @@ Try {
         }
         if($Backup -eq $True){
             $PrimaryLDAPclient | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcLdapClient.json") -Encoding ASCII -Width 65535
-            if( ($ret=get-item $($Global:JsonPath+"Get-NcLdapClient.json") -ErrorAction SilentlyContinue) -ne $null ){
+            if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcLdapClient.json") -ErrorAction SilentlyContinue) ){
                 Write-LogDebug "$($Global:JsonPath+"Get-NcLdapClient.json") saved successfully"
             }else{
                 Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcLdapClient.json")"
                 $Return=$False
             }
         }
-        if ( $PrimaryLDAPclient -eq $null) {
+        if ( $null -eq $PrimaryLDAPclient) {
             Write-Log "LDAP enabled but no Client configuration found on [$myPrimaryVserver]"
             Write-LogDebug "end with error"
             return $True    
@@ -9488,23 +9368,22 @@ Try {
         }
         if($Backup -eq $True){
             $PrimarySchema | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcLdapClientSchema.json") -Encoding ASCII -Width 65535
-            if( ($ret=get-item $($Global:JsonPath+"Get-NcLdapClientSchema.json") -ErrorAction SilentlyContinue) -ne $null ){
+            if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcLdapClientSchema.json") -ErrorAction SilentlyContinue) ){
                 Write-LogDebug "$($Global:JsonPath+"Get-NcLdapClientSchema.json") saved successfully"
             }else{
                 Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcLdapClientSchema.json")"
                 $Return=$False
             }
         }
-        if ( $PrimarySchema -eq $null) {
+        if ( $null -eq $PrimarySchema) {
             Write-Log "[$workOn] LDAP Schema [$PrimaryLDAPclientSchema] not found on [$myPrimaryVserver]"
             Write-LogDebug "end with error"
             return $True    
         }
         if($Backup -eq $False){
             $PrimarySchemaComment=$PrimarySchema.Comment
-            $PrimarySchemaIsOwner=$PrimarySchema.IsOwner
-            if( ($PrimarySchemaComment -match "(read-only)$") -or ($PrimarySchemaIsOwner -eq $True) ){
-                Write-Log "[$workOn] LDAP Schema [$PrimaryLDAPclientSchema] replicated on [$mySecondaryVserver]"
+            if( $PrimarySchemaComment -notmatch "(read-only)$" ){
+                Write-Log "[$workOn] Replicate LDAP Schema [$PrimaryLDAPclientSchema] on [$mySecondaryVserver]"
                 $PrimarySchemaCnGroupAttribute=$PrimarySchema.CnGroupAttribute
                 $PrimarySchemaCnNetgroupAttribute=$PrimarySchema.CnNetgroupAttribute
                 $PrimarySchemaEnableRfc2307bis=$PrimarySchema.EnableRfc2307bis
@@ -9527,77 +9406,157 @@ Try {
                 $PrimarySchemaUidNumberAttribute=$PrimarySchema.UidNumberAttribute
                 $PrimarySchemaUniqueMemberAttribute=$PrimarySchema.UniqueMemberAttribute
                 $PrimarySchemaUserPasswordAttribute=$PrimarySchema.UserPasswordAttribute
+                # $PrimarySchemaUnixAccountAttribute=$PrimarySchema.UnixAccountAttribute
                 $PrimarySchemaWindowsAccountAttribute=$PrimarySchema.WindowsAccountAttribute
                 $PrimarySchemaWindowsToUnixAttribute=$PrimarySchema.WindowsToUnixAttribute
                 $PrimarySchemaWindowsToUnixNoDomainPrefix=$PrimarySchema.WindowsToUnixNoDomainPrefix
                 $PrimarySchemaWindowsToUnixObjectClass=$PrimarySchema.WindowsToUnixObjectClass
-                Write-LogDebug "Copy-NcLdapClientSchema -Name RFC-2307 -NewName $PrimaryLDAPclientSchema -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                $out=Copy-NcLdapClientSchema -Name RFC-2307 -NewName $PrimaryLDAPclientSchema -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
-                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Copy-NcLdapClientSchema [$ErrorVar]" }
-                Write-LogDebug "Set-NcLdapClientSchema -Name $PrimaryLDAPclientSchema -VserverContext -VserverContext $mySecondaryVserver `
-                -PosixAccount $PrimarySchemaPosixAccountObjectClass `
-                -NisNetgroup $PrimarySchemaNisNetgroupObjectClass `
-                -Uid $PrimarySchemaUidAttribute `
-                -GidNumber $PrimarySchemaGidNumberAttribute `
-                -PosixGroup $PrimarySchemaPosixGroupObjectClass `
-                -UidNumber $PrimarySchemaUidNumberAttribute `
-                -GroupCn $PrimarySchemaCnGroupAttribute `
-                -NetGroupCn $PrimarySchemaCnNetgroupAttribute `
-                -Gecos $PrimarySchemaGecosAttribute `
-                -UserPassword $PrimarySchemaUserPasswordAttribute `
-                -HomeDirectory $PrimarySchemaHomeDirectoryAttribute `
-                -LoginShell $PrimarySchemaLoginShellAttribute `
-                -MemberUid $PrimarySchemaMemberUidAttribute `
-                -MemberNisNetgroup $PrimarySchemaMemberNisNetgroupAttribute `
-                -NisNetgroupTriple $PrimarySchemaNisNetgroupTripleAttribute `
-                -WindowsAccount $PrimarySchemaWindowsAccountAttribute `
-                -EnableRfc2307bis $PrimarySchemaEnableRfc2307bis `
-                -GroupOfUniqueNamesObjectClass $PrimarySchemaGroupOfUniqueNamesObjectClass `
-                -UniqueMemberAttribute $PrimarySchemaUniqueMemberAttribute `
-                -NisMapEntryAttribute $PrimarySchemaNisMapentryAttribute `
-                -NisMapNameAttribute $PrimarySchemaNisMapnameAttribute `
-                -NisObjectClass $PrimarySchemaNisObjectClass `
-                -WindowsToUnixObjectClass $PrimarySchemaWindowsToUnixObjectClass `
-                -WindowsToUnixAttribute $PrimarySchemaWindowsToUnixAttribute `
-                -NoDomainPrefixForWindowsToUnix $PrimarySchemaWindowsToUnixNoDomainPrefix `
-                -Comment $PrimarySchemaComment `
-                -Controller $mySecondaryController"
-                $out=Set-NcLdapClientSchema -Name $PrimaryLDAPclientSchema -VserverContext -VserverContext $mySecondaryVserver `
-                -PosixAccount $PrimarySchemaPosixAccountObjectClass `
-                -NisNetgroup $PrimarySchemaNisNetgroupObjectClass `
-                -Uid $PrimarySchemaUidAttribute `
-                -GidNumber $PrimarySchemaGidNumberAttribute `
-                -PosixGroup $PrimarySchemaPosixGroupObjectClass `
-                -UidNumber $PrimarySchemaUidNumberAttribute `
-                -GroupCn $PrimarySchemaCnGroupAttribute `
-                -NetGroupCn $PrimarySchemaCnNetgroupAttribute `
-                -Gecos $PrimarySchemaGecosAttribute `
-                -UserPassword $PrimarySchemaUserPasswordAttribute `
-                -HomeDirectory $PrimarySchemaHomeDirectoryAttribute `
-                -LoginShell $PrimarySchemaLoginShellAttribute `
-                -MemberUid $PrimarySchemaMemberUidAttribute `
-                -MemberNisNetgroup $PrimarySchemaMemberNisNetgroupAttribute `
-                -NisNetgroupTriple $PrimarySchemaNisNetgroupTripleAttribute `
-                -WindowsAccount $PrimarySchemaWindowsAccountAttribute `
-                -EnableRfc2307bis $PrimarySchemaEnableRfc2307bis `
-                -GroupOfUniqueNamesObjectClass $PrimarySchemaGroupOfUniqueNamesObjectClass `
-                -UniqueMemberAttribute $PrimarySchemaUniqueMemberAttribute `
-                -NisMapEntryAttribute $PrimarySchemaNisMapentryAttribute `
-                -NisMapNameAttribute $PrimarySchemaNisMapnameAttribute `
-                -NisObjectClass $PrimarySchemaNisObjectClass `
-                -WindowsToUnixObjectClass $PrimarySchemaWindowsToUnixObjectClass `
-                -WindowsToUnixAttribute $PrimarySchemaWindowsToUnixAttribute `
-                -NoDomainPrefixForWindowsToUnix $PrimarySchemaWindowsToUnixNoDomainPrefix `
-                -Comment $PrimarySchemaComment `
-                -Controller $mySecondaryController -ErrorVariable ErrorVar 
-                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcLdapClientSchema [$ErrorVar]" }
+                if($null -eq (Get-NcLdapClientSchema -Name $PrimaryLDAPclientSchema -VserverContext $mySecondaryVserver -Controller $mySecondaryController )){
+                    Write-LogDebug "Copy-NcLdapClientSchema -Name RFC-2307 -NewName $PrimaryLDAPclientSchema -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                    $out=Copy-NcLdapClientSchema -Name RFC-2307 -NewName $PrimaryLDAPclientSchema -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Copy-NcLdapClientSchema [$ErrorVar]" }
+                }
+                if($Global:PSTKCall -eq "Rest"){
+                    Write-LogDebug "Set-NcLdapClientSchema -Name $PrimaryLDAPclientSchema -VserverContext $mySecondaryVserver `
+                    -PosixAccount $PrimarySchemaPosixAccountObjectClass `
+                    -NisNetgroup $PrimarySchemaNisNetgroupObjectClass `
+                    -Uid $PrimarySchemaUidAttribute `
+                    -GidNumber $PrimarySchemaGidNumberAttribute `
+                    -PosixGroup $PrimarySchemaPosixGroupObjectClass `
+                    -UidNumber $PrimarySchemaUidNumberAttribute `
+                    -GroupCn $PrimarySchemaCnGroupAttribute `
+                    -NetGroupCn $PrimarySchemaCnNetgroupAttribute `
+                    -Gecos $PrimarySchemaGecosAttribute `
+                    -UserPassword $PrimarySchemaUserPasswordAttribute `
+                    -HomeDirectory $PrimarySchemaHomeDirectoryAttribute `
+                    -LoginShell $PrimarySchemaLoginShellAttribute `
+                    -MemberUid $PrimarySchemaMemberUidAttribute `
+                    -MemberNisNetgroup $PrimarySchemaMemberNisNetgroupAttribute `
+                    -NisNetgroupTriple $PrimarySchemaNisNetgroupTripleAttribute `
+                    -WindowsAccount $PrimarySchemaWindowsAccountAttribute `
+                    -EnableRfc2307bis $PrimarySchemaEnableRfc2307bis `
+                    -GroupOfUniqueNamesObjectClass $PrimarySchemaGroupOfUniqueNamesObjectClass `
+                    -UniqueMemberAttribute $PrimarySchemaUniqueMemberAttribute `
+                    -NisMapEntryAttribute $PrimarySchemaNisMapentryAttribute `
+                    -NisMapNameAttribute $PrimarySchemaNisMapnameAttribute `
+                    -NisObjectClass $PrimarySchemaNisObjectClass `
+                    -WindowsToUnixObjectClass $PrimarySchemaWindowsToUnixObjectClass `
+                    -WindowsToUnixAttribute $PrimarySchemaWindowsToUnixAttribute `
+                    -Comment $PrimarySchemaComment `
+                    -Controller $mySecondaryController"
+                    $out=Set-NcLdapClientSchema -Name $PrimaryLDAPclientSchema -VserverContext $mySecondaryVserver `
+                    -PosixAccount $PrimarySchemaPosixAccountObjectClass `
+                    -NisNetgroup $PrimarySchemaNisNetgroupObjectClass `
+                    -Uid $PrimarySchemaUidAttribute `
+                    -GidNumber $PrimarySchemaGidNumberAttribute `
+                    -PosixGroup $PrimarySchemaPosixGroupObjectClass `
+                    -UidNumber $PrimarySchemaUidNumberAttribute `
+                    -GroupCn $PrimarySchemaCnGroupAttribute `
+                    -NetGroupCn $PrimarySchemaCnNetgroupAttribute `
+                    -Gecos $PrimarySchemaGecosAttribute `
+                    -UserPassword $PrimarySchemaUserPasswordAttribute `
+                    -HomeDirectory $PrimarySchemaHomeDirectoryAttribute `
+                    -LoginShell $PrimarySchemaLoginShellAttribute `
+                    -MemberUid $PrimarySchemaMemberUidAttribute `
+                    -MemberNisNetgroup $PrimarySchemaMemberNisNetgroupAttribute `
+                    -NisNetgroupTriple $PrimarySchemaNisNetgroupTripleAttribute `
+                    -WindowsAccount $PrimarySchemaWindowsAccountAttribute `
+                    -EnableRfc2307bis $PrimarySchemaEnableRfc2307bis `
+                    -GroupOfUniqueNamesObjectClass $PrimarySchemaGroupOfUniqueNamesObjectClass `
+                    -UniqueMemberAttribute $PrimarySchemaUniqueMemberAttribute `
+                    -NisMapEntryAttribute $PrimarySchemaNisMapentryAttribute `
+                    -NisMapNameAttribute $PrimarySchemaNisMapnameAttribute `
+                    -NisObjectClass $PrimarySchemaNisObjectClass `
+                    -WindowsToUnixObjectClass $PrimarySchemaWindowsToUnixObjectClass `
+                    -WindowsToUnixAttribute $PrimarySchemaWindowsToUnixAttribute `
+                    -Comment $PrimarySchemaComment `
+                    -Controller $mySecondaryController -ErrorVariable ErrorVar 
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcLdapClientSchema [$ErrorVar]" }
+                    # ! REST request necessary to correctly set NoDomainePrefixForWindows to $False due to burt inside set-ncldapclientschema
+                    $SecondaryCredential = get_local_cDotcred($mySecondaryController)
+                    $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/vserver/services/name-service/ldap/client/schema?vserver="+$mySecondaryVserver+"&schema="+$PrimaryLDAPclientSchema)
+                    if($PrimarySchemaWindowsToUnixNoDomainPrefix -eq $False){
+                        $body=@{
+                            windows_to_unix_no_domain_prefix="false"
+                        }|ConvertTo-Json
+                        
+                    }else{
+                        $body=@{
+                            windows_to_unix_no_domain_prefix="true"
+                        }|ConvertTo-Json   
+                    }
+                    Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $SecondaryCredential -Body $body -SkipCertificateCheck"
+                    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $SecondaryCredential -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                    if($? -ne $True){
+                        Write-LogError "ERROR: Unable to set LDAP Schema noDomainPrefix. Reason [$ErrorVar]"
+                        Write-LogDebug "[$workOn]: end"
+                        return $False
+                    }
+                }else{
+                    Write-LogDebug "Set-NcLdapClientSchema -Name $PrimaryLDAPclientSchema -VserverContext $mySecondaryVserver `
+                    -PosixAccount $PrimarySchemaPosixAccountObjectClass `
+                    -NisNetgroup $PrimarySchemaNisNetgroupObjectClass `
+                    -Uid $PrimarySchemaUidAttribute `
+                    -GidNumber $PrimarySchemaGidNumberAttribute `
+                    -PosixGroup $PrimarySchemaPosixGroupObjectClass `
+                    -UidNumber $PrimarySchemaUidNumberAttribute `
+                    -GroupCn $PrimarySchemaCnGroupAttribute `
+                    -NetGroupCn $PrimarySchemaCnNetgroupAttribute `
+                    -Gecos $PrimarySchemaGecosAttribute `
+                    -UserPassword $PrimarySchemaUserPasswordAttribute `
+                    -HomeDirectory $PrimarySchemaHomeDirectoryAttribute `
+                    -LoginShell $PrimarySchemaLoginShellAttribute `
+                    -MemberUid $PrimarySchemaMemberUidAttribute `
+                    -MemberNisNetgroup $PrimarySchemaMemberNisNetgroupAttribute `
+                    -NisNetgroupTriple $PrimarySchemaNisNetgroupTripleAttribute `
+                    -WindowsAccount $PrimarySchemaWindowsAccountAttribute `
+                    -EnableRfc2307bis $PrimarySchemaEnableRfc2307bis `
+                    -GroupOfUniqueNamesObjectClass $PrimarySchemaGroupOfUniqueNamesObjectClass `
+                    -UniqueMemberAttribute $PrimarySchemaUniqueMemberAttribute `
+                    -NisMapEntryAttribute $PrimarySchemaNisMapentryAttribute `
+                    -NisMapNameAttribute $PrimarySchemaNisMapnameAttribute `
+                    -NisObjectClass $PrimarySchemaNisObjectClass `
+                    -WindowsToUnixObjectClass $PrimarySchemaWindowsToUnixObjectClass `
+                    -WindowsToUnixAttribute $PrimarySchemaWindowsToUnixAttribute `
+                    -NoDomainPrefixForWindowsToUnix $PrimarySchemaWindowsToUnixNoDomainPrefix `
+                    -Comment $PrimarySchemaComment `
+                    -Controller $mySecondaryController"
+                    $out=Set-NcLdapClientSchema -Name $PrimaryLDAPclientSchema -VserverContext $mySecondaryVserver `
+                    -PosixAccount $PrimarySchemaPosixAccountObjectClass `
+                    -NisNetgroup $PrimarySchemaNisNetgroupObjectClass `
+                    -Uid $PrimarySchemaUidAttribute `
+                    -GidNumber $PrimarySchemaGidNumberAttribute `
+                    -PosixGroup $PrimarySchemaPosixGroupObjectClass `
+                    -UidNumber $PrimarySchemaUidNumberAttribute `
+                    -GroupCn $PrimarySchemaCnGroupAttribute `
+                    -NetGroupCn $PrimarySchemaCnNetgroupAttribute `
+                    -Gecos $PrimarySchemaGecosAttribute `
+                    -UserPassword $PrimarySchemaUserPasswordAttribute `
+                    -HomeDirectory $PrimarySchemaHomeDirectoryAttribute `
+                    -LoginShell $PrimarySchemaLoginShellAttribute `
+                    -MemberUid $PrimarySchemaMemberUidAttribute `
+                    -MemberNisNetgroup $PrimarySchemaMemberNisNetgroupAttribute `
+                    -NisNetgroupTriple $PrimarySchemaNisNetgroupTripleAttribute `
+                    -WindowsAccount $PrimarySchemaWindowsAccountAttribute `
+                    -EnableRfc2307bis $PrimarySchemaEnableRfc2307bis `
+                    -GroupOfUniqueNamesObjectClass $PrimarySchemaGroupOfUniqueNamesObjectClass `
+                    -UniqueMemberAttribute $PrimarySchemaUniqueMemberAttribute `
+                    -NisMapEntryAttribute $PrimarySchemaNisMapentryAttribute `
+                    -NisMapNameAttribute $PrimarySchemaNisMapnameAttribute `
+                    -NisObjectClass $PrimarySchemaNisObjectClass `
+                    -WindowsToUnixObjectClass $PrimarySchemaWindowsToUnixObjectClass `
+                    -WindowsToUnixAttribute $PrimarySchemaWindowsToUnixAttribute `
+                    -NoDomainPrefixForWindowsToUnix $PrimarySchemaWindowsToUnixNoDomainPrefix `
+                    -Comment $PrimarySchemaComment `
+                    -Controller $mySecondaryController -ErrorVariable ErrorVar
+                }
             }else{ 
                 Write-LogDebug "This is a default Schema"    
             }
             Write-LogDebug "Get-NcLdapClient -Name $PrimClient -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
             $SecondaryLDAPclient=Get-NcLdapClient -Name $PrimClient -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcLdapClient failed [$ErrorVar]" }
-            if ($SecondaryLDAPclient -eq $null){
+            if ($null -eq $SecondaryLDAPclient){
                 $LDAPclientAdDomain=$PrimaryLDAPclient.AdDomain
                 $LDAPclientAllowSsl=$PrimaryLDAPclient.AllowSsl
                 $LDAPclientBaseDn=$PrimaryLDAPclient.BaseDn
@@ -9615,7 +9574,7 @@ Try {
                 $LDAPclientNetgroupByhostDn=$PrimaryLDAPclient.NetgroupByhostDn
                 $LDAPclientNetgroupScope=$PrimaryLDAPclient.NetgroupScope
                 $LDAPclientNetgroupDn=$PrimaryLDAPclient.NetgroupDn
-                $LDAPclientNetgroupDn=$PrimaryLDAPclient.NetgroupByhostScope
+                $LDAPclientNetgroupByhostScope=$PrimaryLDAPclient.NetgroupByhostScope
                 $LDAPclientObsPassword=$PrimaryLDAPclient.ObsPassword
                 $LDAPclientPreferredAdServers=$PrimaryLDAPclient.PreferredAdServers
                 $LDAPclientQueryTimeout=$PrimaryLDAPclient.QueryTimeout
@@ -9627,6 +9586,8 @@ Try {
                 $LDAPclientUserDn=$PrimaryLDAPclient.UserDn
                 $LDAPclientUserScope=$PrimaryLDAPclient.UserScope
                 $LDAPclientUseStartTls=$PrimaryLDAPclient.UseStartTls
+                $LDAPclientLdapsEnabled=$PrimaryLDAPclient.LdapsEnabled
+                if($Global:PSTKCall -eq "Rest"){$LDAPclientReferalEnabled=$PrimaryLDAPclient.ReferralEnabled}
                 $LDAPclientTcpPort=$PrimaryLDAPclient.TcpPort  
             }else{
                 $LDAPclientAdDomain=$PrimaryLDAPclient.AdDomain
@@ -9658,6 +9619,8 @@ Try {
                 $LDAPclientUserDn=$PrimaryLDAPclient.UserDn
                 $LDAPclientUserScope=$PrimaryLDAPclient.UserScope
                 $LDAPclientUseStartTls=$PrimaryLDAPclient.UseStartTls
+                $LDAPclientLdapsEnabled=$PrimaryLDAPclient.LdapsEnabled
+                if($Global:PSTKCall -eq "Rest"){$LDAPclientReferalEnabled=$PrimaryLDAPclient.ReferralEnabled}
                 $LDAPclientTcpPort=$PrimaryLDAPclient.TcpPort
                 Write-LogDebug "LDAP config exist on [$mySecondaryVserver] need to delete config, before delete LDAP client"
                 try{
@@ -9790,54 +9753,86 @@ Try {
                 }
                 $LDAPclientBindPassword=get_pwd_from_cli -workOn $mySecondaryVserver -for "LDAP server Bind Password" 
                 $LDAPclientServers=$serverslist
-                Write-LogDebug "New-NcLdapClient -Name $PrimClient -VserverContext $mySecondaryVserver `
-                -Schema $LDAPclientSchema `
-                -Servers $LDAPclientServers `
-                -TcpPort $LDAPclientTcpPort `
-                -QueryTimeout $LDAPclientQueryTimeout `
-                -MinBindLevel $LDAPclientMinBindLevel `
-                -BindDn $LDAPclientBindDn `
-                -BindPassword ******** `
-                -BaseDn $LDAPclientBaseDn `
-                -BaseScope $LDAPclientBaseScope `
-                -UserDn $LDAPclientUserDn `
-                -UserScope $LDAPclientUserScope `
-                -GroupDn $LDAPclientGroupDn `
-                -GroupScope $LDAPclientGroupScope `
-                -NetGroupDn $LDAPclientNetgroupDn `
-                -NetGroupScope $LDAPclientNetgroupScope `
-                -IsNetgroupByHostEnabled $LDAPclientIsNetgroupByhostEnabled `
-                -NetgroupByHostScope $LDAPclientNetgroupByhostScope `
-                -SessionSecurity $LDAPclientSessionSecurity `
-                -Controller $mySecondaryController -Confirm:$false"
-                $out=New-NcLdapClient -Name $PrimClient -VserverContext $mySecondaryVserver `
-                -Schema $LDAPclientSchema `
-                -Servers $LDAPclientServers `
-                -TcpPort $LDAPclientTcpPort `
-                -QueryTimeout $LDAPclientQueryTimeout `
-                -MinBindLevel $LDAPclientMinBindLevel `
-                -BindDn $LDAPclientBindDn `
-                -BindPassword $LDAPclientBindPassword `
-                -BaseDn $LDAPclientBaseDn `
-                -BaseScope $LDAPclientBaseScope `
-                -UserDn $LDAPclientUserDn `
-                -UserScope $LDAPclientUserScope `
-                -GroupDn $LDAPclientGroupDn `
-                -GroupScope $LDAPclientGroupScope `
-                -NetGroupDn $LDAPclientNetgroupDn `
-                -NetGroupScope $LDAPclientNetgroupScope `
-                -IsNetgroupByHostEnabled $LDAPclientIsNetgroupByhostEnabled `
-                -NetgroupByHostScope $LDAPclientNetgroupByhostScope `
-                -SessionSecurity $LDAPclientSessionSecurity `
-                -Controller $mySecondaryController -Confirm:$false -ErrorVariable ErrorVar
+                if($Global:PSTKCall -eq "Rest"){
+                    # ! Try REST request because New-NcLdapClient cmdlet does not support -Name and -Servers parameters
+                    $body=@{
+                        schema=$LDAPclientSchema
+                        servers=$LDAPclientServers
+                        port=$LDAPclientTcpPort
+                        query_timeout=$LDAPclientQueryTimeout
+                        min_bind_level=$LDAPclientMinBindLevel
+                        bind_bn=$LDAPclientBindDn
+                        bind_password=$LDAPclientBindPassword
+                        base_bn=$LDAPclientBaseDn
+                        base_scope=$LDAPclientBaseScope
+                        user_dn=$LDAPclientUserDn
+                        user_scope=$LDAPclientUserScope
+                        group_dn=$LDAPclientGroupDn
+                        group_scope=$LDAPclientGroupScope
+                        netGroup_dn=$LDAPclientNetgroupDn
+                        netGroup_scope=$LDAPclientNetgroupScope
+                        is_netgroup_byhost_enabled=$LDAPclientIsNetgroupByhostEnabled
+                        netgroup_byhost_scope=$LDAPclientNetgroupByhostScope
+                        session_security=$LDAPclientSessionSecurity
+                        ldaps_enable=$LDAPclientLdapsEnabled
+                        referral_enabled=$LDAPclientReferalEnabled
+                        bind_as_cifs_server=$LDAPclientBindAsCifsServer
+                        skip_config_validation="true"
+                        use_start_tls=$LDAPclientUseStartTls
+                        svm=@{name=$mySecondaryVserver}
+                    }|ConvertTo-Json
+                    $url=$url=$("https://"+$mySecondaryController.Name+"/api/name-service/ldap")
+                }else{
+                    Write-LogDebug "New-NcLdapClient -Name $PrimClient -VserverContext $mySecondaryVserver `
+                    -Schema $LDAPclientSchema `
+                    -Servers $LDAPclientServers `
+                    -TcpPort $LDAPclientTcpPort `
+                    -QueryTimeout $LDAPclientQueryTimeout `
+                    -MinBindLevel $LDAPclientMinBindLevel `
+                    -BindDn $LDAPclientBindDn `
+                    -BindPassword ******** `
+                    -BaseDn $LDAPclientBaseDn `
+                    -BaseScope $LDAPclientBaseScope `
+                    -UserDn $LDAPclientUserDn `
+                    -UserScope $LDAPclientUserScope `
+                    -GroupDn $LDAPclientGroupDn `
+                    -GroupScope $LDAPclientGroupScope `
+                    -NetGroupDn $LDAPclientNetgroupDn `
+                    -NetGroupScope $LDAPclientNetgroupScope `
+                    -IsNetgroupByHostEnabled $LDAPclientIsNetgroupByhostEnabled `
+                    -NetgroupByHostScope $LDAPclientNetgroupByhostScope `
+                    -SessionSecurity $LDAPclientSessionSecurity `
+                    -Controller $mySecondaryController -Confirm:$false"
+                    $out=New-NcLdapClient -Name $PrimClient -VserverContext $mySecondaryVserver `
+                    -Schema $LDAPclientSchema `
+                    -Servers $LDAPclientServers `
+                    -TcpPort $LDAPclientTcpPort `
+                    -QueryTimeout $LDAPclientQueryTimeout `
+                    -MinBindLevel $LDAPclientMinBindLevel `
+                    -BindDn $LDAPclientBindDn `
+                    -BindPassword $LDAPclientBindPassword `
+                    -BaseDn $LDAPclientBaseDn `
+                    -BaseScope $LDAPclientBaseScope `
+                    -UserDn $LDAPclientUserDn `
+                    -UserScope $LDAPclientUserScope `
+                    -GroupDn $LDAPclientGroupDn `
+                    -GroupScope $LDAPclientGroupScope `
+                    -NetGroupDn $LDAPclientNetgroupDn `
+                    -NetGroupScope $LDAPclientNetgroupScope `
+                    -IsNetgroupByHostEnabled $LDAPclientIsNetgroupByhostEnabled `
+                    -NetgroupByHostScope $LDAPclientNetgroupByhostScope `
+                    -SessionSecurity $LDAPclientSessionSecurity `
+                    -Controller $mySecondaryController -Confirm:$false -ErrorVariable ErrorVar
 
-                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcLdapClient failed [$ErrorVar]" ; }    
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcLdapClient failed [$ErrorVar]" ; } 
+                }
+                   
             }
 
             Write-LogDebug "Get-NcLdapConfig -vserver $mySecondaryVserver -controller $mySecondaryController"
             $SecondaryLdapConfig=Get-NcLdapConfig -vserver $mySecondaryVserver -controller $mySecondaryController -ErrorVariable ErrorVar
             if($? -ne $True){Throw "ERROR: Failed to get LDAP Config on [$mySecondaryVserver] reason [$ErrorVar]"}
-            if($SecondaryLdapConfig -ne $null)
+            if($null -ne $SecondaryLdapConfig)
             {
                 Write-LogDebug "Remove-NcLdapConfig -Vservercontext $mySecondaryVserver -Controller $mySecondaryController"
                 $out=Remove-NcLdapConfig -Vservercontext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
@@ -10075,6 +10070,7 @@ Try {
 			        $InterfaceMasterRole=$InterfaceMaster.Role
 			        $InterfaceMasterFirewallPolicy=$InterfaceMaster.FirewallPolicy
 			        $InterfaceMasterIsAutoRevert=$InterfaceMaster.IsAutoRevert
+                    if($Global:PSTKCall -eq "Rest"){$InterfaceMasterServicePolicy=$InterfaceMaster.ServicePolicy}
 
 			        $SecondaryInterface  = Get-NcNetInterface -InterfaceName $TempInterfaceName -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
 			        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
@@ -10087,8 +10083,13 @@ Try {
                         }
 				        Write-Log "[$workOn] Create the LIF [$TempInterfaceName] (cloning from $SecondaryCifsLifMaster)"
 				        Write-Log "[$workOn] LIF [$TempInterfaceName] is the Temp Cifs LIF, it must be in Administrative up status"
-				        Write-LogDebug "New-NcNetInterface -Name $TempInterfaceName -Vserver $mySecondaryVserver -Role $InterfaceMasterRole -Node $InterfaceMasterCurrentNode -Port $InterfaceMasterCurrentPort -DataProtocols $InterfaceMasterDataProtocols -FirewallPolicy $InterfaceMasterFirewallPolicy -Address $TempIpAddress -Netmask $InterfaceMasterNetMask -DnsDomain $InterfaceMasterDnsDomainName -AdministrativeStatus up -AutoRevert $InterfaceMasterIsAutoRevert -Controller $mySecondaryController"
-				        $SecondaryInterface=New-NcNetInterface -Name $TempInterfaceName -Vserver $mySecondaryVserver  -Role $InterfaceMasterRole -Node $InterfaceMasterCurrentNode -Port $InterfaceMasterCurrentPort -DataProtocols $InterfaceMasterDataProtocols -FirewallPolicy $InterfaceMasterFirewallPolicy -Address $TempIpAddress -Netmask $InterfaceMasterNetMask -DnsDomain $InterfaceMasterDnsDomainName -AdministrativeStatus up -AutoRevert $InterfaceMasterIsAutoRevert -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                        if($Global:PSTKCall -eq "Rest"){
+                            Write-LogDebug "New-NcNetInterface -Name $TempInterfaceName -Vserver $mySecondaryVserver -ServicePolicy $InterfaceMasterServicePolicy -Node $InterfaceMasterCurrentNode -Port $InterfaceMasterCurrentPort -DataProtocols $InterfaceMasterDataProtocols -Address $TempIpAddress -Netmask $InterfaceMasterNetMask -DnsDomain $InterfaceMasterDnsDomainName -AdministrativeStatus up -AutoRevert $InterfaceMasterIsAutoRevert -Controller $mySecondaryController"
+                            $SecondaryInterface=New-NcNetInterface -Name $TempInterfaceName -Vserver $mySecondaryVserver  -ServicePolicy $InterfaceMasterServicePolicy -Node $InterfaceMasterCurrentNode -Port $InterfaceMasterCurrentPort -DataProtocols $InterfaceMasterDataProtocols -Address $TempIpAddress -Netmask $InterfaceMasterNetMask -DnsDomain $InterfaceMasterDnsDomainName -AdministrativeStatus up -AutoRevert $InterfaceMasterIsAutoRevert -Controller $mySecondaryController  -ErrorVariable ErrorVar 
+                        }else{
+                            Write-LogDebug "New-NcNetInterface -Name $TempInterfaceName -Vserver $mySecondaryVserver -Role $InterfaceMasterRole -Node $InterfaceMasterCurrentNode -Port $InterfaceMasterCurrentPort -DataProtocols $InterfaceMasterDataProtocols -FirewallPolicy $InterfaceMasterFirewallPolicy -Address $TempIpAddress -Netmask $InterfaceMasterNetMask -DnsDomain $InterfaceMasterDnsDomainName -AdministrativeStatus up -AutoRevert $InterfaceMasterIsAutoRevert -Controller $mySecondaryController"
+                            $SecondaryInterface=New-NcNetInterface -Name $TempInterfaceName -Vserver $mySecondaryVserver  -Role $InterfaceMasterRole -Node $InterfaceMasterCurrentNode -Port $InterfaceMasterCurrentPort -DataProtocols $InterfaceMasterDataProtocols -FirewallPolicy $InterfaceMasterFirewallPolicy -Address $TempIpAddress -Netmask $InterfaceMasterNetMask -DnsDomain $InterfaceMasterDnsDomainName -AdministrativeStatus up -AutoRevert $InterfaceMasterIsAutoRevert -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                        }
 				        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcNetInterface failed [$ErrorVar]" ;  }
                         $TempCifsLif = Get-NcNetInterface ("tmp_lif_to_join_in_ad_" + $SecondaryCifsLifMaster) -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
                         $SecondaryCifsLifCreated=$true
@@ -12161,13 +12162,13 @@ Try {
             } 
         }
     }
-    #wait-debugger
     if ( ( $ret=check_update_vserver -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed check update vserver" ; $Return = $False }
     if ( ( $ret=create_vserver_peer -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create vserver peer" ; $Return = $False }
     if ( ( $ret=create_update_cron_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -Backup $runBackup -Restore $runRestore) -ne $True ) {Write-LogError "ERROR: create_update_cron_dr"}
     if ( ( $ret=create_update_exportpolicy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all policy" ; $Return = $False }
     if ( ( $ret=create_update_efficiency_policy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all Efficiency policy" ; $Return = $False }
     if ( ( $ret=create_update_firewallpolicy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all Firewall policy" ; $Return = $False }
+    #wait-debugger
     if ( ( $ret=create_update_servicepolicy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all Service policy" ; $Return = $False }
     if ( ( $ret=create_update_role_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all Role"}
     $ret=create_lif_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore -nodeMatchRegEx $nodeMatchRegEx
@@ -12184,24 +12185,18 @@ Try {
         Write-LogWarn "SKIPPING local user create/update in NonInteractive Mode with no default credentials"
     }
     if ( ( $ret=create_update_localunixgroupanduser_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all Local Unix User and Group"}
-    if ( ( $ret=create_update_usermapping_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create User Mapping"}
+    # if ( ( $ret=create_update_usermapping_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create User Mapping"}
     if ( ( $ret=create_update_DNS_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create DNS service" ; $Return = $False }
-    
-    #if(-not $Global:NonInteractive){
-        if ( ( $ret=create_update_LDAP_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create LDAP config" ; $Return = $False }
-    #}else{
-    #    Write-LogWarn "SKIPPING LDAP config create/update in NonInteractive Mode"
-    #}
+    if ( ( $ret=create_update_LDAP_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create LDAP config" ; $Return = $False }
     if ( ( $ret=create_update_NIS_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create NIS service" ; $Return = $False }
     if ( ( $ret=create_update_NFS_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create NFS service" ; $Return = $False }
     if ( ( $ret=create_update_ISCSI_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create iSCSI service" ; $Return = $False }
-    #wait-debugger
     if ( ( $ret=create_update_CIFS_server_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore -TemporarySecondaryCifsIp $TemporarySecondaryCifsIp -SecondaryCifsLifMaster $SecondaryCifsLifMaster -SecondaryCifsLifCustomVlan $SecondaryCifsLifCustomVlan -ActiveDirectoryCustomOU $ActiveDirectoryCustomOU) -ne $True ) {Write-LogError "ERROR: create_update_CIFS_server_dr" ; $Return = $False } 
     $ret=update_CIFS_server_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore
     if ( $? -ne $True ) {
         Write-LogWarn "[$workOn] Some CIFS options has not been set on"    
     }
-    
+    if ( ( $ret=create_update_usermapping_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create User Mapping"}
     if ( ( $ret=create_update_igroupdr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all igroups" ; $Return = $False }
     if ( ( $ret=create_update_vscan_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -fromConfigureDR -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create Vscan config" ; $Return = $False }
 	if ( ( $ret=create_update_fpolicy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -fromConfigureDR -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create Fpolicy config" ; $Return = $False }
@@ -13892,6 +13887,7 @@ try{
                     $InterfaceMasterRole=$InterfaceMaster.Role
                     $InterfaceMasterFirewallPolicy=$InterfaceMaster.FirewallPolicy
                     $InterfaceMasterIsAutoRevert=$InterfaceMaster.IsAutoRevert
+                    if($Global:PSTKCall -eq "Rest"){$InterfaceMasterServicePolicy=$InterfaceMaster.ServicePolicy}
 
                     $SecondaryInterface  = Get-NcNetInterface -InterfaceName $TempInterfaceName -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
@@ -13904,8 +13900,13 @@ try{
                         }
                         Write-Log "[$workOn] Create the LIF [$TempInterfaceName] (cloned from $SecondaryCifsLifMaster)"
                         Write-Log "[$workOn] LIF [$TempInterfaceName] is the Temp Cifs LIF, it must be in Administrative up status"
-                        Write-LogDebug "New-NcNetInterface -Name $TempInterfaceName -Vserver $mySecondaryVserver -Role $InterfaceMasterRole -Node $InterfaceMasterCurrentNode -Port $InterfaceMasterCurrentPort -DataProtocols $InterfaceMasterDataProtocols -FirewallPolicy $InterfaceMasterFirewallPolicy -Address $TempIpAddress -Netmask $InterfaceMasterNetMask -DnsDomain $InterfaceMasterDnsDomainName -AdministrativeStatus up -AutoRevert $InterfaceMasterIsAutoRevert -Controller $mySecondaryController"
-                        $SecondaryInterface=New-NcNetInterface -Name $TempInterfaceName -Vserver $mySecondaryVserver  -Role $InterfaceMasterRole -Node $InterfaceMasterCurrentNode -Port $InterfaceMasterCurrentPort -DataProtocols $InterfaceMasterDataProtocols -FirewallPolicy $InterfaceMasterFirewallPolicy -Address $TempIpAddress -Netmask $InterfaceMasterNetMask -DnsDomain $InterfaceMasterDnsDomainName -AdministrativeStatus up -AutoRevert $InterfaceMasterIsAutoRevert -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                        if($Global:PSTKCall -eq "Rest"){
+                            Write-LogDebug "New-NcNetInterface -Name $TempInterfaceName -Vserver $mySecondaryVserver -ServicePolicy $InterfaceMasterServicePolicy -Node $InterfaceMasterCurrentNode -Port $InterfaceMasterCurrentPort -DataProtocols $InterfaceMasterDataProtocols -Address $TempIpAddress -Netmask $InterfaceMasterNetMask -DnsDomain $InterfaceMasterDnsDomainName -AdministrativeStatus up -AutoRevert $InterfaceMasterIsAutoRevert -Controller $mySecondaryController"
+                            $SecondaryInterface=New-NcNetInterface -Name $TempInterfaceName -Vserver $mySecondaryVserver  -ServicePolicy $InterfaceMasterServicePolicy -Node $InterfaceMasterCurrentNode -Port $InterfaceMasterCurrentPort -DataProtocols $InterfaceMasterDataProtocols -Address $TempIpAddress -Netmask $InterfaceMasterNetMask -DnsDomain $InterfaceMasterDnsDomainName -AdministrativeStatus up -AutoRevert $InterfaceMasterIsAutoRevert -Controller $mySecondaryController  -ErrorVariable ErrorVar    
+                        }else{
+                            Write-LogDebug "New-NcNetInterface -Name $TempInterfaceName -Vserver $mySecondaryVserver -Role $InterfaceMasterRole -Node $InterfaceMasterCurrentNode -Port $InterfaceMasterCurrentPort -DataProtocols $InterfaceMasterDataProtocols -FirewallPolicy $InterfaceMasterFirewallPolicy -Address $TempIpAddress -Netmask $InterfaceMasterNetMask -DnsDomain $InterfaceMasterDnsDomainName -AdministrativeStatus up -AutoRevert $InterfaceMasterIsAutoRevert -Controller $mySecondaryController"
+                            $SecondaryInterface=New-NcNetInterface -Name $TempInterfaceName -Vserver $mySecondaryVserver  -Role $InterfaceMasterRole -Node $InterfaceMasterCurrentNode -Port $InterfaceMasterCurrentPort -DataProtocols $InterfaceMasterDataProtocols -FirewallPolicy $InterfaceMasterFirewallPolicy -Address $TempIpAddress -Netmask $InterfaceMasterNetMask -DnsDomain $InterfaceMasterDnsDomainName -AdministrativeStatus up -AutoRevert $InterfaceMasterIsAutoRevert -Controller $mySecondaryController  -ErrorVariable ErrorVar    
+                        }
                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcNetInterface failed [$ErrorVar]" ;  }
                         $TempCifsLif = Get-NcNetInterface ("tmp_lif_to_join_in_ad_" + $SecondaryCifsLifMaster) -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
                         $SecondaryCifsLifCreated=$true
@@ -17124,16 +17125,28 @@ Function Set_LIF_from_JSON (
                 $IsAutoRevert=$Interface.IsAutoRevert
                 $FailoverPolicy=$Interface.FailoverPolicy
                 $FailoverGroup=$Interface.FailoverGroup
+                if($Global:PSTKCall -eq "Rest"){$ServicePolicy=$Interface.ServicePolicy}
                 $Comment=$Interface.Comment 
                 Write-Log "[$ToVserver] Create LIF [$InterfaceName] with [$Address] [$Netmask] [$AdminState]"
-                Write-LogDebug "New-NcNetInterface -Name $InterfaceName -Vserver $ToVserver -Address $Address -Netmask $Netmask `
-                -Role $Role -Node $CurrentNode -Port $CurrentPort -DataProtocols $DataProtocols -FirewallPolicy $FirewallPolicy `
-                -AdministrativeStatus $AdminState -RoutingGroup $RoutingGroupName -DnsDomain $DnsDomainName -FailoverPolicy $FailoverPolicy `
-                -FailoverGroup $FailoverGroup -AutoRevert $IsAutoRevert -Comment $Comment -controller $ToNcController"
-                $ret=New-NcNetInterface -Name $InterfaceName -Vserver $ToVserver -Address $Address -Netmask $Netmask `
-                -Role $Role -Node $CurrentNode -Port $CurrentPort -DataProtocols $DataProtocols -FirewallPolicy $FirewallPolicy `
-                -AdministrativeStatus $AdminState -RoutingGroup $RoutingGroupName -DnsDomain $DnsDomainName -FailoverPolicy $FailoverPolicy `
-                -FailoverGroup $FailoverGroup -AutoRevert $IsAutoRevert -Comment $Comment -controller $ToNcController -ErrorVariable ErrorVar
+                if($Global:PSTKCall -eq "Rest"){
+                    Write-LogDebug "New-NcNetInterface -Name $InterfaceName -Vserver $ToVserver -Address $Address -Netmask $Netmask `
+                    -ServicePolicy $ServicePolicy -Node $CurrentNode -Port $CurrentPort -DataProtocols $DataProtocols `
+                    -AdministrativeStatus $AdminState -RoutingGroup $RoutingGroupName -DnsDomain $DnsDomainName -FailoverPolicy $FailoverPolicy `
+                    -FailoverGroup $FailoverGroup -AutoRevert $IsAutoRevert -Comment $Comment -controller $ToNcController"
+                    $ret=New-NcNetInterface -Name $InterfaceName -Vserver $ToVserver -Address $Address -Netmask $Netmask `
+                    -ServicePolicy $ServicePolicy -Node $CurrentNode -Port $CurrentPort -DataProtocols $DataProtocols `
+                    -AdministrativeStatus $AdminState -RoutingGroup $RoutingGroupName -DnsDomain $DnsDomainName -FailoverPolicy $FailoverPolicy `
+                    -FailoverGroup $FailoverGroup -AutoRevert $IsAutoRevert -Comment $Comment -controller $ToNcController -ErrorVariable ErrorVar
+                }else{
+                    Write-LogDebug "New-NcNetInterface -Name $InterfaceName -Vserver $ToVserver -Address $Address -Netmask $Netmask `
+                    -Role $Role -Node $CurrentNode -Port $CurrentPort -DataProtocols $DataProtocols -FirewallPolicy $FirewallPolicy `
+                    -AdministrativeStatus $AdminState -RoutingGroup $RoutingGroupName -DnsDomain $DnsDomainName -FailoverPolicy $FailoverPolicy `
+                    -FailoverGroup $FailoverGroup -AutoRevert $IsAutoRevert -Comment $Comment -controller $ToNcController"
+                    $ret=New-NcNetInterface -Name $InterfaceName -Vserver $ToVserver -Address $Address -Netmask $Netmask `
+                    -Role $Role -Node $CurrentNode -Port $CurrentPort -DataProtocols $DataProtocols -FirewallPolicy $FirewallPolicy `
+                    -AdministrativeStatus $AdminState -RoutingGroup $RoutingGroupName -DnsDomain $DnsDomainName -FailoverPolicy $FailoverPolicy `
+                    -FailoverGroup $FailoverGroup -AutoRevert $IsAutoRevert -Comment $Comment -controller $ToNcController -ErrorVariable ErrorVar
+                }
                 if($? -ne $True){
                     Throw "ERROR: Failed to create LIF on [$ToVserver] reason [$ErrorVar]"
                     $Return=$False
@@ -19415,5 +19428,240 @@ Try {
 Catch {
         handle_error $_ $workOn
         return $Return
+    }
+}
+
+#############################################################################################
+# create_update_servicepolicy_dr
+# available only since ONTAP version 9.10.1
+# firewall policy will be deprecated soon
+# works only with PSTK Core with REST call
+<#
+.SYNOPSIS
+Deals with net interface service-policy
+#>
+Function create_update_servicepolicy_dr(
+    [NetApp.Ontapi.Filer.C.NcController] $myPrimaryController,
+    [NetApp.Ontapi.Filer.C.NcController] $mySecondaryController,
+    [string] $myPrimaryVserver,
+    [string] $mySecondaryVserver,
+    [string]$workOn=$mySecondaryVserver,
+    [bool]$Backup,
+    [bool]$Restore) 
+{
+    Try 
+    {
+        $Return=$True
+        Write-Log "[$workOn] Check SVM Service Policy"
+        Write-LogDebug "[$myPrimaryVserver]: start"
+        if($Backup -eq $True){Write-LogDebug "run in Backup mode [$myPrimaryVserver]"}
+        if($Restore -eq $True){Write-LogDebug "run in Restore mode [$myPrimaryVserver]"}
+
+
+        if($Restore -eq $False -and $Backup -eq $False){
+            $VersionPrimary=Get-NcSystemVersionInfo -controller $myPrimaryController
+            $VersionSecondary=Get-NcSystemVersionInfo -controller $mySecondaryController
+        }
+        elseif($Backup -eq $False){
+            $VersionSecondary=Get-NcSystemVersionInfo -controller $mySecondaryController
+            $VersionPrimary=$VersionSecondary
+        }else{
+            $VersionPrimary=Get-NcSystemVersionInfo -controller $myPrimaryController
+            $VersionSecondary=$VersionPrimary
+        }
+        if((($VersionPrimary[0].VersionTuple.Generation -lt 9) -and ($VersionPrimary[0].VersionTuple.Major -lt 10)) -or (($VersionSecondary[0].VersionTuple.Generation -lt 9) -and ($VersionSecondary[0].VersionTuple.Major -lt 10))){
+            Write-LogWarn "Your ctrl must at least run ONTAP version 9.10.1 to support Service Policy"
+            $Return=$True
+            Write-LogDebug "[$myPrimaryVserver]: end"
+            return $Return
+        }
+        if($Global:PSTKCall -eq "Zapi"){
+            Write-LogWarn "You must use PSTK core with REST call to support Service Policy"
+            $Return=$True
+            Write-LogDebug "[$myPrimaryVserver]: end"
+            return $Return    
+        }
+        if($Restore -eq $False -and $Backup -eq $False){
+            
+            $mySecondaryCluster = (Get-NcCluster -Controller $mySecondaryController  -ErrorVariable ErrorVar).ClusterName 
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCluster failed [$ErrorVar]" }
+        }
+        if($Restore -eq $False){
+            $PrimaryServicePolicies=Get-NcNetServicePolicy -Controller $myPrimaryController -Vserver $myPrimaryVserver  -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetServicePolicy failed [$ErrorVar]" }
+        }else{
+            if(Test-Path $($Global:JsonPath+"Get-NcNetServicePolicy.json")){
+                $PrimaryServicePolicies=Get-Content $($Global:JsonPath+"Get-NcNetServicePolicy.json") -Raw | ConvertFrom-Json
+            }else{
+                $Return=$False
+                $filepath=$($Global:JsonPath+"Get-NcNetServicePolicy.json")
+                Throw "ERROR: failed to read $filepath"
+            }    
+        }
+        if($Backup -eq $True){
+            $PrimaryServicePolicies | ConvertTo-Json -Depth 5 | Out-File -FilePath $($Global:JsonPath+"Get-NcNetServicePolicy.json") -Encoding ASCII -Width 65535
+            if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcNetServicePolicy.json") -ErrorAction SilentlyContinue) ){
+                Write-LogDebug "$($Global:JsonPath+"Get-NcNetServicePolicy.json") saved successfully"
+            }else{
+                Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcNetServicePolicy.json")"
+                $Return=$False
+            }    
+        }
+        if($Backup -eq $False){
+            $CredPrimary=get_local_cDotcred($myPrimaryController)
+            $CredSecondary=get_local_cDotcred($mySecondaryController)
+            <# $headers=@{
+                Accept='application/json'
+                ContentType='application/json'
+            } #>
+            foreach ($Policy in $PrimaryServicePolicies){
+                $PolicyName=$Policy.Name
+                Write-LogDebug "Analyse Policy [$PolicyName]"
+                $PolicyScope=$Policy.Scope
+                $PolicyIpSpace=$Policy.Ipspace
+                $PolicyServices=$Policy.Services
+                # ! there is no REST call for this yet
+                # ! perform a REST CLI passthrough call to get detailed information about service-policy allowed-addresses
+                Write-LogDebug "Get-NcNetServicePolicy -Controller $mySecondaryController -Vserver $mySecondaryVserver -Name $PolicyName"
+                $SecondaryPolicy=Get-NcNetServicePolicy -Controller $mySecondaryController -Vserver $mySecondaryVserver -Name $PolicyName  -ErrorVariable ErrorVar
+                if($? -ne $True){
+                    Throw "ERROR: Fail to read service-policy [$PolicyName] on secondary"
+                }
+                if($null -eq $SecondaryPolicy){
+                    Write-Log "Policy [$PolicyName] does not exist on secondary"
+                    Write-LogDebug "New-NcNetServicePolicy -Name $PolicyName -Scope $PolicyScope -IpSpaceName $PolicyIpSpace.Name -Services $PolicyServices -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+                    $ret=New-NcNetServicePolicy -Name $PolicyName -Scope $PolicyScope -IpSpaceName $PolicyIpSpace.Name -Services $PolicyServices -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                    if($? -ne $True){
+                        Throw "ERROR: Fail to create service-policy [$PolicyName] on secondary"
+                    }
+                    Write-Log "Policy [$PolicyName] created successfully on secondary"
+                }
+                $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/network/interface/service-policy?vserver="+$myPrimaryVserver+"&policy="+$PolicyName+"&fields=service_allowed_addresses")
+                Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $CredPrimary -SkipCertificateCheck"
+                $DetailedPrimaryService=Invoke-RestMethod -Method 'get' -Uri $url -Credential $CredPrimary -SkipCertificateCheck -ErrorVariable ErrorVar
+                if($? -ne $True){
+                    Write-LogError "ERROR: Unable to get service-allowed-addresses. Reason [$ErrorVar]"
+                    Write-LogDebug "[$workOn]: end"
+                    return $False
+                }
+                $DetailedPrimaryService=$DetailedPrimaryService.records
+                #$PrimaryServices=@()
+                #$SecondaryServices=@()
+                # Get Service Allowed Addresses from Primary Vserver
+                #foreach($ServiceRecord in $DetailedPrimaryService){
+                    #$ServiceRecordName=$ServiceRecord.Substring(0,$ServiceRecord.IndexOf(':'))
+                    $PrimaryServiceAllowedAddresses=$DetailedPrimaryService[0].service_allowed_addresses
+                    #$PolicyRecordAllowedAddresses=($PolicyRecord -replace ($($PolicyRecordName+':'),'')).spit(',')
+                    #$PolicyRecordAllowedAddresses=$PolicyRecord -replace ($($PolicyRecordName+':'),'')
+                    #$myobj=New-Object -TypeName PSObject -Property @{'ServiceName'=$PolicyRecordName;'ServiceAddresses'=$PolicyRecordAllowedAddresses}
+                    #$PrimaryServices+=$myobj
+                #}
+                
+                $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/network/interface/service-policy?vserver="+$mySecondaryVserver+"&policy="+$PolicyName+"&fields=service_allowed_addresses")
+                $DetailedSecondaryService=Invoke-RestMethod -Method 'get' -Uri $url -Credential $CredSecondary -SkipCertificateCheck -ErrorVariable ErrorVar
+                if($? -ne $True){
+                    Write-LogError "ERROR: Unable to get service-allowed-addresses. Reason [$ErrorVar]"
+                    Write-LogDebug "[$workOn]: end"
+                    return $False
+                }
+                if($DetailedSecondaryService.num_record -eq 0){
+                    # Create a new policy on secondary
+                    Write-LogDebug "Policy $PolicyName does not exist on Secondary"
+                    Write-Log "Create missing Policy [$PolicyName] on secondary Vserver [$mySecondaryVserver]"
+                    Write-LogDebug "New-NcNetServicePolicy -Name $PolicyName -Scope $PolicyScope -IpSpaceName $PolicyIpSpace -Services $PolicyServices -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+                    $ret=New-NcNetServicePolicy -Name $PolicyName -Scope $PolicyScope -IpSpaceName $PolicyIpSpace -Services $PolicyServices -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                    $DetailedSecondaryService=Invoke-RestMethod -Method 'get' -Uri $url -Credential $cred -SkipCertificateCheck -ErrorVariable ErrorVar
+                    if($? -ne $True){
+                        Write-LogError "ERROR: Unable to get service-allowed-addresses. Reason [$ErrorVar]"
+                        Write-LogDebug "[$workOn]: end"
+                        return $False
+                    }
+                }
+                $DetailedSecondaryService=$DetailedSecondaryService.records
+                # Get Service Allowed Addresses from Secondary Vserver
+                $SecondaryServiceAllowedAddresses=$DetailedSecondaryService[0].service_allowed_addresses
+                <# foreach($PolicyRecord in $DetailedSecondaryPolicy){
+                    $PolicyRecordName=$PolicyRecord.Substring(0,$PolicyRecord.IndexOf(':'))
+                    #$PolicyRecordAllowedAddresses=($PolicyRecord -replace ($($PolicyRecordName+':'),'')).spit(',')
+                    $PolicyRecordAllowedAddresses=$PolicyRecord -replace ($($PolicyRecordName+':'),'')
+                    $myobj=New-Object -TypeName PSObject -Property @{'ServiceName'=$PolicyRecordName;'ServiceAddresses'=$PolicyRecordAllowedAddresses}
+                    $SecondaryServices+=$myobj
+                } #>
+                # Now Compare allowed addresses from primary and secondary vserver
+                foreach($ServiceAllowedAddresses in $PrimaryServiceAllowedAddresses){
+                    Write-LogDebug "analyse allowed address [$ServiceAllowedAddresses]"
+                    $Name=$ServiceAllowedAddresses.Substring(0,$ServiceAllowedAddresses.IndexOf(':'))
+                    $Addresses=(($ServiceAllowedAddresses -replace ($($Name+':'),'')) -replace ' ','').split(',')
+                    if($ServiceAllowedAddresses -match "data-nfs|data-cifs|data-flexcache"){
+                        Write-LogDebug "Ignore service [$Name] because Allowed-Addresses cannot be modified for [data-cifs|data-nfs|data-flexcache]"
+                        continue
+                    }
+                    if($SecondaryServiceAllowedAddresses | where-object {$_ -match $Name}){
+                        # Service Name exist on secondary
+                        $DetailedSecondaryService=$SecondaryServiceAllowedAddresses | where-object {$_ -match $($Name+':')}
+                        if($DetailedSecondaryService -ne $ServiceAllowedAddresses){
+                            # Need to modify Allowed Addresses for this service on secondary
+                            Write-LogDebug "Primary [$ServiceAllowedAddresses] different than secondary [$DetailedSecondaryService]"
+                            $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/network/interface/service-policy/modify-service")
+                            $body=@{
+                                vserver=$mySecondaryVserver
+                                policy=$PolicyName
+                                service=$Name
+                                allowed_addresses=$Addresses
+                            } | ConvertTo-Json
+                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                            if($? -ne $True){
+                                Write-LogError "ERROR: Unable to modify a service [$Name] for policy [$PolicyName]. Reason [$ErrorVar]"
+                                Write-LogDebug "[$workOn]: end"
+                                return $False
+                            }
+                        }
+                        Write-LogDebug "Primary [$ServiceAllowedAddresses] identical on secondary [$DetailedSecondaryService]"
+                    }else{
+                        # Service does not exist on secondary
+                        # need to create it
+                        # first with default allowed_addresses
+                        Write-LogDebug "Service [$PolicyName][$Name][$Addresses] does not exist on secondary"
+                        Write-LogDebug "Create a new default service [$Name]"
+                        $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/network/interface/service-policy/add-service")
+                        $body=@{
+                            vserver=$mySecondaryVserver
+                            policy=$PolicyName
+                            service=$Name
+                            #allowed_addresses=$Addresses
+                        } | ConvertTo-Json
+                        $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                        if($? -ne $True){
+                            Write-LogError "ERROR: Unable to add a service [$Name] for policy [$PolicyName]. Reason [$ErrorVar]"
+                            Write-LogDebug "[$workOn]: end"
+                            return $False
+                        }
+                        # and then modify it with the expected allowed_addresses
+                        Write-LogDebug "Modify service [$Name] wit allowed_addresse [$Addresses]"
+                        $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/network/interface/service-policy/modify-service")
+                        $body=@{
+                            vserver=$mySecondaryVserver
+                            policy=$PolicyName
+                            service=$Name
+                            allowed_addresses=$Addresses
+                        } | ConvertTo-Json
+                        $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                        if($? -ne $True){
+                            Write-LogError "ERROR: Unable to modify a service [$Name] for policy [$PolicyName]. Reason [$ErrorVar]"
+                            Write-LogDebug "[$workOn]: end"
+                            return $False
+                        }
+                        
+                    }
+                }
+            }
+        }
+        Write-LogDebug "[$workOn]: end"
+        return $Return
+    }
+    catch
+    {
+        handle_error $_ $workOn
+	    return $false        
     }
 }

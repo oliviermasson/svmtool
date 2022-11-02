@@ -1266,21 +1266,28 @@ if ( $null -eq $module ) {
 init_log4net
 
 # appenders (logfile, eventviewer & console)
+
 $masterLogFileAppender = create_rolling_log_appender -name "svmtool.log" -file $LOGFILE -threshold $LogLevelLogFile
-if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){$masterEventViewerAppender = create_eventviewer_appender -name "eventviewer" -applicationname "svmtool"}
-$consoleAppender = create_console_appender -name "console" -threshold $LogLevelConsole
-
 # initialize logonly
-add_appender -loggerinstance "logonly" $masterLogFileAppender
+if("svmtool.log" -notin (get_logger -name "logonly").Logger.Appenders.Name){add_appender -loggerinstance "logonly" $masterLogFileAppender}
 set_log_level -loggerinstance "logonly" -level "All"
-$Global:MasterLog = get_logger -name "logonly" 
+$Global:MasterLog = get_logger -name "logonly"
 
+if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){
+    $masterEventViewerAppender = create_eventviewer_appender -name "eventviewer" -applicationname "svmtool"
+    }
+
+$consoleAppender = create_console_appender -name "console" -threshold $LogLevelConsole
 # initialize console
-add_appender -loggerinstance "console" $masterLogFileAppender
-if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){add_appender -loggerinstance "console" $masterEventViewerAppender}
-add_appender -loggerinstance "console" $consoleAppender 
+if("svmtool.log" -notin (get_logger -name "console").Logger.Appenders.Name){add_appender -loggerinstance "console" $masterLogFileAppender}
+if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){
+    if("eventviewer" -notin (get_logger -name "console").Logger.Appenders.Name){add_appender -loggerinstance "console" $masterEventViewerAppender}
+}
+if("console" -notin (get_logger -name "console").Logger.Appenders.Name){add_appender -loggerinstance "console" $consoleAppender}
 set_log_level -loggerinstance "console" -level "All"
 $Global:ConsoleLog = get_logger -name "console"
+
+
 
 # check if module is already imported
 $module=get-module netapp.ontap,dataontap
