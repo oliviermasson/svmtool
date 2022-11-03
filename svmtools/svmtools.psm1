@@ -8337,6 +8337,7 @@ Try {
             }
         }
 	}
+    Write-LogDebug "DNS check finished"
     Write-LogDebug "[$myPrimaryVserver]: end"
 	return $Return 
 }
@@ -9647,33 +9648,72 @@ Try {
                 $ldapserverslist=@()
                 $existingPreferedADServers=$LDAPclientPreferredAdServers
                 $index=0
-                if($Restore -eq $False){
-                    do{
+                while($index -lt $existingPreferedADServers.count){
+                    if($Restore -eq $False){
+                        if($existingServers.count -gt 0){
+                            if($existingPreferedADServers.GetType().Name -match "\[\]"){
+                                $previousPreferedServer=$existingPreferedADServers[$index]
+                                $index++
+                            }else{
+                                $previousPreferedServer=$existingPreferedADServers    
+                            }
+                        }else{$previousPreferedServer=""}
+                        do{
+                            $ldapserver=Read-HostDefault -question "[$mySecondaryVserver] Enter AD Prefered LDAP server IP" -default $previousPreferedServer
+                        }while(-not (validate_ip_format $ldapserver))
+                        $ldapserverslist+=$ldapserver
+                        $ANS=Read-HostOptions -question "[$mySecondaryVserver] Do you want to add another AD Prefered LDAP server ?" -options "y/n" -default "n"
+                    }else{
                         if($existingPreferedADServers.GetType().Name -match "\[\]"){
                             $previousPreferedServer=$existingPreferedADServers[$index]
                             $index++
                         }else{
                             $previousPreferedServer=$existingPreferedADServers    
                         }
-                        do{
-                            $ldapserver=Read-HostDefault -question "[$mySecondaryVserver] Enter AD Prefered LDAP server IP []" -default $previousPreferedServer
-                        }
-                        while(validate_ip_format $ldapserver)
-                        $ldapserverslist+=$ldapserver
-                        $ANS=Read-HostOptions -question "[$mySecondaryVserver] Do you want to add another AD Prefered LDAP server ?" -options "y/n" -default "n"
+                        $ldapserverslist+=$previousPreferedServer
                     }
-                    while($ANS -eq "y")
-                }else{
-                    if($existingPreferedADServers.GetType().Name -match "\[\]"){
-                        $previousPreferedServer=$existingPreferedADServers[$index]
-                        $index++
-                    }else{
-                        $previousPreferedServer=$existingPreferedADServers    
-                    }
-                    $ldapserverslist+=$previousPreferedServer
                 }
                 $LDAPclientADServers=$ldapserverslist
                 $LDAPclientBindPassword=get_pwd_from_cli -workOn $mySecondaryVserver -for "LDAP server Bind Password"
+                if($Global:PSTKCall -eq "Rest"){
+                    # ! Try REST request because New-NcLdapClient cmdlet does not support -Name and -Servers parameters
+                    $CredSecondary=get_local_cDotcred($mySecondaryController)
+                    $body=@{
+                        schema=$LDAPclientSchema
+                        ad_domain=$LDAPclientAdDomain
+                        preferred_ad_servers=$LDAPclientADServers
+                        port=$LDAPclientTcpPort
+                        query_timeout=$LDAPclientQueryTimeout
+                        min_bind_level=$LDAPclientMinBindLevel
+                        bind_dn=$LDAPclientBindDn
+                        bind_password=$LDAPclientBindPassword
+                        base_dn=$LDAPclientBaseDn
+                        base_scope=$LDAPclientBaseScope
+                        user_dn=$LDAPclientUserDn
+                        user_scope=$LDAPclientUserScope
+                        group_dn=$LDAPclientGroupDn
+                        group_scope=$LDAPclientGroupScope
+                        netgroup_dn=$LDAPclientNetgroupDn
+                        netgroup_scope=$LDAPclientNetgroupScope
+                        is_netgroup_byhost_enabled=$LDAPclientIsNetgroupByhostEnabled
+                        netgroup_byhost_scope=$LDAPclientNetgroupByhostScope
+                        session_security=$LDAPclientSessionSecurity
+                        ldaps_enabled=$LDAPclientLdapsEnabled
+                        referral_enabled=$LDAPclientReferalEnabled
+                        bind_as_cifs_server=$LDAPclientBindAsCifsServer
+                        skip_config_validation="true"
+                        use_start_tls=$LDAPclientUseStartTls
+                        svm=@{name=$mySecondaryVserver}
+                    }|ConvertTo-Json
+                    $url=$("https://"+$mySecondaryController.Name+"/api/name-services/ldap")
+                    Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
+                    $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                    if($? -ne $True){
+                        Write-LogError "ERROR: Unable to create LDAP AD client. Reason [$ErrorVar]"
+                        Write-LogDebug "[$workOn]: end"
+                        return $False
+                    }
+                }
                 Write-LogDebug "New-NcLdapClient -Name $PrimClient -VserverContext $mySecondaryVserver `
                 -Schema $LDAPclientSchema `
                 -AdDomain $LDAPclientAdDomain `
@@ -9723,8 +9763,8 @@ Try {
                 $serverslist=@()
                 $existingServers=$LDAPclientServers
                 $index=0
-                if($Restore -eq $False){
-                    do{
+                while($index -lt $existingServers.count){
+                    if($Restore -eq $False){
                         if($existingServers.count -gt 0){
                             if($existingServers.GetType().Name -match "\[\]"){
                                 $previousServer=$existingServers[$index]
@@ -9735,53 +9775,60 @@ Try {
                         }else{$previousServer=""}
                         do{
                             $server=Read-HostDefault -question "[$mySecondaryVserver] Enter LDAP server IP" -default $previousServer
-                        }while((validate_ip_format $server) -eq $False)
+                        }while(-not (validate_ip_format $server))
                         $serverslist+=$server
                         $ANS=Read-HostOptions -question "[$mySecondaryVserver] Do you want to add another LDAP server" -options "y/n" -default "n"
+                    }else{
+                        if($existingServers.count -gt 0){
+                            if($existingServers.GetType().Name -match "\[\]"){
+                                $previousServer=$existingServers[$index]
+                                $index++
+                            }else{
+                                $previousServer=$existingServers    
+                            }
+                        }else{$previousServer=""}
+                        $serverslist+=$previousServer    
                     }
-                    while($ANS -eq "y")
-                }else{
-                    if($existingServers.count -gt 0){
-                        if($existingServers.GetType().Name -match "\[\]"){
-                            $previousServer=$existingServers[$index]
-                            $index++
-                        }else{
-                            $previousServer=$existingServers    
-                        }
-                    }else{$previousServer=""}
-                    $serverslist+=$previousServer    
                 }
                 $LDAPclientBindPassword=get_pwd_from_cli -workOn $mySecondaryVserver -for "LDAP server Bind Password" 
                 $LDAPclientServers=$serverslist
                 if($Global:PSTKCall -eq "Rest"){
                     # ! Try REST request because New-NcLdapClient cmdlet does not support -Name and -Servers parameters
+                    $CredSecondary=get_local_cDotcred($mySecondaryController)
                     $body=@{
                         schema=$LDAPclientSchema
                         servers=$LDAPclientServers
                         port=$LDAPclientTcpPort
                         query_timeout=$LDAPclientQueryTimeout
                         min_bind_level=$LDAPclientMinBindLevel
-                        bind_bn=$LDAPclientBindDn
+                        bind_dn=$LDAPclientBindDn
                         bind_password=$LDAPclientBindPassword
-                        base_bn=$LDAPclientBaseDn
+                        base_dn=$LDAPclientBaseDn
                         base_scope=$LDAPclientBaseScope
                         user_dn=$LDAPclientUserDn
                         user_scope=$LDAPclientUserScope
                         group_dn=$LDAPclientGroupDn
                         group_scope=$LDAPclientGroupScope
-                        netGroup_dn=$LDAPclientNetgroupDn
-                        netGroup_scope=$LDAPclientNetgroupScope
+                        netgroup_dn=$LDAPclientNetgroupDn
+                        netgroup_scope=$LDAPclientNetgroupScope
                         is_netgroup_byhost_enabled=$LDAPclientIsNetgroupByhostEnabled
                         netgroup_byhost_scope=$LDAPclientNetgroupByhostScope
                         session_security=$LDAPclientSessionSecurity
-                        ldaps_enable=$LDAPclientLdapsEnabled
+                        ldaps_enabled=$LDAPclientLdapsEnabled
                         referral_enabled=$LDAPclientReferalEnabled
                         bind_as_cifs_server=$LDAPclientBindAsCifsServer
                         skip_config_validation="true"
                         use_start_tls=$LDAPclientUseStartTls
                         svm=@{name=$mySecondaryVserver}
                     }|ConvertTo-Json
-                    $url=$url=$("https://"+$mySecondaryController.Name+"/api/name-service/ldap")
+                    $url=$("https://"+$mySecondaryController.Name+"/api/name-services/ldap")
+                    Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
+                    $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                    if($? -ne $True){
+                        Write-LogError "ERROR: Unable to create LDAP client. Reason [$ErrorVar]"
+                        Write-LogDebug "[$workOn]: end"
+                        return $False
+                    }
                 }else{
                     Write-LogDebug "New-NcLdapClient -Name $PrimClient -VserverContext $mySecondaryVserver `
                     -Schema $LDAPclientSchema `
@@ -9826,7 +9873,6 @@ Try {
 
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcLdapClient failed [$ErrorVar]" ; } 
                 }
-                   
             }
 
             Write-LogDebug "Get-NcLdapConfig -vserver $mySecondaryVserver -controller $mySecondaryController"
@@ -11127,14 +11173,14 @@ Try {
     }
     if($Backup -eq $True){
         $PrimaryIscsiService | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcIscsiService.json") -Encoding ASCII -Width 65535
-        if( ($ret=get-item $($Global:JsonPath+"Get-NcIscsiService.json") -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcIscsiService.json") -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$($Global:JsonPath+"Get-NcIscsiService.json") saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcIscsiService.json")"
             $Return=$False
         }
     }
-	if ( $PrimaryIscsiService -eq $null ) {
+	if ( $null -eq $PrimaryIscsiService ) {
 		Write-Log "[$workOn] No ISCSI services in vserver [$myPrimaryVserver]"
         Write-LogDebug "end"
 		return $true
@@ -11142,7 +11188,7 @@ Try {
     if($Backup -eq $False){
         $SecondaryIscsiService = Get-NcIscsiService -VserverContext  $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcIscsiService failed [$ErrorVar]" }
-        if ( $SecondaryIscsiService -eq $null ) {
+        if ( $null -eq $SecondaryIscsiService ) {
             Write-Log "[$workOn] Add ISCSI services in vserver [$mySecondaryVserver]"
             Write-LogDebug "Add-NcIscsiService -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
             $out = Add-NcIscsiService -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
@@ -12187,15 +12233,15 @@ Try {
     if ( ( $ret=create_update_localunixgroupanduser_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all Local Unix User and Group"}
     # if ( ( $ret=create_update_usermapping_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create User Mapping"}
     if ( ( $ret=create_update_DNS_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create DNS service" ; $Return = $False }
-    if ( ( $ret=create_update_LDAP_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create LDAP config" ; $Return = $False }
-    if ( ( $ret=create_update_NIS_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create NIS service" ; $Return = $False }
-    if ( ( $ret=create_update_NFS_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create NFS service" ; $Return = $False }
     if ( ( $ret=create_update_ISCSI_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create iSCSI service" ; $Return = $False }
     if ( ( $ret=create_update_CIFS_server_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore -TemporarySecondaryCifsIp $TemporarySecondaryCifsIp -SecondaryCifsLifMaster $SecondaryCifsLifMaster -SecondaryCifsLifCustomVlan $SecondaryCifsLifCustomVlan -ActiveDirectoryCustomOU $ActiveDirectoryCustomOU) -ne $True ) {Write-LogError "ERROR: create_update_CIFS_server_dr" ; $Return = $False } 
     $ret=update_CIFS_server_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore
     if ( $? -ne $True ) {
         Write-LogWarn "[$workOn] Some CIFS options has not been set on"    
     }
+    if ( ( $ret=create_update_LDAP_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create LDAP config" ; $Return = $False }
+    if ( ( $ret=create_update_NIS_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create NIS service" ; $Return = $False }
+    if ( ( $ret=create_update_NFS_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create NFS service" ; $Return = $False }
     if ( ( $ret=create_update_usermapping_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create User Mapping"}
     if ( ( $ret=create_update_igroupdr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all igroups" ; $Return = $False }
     if ( ( $ret=create_update_vscan_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -fromConfigureDR -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create Vscan config" ; $Return = $False }

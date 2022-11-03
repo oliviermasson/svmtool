@@ -2414,6 +2414,7 @@ if ( ( $Setup ) -or ( $null -eq $read_vconf ) ) {
     }
 }
 
+
 $VserverDR = $read_vconf.Get_Item("VserverDR")
 if ( $null -eq $Vserver ) {
     Write-LogError "ERROR: unable to find VserverDR in $VCONFFILE"
@@ -2455,6 +2456,28 @@ Write-LogDebug "OPTION AlwaysChooseDataAggr 		 [$Global:AlwaysChooseDataAggr]"
 Write-LogDebug "OPTION SelectVolume         		 [$Global:SelectVolume]"
 Write-LogDebug "OPTION IgnoreQtreeExportPolicy       [$Global:IgnoreQtreeExportPolicy]"
 ####################################################################################################
+
+# * Set version tuple (Generation and Major only) into a double to easily check if version is greater than X.Y
+
+$myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
+$tmp_str = $MyCred.UserName
+Write-LogDebug "Connect to cluster [$PRIMARY_CLUSTER] with login [$tmp_str]"
+Write-LogDebug "connect_cluster -myController $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+if ( ( $NcPrimaryCtrl = connect_cluster -myController $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
+    Write-LogError "ERROR: Unable to Connect to NcController [$PRIMARY_CLUSTER]" 
+}else{
+    $Global:PrimaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $myPrimaryCtrl)[0].VersionTuple.Generation)+','+[string]((Get-NcSystemVersionInfo -Controller $myPrimaryCtrl)[0].VersionTuple.Major)))
+}
+
+$myCred = get_local_cDotcred ($SECONDARY_CLUSTER) 
+$tmp_str = $MyCred.UserName
+Write-LogDebug "Connect to cluster [$SECONDARY_CLUSTER] with login [$tmp_str]"
+Write-LogDebug "connect_cluster -myController $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
+if ( ( $NcSecondaryCtrl = connect_cluster -myController $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
+    Write-LogError "ERROR: Unable to Connect to NcController [$SECONDARY_CLUSTER]"
+}else{
+    $Global:SecondaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Generation)+','+[string]((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Major)))
+}
 
 if ( $ShowDR ) {
     $Global:Run_Mode = "ShowDR"
