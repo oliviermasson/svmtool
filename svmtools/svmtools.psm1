@@ -4180,13 +4180,13 @@ Function create_update_efficiency_policy_dr(
                                 Throw "ERROR: failed to read $filepath"
                             }    
                         }else{
-                            $PrimaryVersion=(Get-NcSystemVersionInfo -Controller $myPrimaryController).VersionTupleV    
+                            $PrimaryVersion=(Get-NcSystemVersionInfo -Controller $myPrimaryController)[0].VersionTuple    
                         }
                         if($PrimaryVersion.Major -ge 9 -and $PrimaryVersion.Minor -ge 3){
                             Write-Log "[$workOn] [auto] Efficiency Policy is factory created since ONTAP 9.3. Bypass on destination"
                             continue
                         }else{
-                            $SecondaryVersion=(Get-NcSystemVersionInfo -Controller $mySecondaryController).VersionTupleV
+                            $SecondaryVersion=(Get-NcSystemVersionInfo -Controller $mySecondaryController)[0].VersionTuple
                             if($SecondaryVersion.Major -ge 9 -and $SecondaryVersion.Minor -ge 3){
                                 Write-Log "[$workOn] [auto] Efficiency Policy already exists since ONTAP 9.3 as a factory Policy."
                                 continue  
@@ -5653,8 +5653,8 @@ Try {
                         #  THIS NOW WORKS DIFFERENTLY
                         #  WE ALWAYS TRY TO FIND A MATCH IN NON INTERACTIVE MODE
 
-                        $PrimaryVersion=(Get-NcSystemVersionInfo -Controller $myPrimaryController).VersionTupleV
-                        $SecondaryVersion=(Get-NcSystemVersionInfo -Controller $mySecondaryController).VersionTupleV
+                        $PrimaryVersion=(Get-NcSystemVersionInfo -Controller $myPrimaryController)[0].VersionTuple
+                        $SecondaryVersion=(Get-NcSystemVersionInfo -Controller $mySecondaryController)[0].VersionTuple
         
                         if($Global:NonInteractive){
                             Write-LogDebug "with `$Global:NonInteractive enabled, auto selecting aggregate for volume [$PrimaryVolName]"
@@ -7172,8 +7172,8 @@ Try {
     # Check ONTAP version on source and destination in order to validate the type of snapmirror relationship that will be created
     # DP or XDP?
 	Write-LogDebug "Check ONTAP version"
-	$PrimaryVersion=(Get-NcSystemVersionInfo -Controller $myPrimaryController).VersionTupleV
-	$SecondaryVersion=(Get-NcSystemVersionInfo -Controller $mySecondaryController).VersionTupleV
+	$PrimaryVersion=(Get-NcSystemVersionInfo -Controller $myPrimaryController)[0].VersionTuple
+	$SecondaryVersion=(Get-NcSystemVersionInfo -Controller $mySecondaryController)[0].VersionTuple
 	$PrimaryVersionString=$PrimaryVersion | out-string
 	$SecondaryVersionString=$SecondaryVersion | out-string
 	Write-LogDebug "Primary version is $PrimaryVersionString"
@@ -8873,7 +8873,7 @@ Try {
         Write-LogDebug "Get-NcCifsOption -VserverContext $myPrimaryVserver -controller $myPrimaryController"
         $primaryOptions=Get-NcCifsOption -VserverContext $myPrimaryVserver -controller $myPrimaryController  -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsOption failed [$ErrorVar]" }
-        $PrimaryVersion=(Get-NcSystemVersionInfo -Controller $myPrimaryController).VersionTupleV
+        $PrimaryVersion=(Get-NcSystemVersionInfo -Controller $myPrimaryController)[0].VersionTuple
         Write-LogDebug "Get-NcCifsSecurity -Vservercontext $myPrimaryVserver -Controller $myPrimaryController"
         $PrimaryCIFSsecurity=Get-NcCifsSecurity -Vservercontext $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
         if($? -ne $True){Throw "ERROR: Failed to get CIFS security for [$myPrimaryVserver] reason [$ErrorVar]"}
@@ -8892,7 +8892,6 @@ Try {
             $filepath=$($Global:JsonPath+"Get-NcSystemVersionInfo.json")
             Throw "ERROR: failed to read $filepath"
         }
-        $PrimaryVersion=$PrimaryVersion.VersionTupleV
         if(Test-Path $($Global:JsonPath+"Get-NcCifsSecurity.json")){
             $PrimaryCIFSsecurity=Get-Content $($Global:JsonPath+"Get-NcCifsSecurity.json") -Raw | ConvertFrom-Json
         }else{
@@ -8903,14 +8902,14 @@ Try {
     }
     if($Backup -eq $True){
         $primaryOptions | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcCifsOption.json") -Encoding ASCII -Width 65535
-        if( ($ret=get-item $($Global:JsonPath+"Get-NcCifsOption.json") -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcCifsOption.json") -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$($Global:JsonPath+"Get-NcCifsOption.json") saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcCifsOption.json")"
             $Return=$False
         }
         $PrimaryVersion | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcSystemVersionInfo.json") -Encoding ASCII -Width 65535
-        if( ($ret=get-item $($Global:JsonPath+"Get-NcSystemVersionInfo.json") -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcSystemVersionInfo.json") -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$($Global:JsonPath+"Get-NcSystemVersionInfo.json") saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcSystemVersionInfo.json")"
@@ -8929,7 +8928,7 @@ Try {
         $secondaryOptions=Get-NcCifsOption -VserverContext $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsOption failed [$ErrorVar]" }
         $Properties=$primaryOptions | Get-Member -MemberType Property | Select-Object -ExpandProperty Name
-        $SecondaryVersion=(Get-NcSystemVersionInfo -Controller $mySecondaryController).VersionTupleV
+        $SecondaryVersion=(Get-NcSystemVersionInfo -Controller $mySecondaryController)[0].VersionTuple
         if($PrimaryVersion.Major -ne $SecondaryVersion.Major){$ONTAPVersionDiff=$True}
         foreach($Property in $Properties | Where-Object {$_ -notmatch "Vserver|NcController|Specified"}){
             #write-log "$Property"
@@ -9885,7 +9884,7 @@ Try {
                 if($? -ne $True){Throw "ERROR: Failed to remove LDAP Config on [$mySecondaryVserver] reason [$ErrorVar]"}
             }
             $version=Get-NcSystemVersionInfo -Controller $mySecondaryController
-            if($version.VersionTupleV.Major -ge 9 -and $version.VersionTupleV.Minor -ge 3){
+            if($version[0].VersionTuple.Major -ge 9 -and $version[0].VersionTuple.Minor -ge 3){
                 if($PrimClientEnabled -eq $True){
                     Write-LogDebug "New-NcLdapConfig -ClientConfig $PrimClient -ClientEnabled $PrimClientEnabled -SkipConfigValidation -Vservercontext $mySecondaryVserver -Controller $mySecondaryController"
                     $out=New-NcLdapConfig -ClientConfig $PrimClient -ClientEnabled $PrimClientEnabled -SkipConfigValidation -Vservercontext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
@@ -10018,7 +10017,7 @@ Try {
             $SecondaryDomainWorkgroup = $PrimaryCifsServerInfos.DomainWorkgroup
             $SecondaryOrganizationalUnit = $PrimaryCifsServerInfos.OrganizationalUnit
             if ($ActiveDirectoryCustomOU) {
-                Write-Log "[$workOn] A custom OU has been provided, using this one instead [$ActiveDirectoryCustomOU]" 
+                Write-Log "[$workOn] A custom OU has been provided, using this one [$ActiveDirectoryCustomOU] instead of [$SecondaryOrganizationalUnit]" 
                 $SecondaryOrganizationalUnit = $ActiveDirectoryCustomOU
             }            
             
@@ -10046,7 +10045,7 @@ Try {
                         if ( ( $SecondaryDomain -eq $PrimaryCifsServerInfos.Domain ) -and ( $SecondaryCifsServer -eq $PrimaryCifsServerInfos.CifsServer ) -and ($Global:RESTORE_ORIGINAL -ne $True)) { 
                             Write-LogError "ERROR: Secondary CIFS server cannot use the same name has primary CIFS server in the same domain"
                         } else {
-                                Write-Log "[$workOn] Default Secondary CIFS Name:      [$SecondaryCifsServer]"
+                                Write-Log "[$workOn] Default Secondary CIFS Name [$SecondaryCifsServer]"
                             Write-Log ""
                                 $ANS = Read-HostOptions -question "[$workOn] Apply new configuration ?" -options "y/n" -default "y"
                         }
@@ -10234,12 +10233,22 @@ Try {
                     }
                     $ADCred = get_local_cred ($SecondaryDomain)
                     if($null -eq $SecondaryCifsNetbiosAlias){
-                        Write-logDebug "Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite $SecondaryDefaultSite -AdminCredential $ADCred -Force -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -Controller $mySecondaryController" 
-                        $out = Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite  $SecondaryDefaultSite -AdminCredential $ADCred -Force -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                        if($Global:PSTKCall -eq "Rest"){
+                            Write-logDebug "Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite $SecondaryDefaultSite -AdminCredential $ADCred -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -Controller $mySecondaryController" 
+                            $out = Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite  $SecondaryDefaultSite -AdminCredential $ADCred -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                        }else{
+                            Write-logDebug "Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite $SecondaryDefaultSite -AdminCredential $ADCred -Force -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -Controller $mySecondaryController" 
+                            $out = Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite  $SecondaryDefaultSite -AdminCredential $ADCred -Force -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                        }
                         if ( $? -ne $True ) { throw "ERROR: Add-NcCifsServer failed [$ErrorVar]" ; }else{ Write-Log "[$workOn] Cifs server is joined"}
                     }else{
-                        Write-logDebug "Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite $SecondaryDefaultSite -AdminCredential $ADCred -Force -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -NetbiosAlias $SecondaryCifsNetbiosAlias -Controller $mySecondaryController" 
-                        $out = Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite  $SecondaryDefaultSite -AdminCredential $ADCred -Force -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -NetbiosAlias $SecondaryCifsNetbiosAlias -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                        if($Global:PSTKCall -eq "Rest"){
+                            Write-logDebug "Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite $SecondaryDefaultSite -AdminCredential $ADCred -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -NetbiosAlias $SecondaryCifsNetbiosAlias -Controller $mySecondaryController" 
+                            $out = Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite  $SecondaryDefaultSite -AdminCredential $ADCred -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -NetbiosAlias $SecondaryCifsNetbiosAlias -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                        }else{
+                            Write-logDebug "Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite $SecondaryDefaultSite -AdminCredential $ADCred -Force -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -NetbiosAlias $SecondaryCifsNetbiosAlias -Controller $mySecondaryController" 
+                            $out = Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite  $SecondaryDefaultSite -AdminCredential $ADCred -Force -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -NetbiosAlias $SecondaryCifsNetbiosAlias -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                        }
                         if ( $? -ne $True ) { throw "ERROR: Add-NcCifsServer failed [$ErrorVar]" ; }else{ Write-Log "[$workOn] Cifs server is joined"}
                     }
                     if( ($myInterfaceName.Length -gt 0) -and ($Global:RESTORE_ORIGINAL -eq $False -and ( -not ($Global:ForceCloneOriginal.IsPresent))) )
@@ -10461,11 +10470,11 @@ Try {
         return $True    
     }
     if($Restore -eq $False){
-        $PrimaryVersion=(Get-NcSystemVersionInfo -Controller $myPrimaryController).VersionTupleV
+        $PrimaryVersion=(Get-NcSystemVersionInfo -Controller $myPrimaryController)[0].VersionTuple
     }else{
         if(Test-Path $($Global:JsonPath+"Get-NcSystemVersionInfo.json")){
             $PrimaryVersion=Get-Content $($Global:JsonPath+"Get-NcSystemVersionInfo.json") -Raw | ConvertFrom-Json
-            $PrimaryVersion=$PrimaryVersion.VersionTupleV
+            $PrimaryVersion=$PrimaryVersion[0].VersionTuple
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcSystemVersionInfo.json")
@@ -10474,7 +10483,7 @@ Try {
     }
     $WinSIDCompatible=$False
     if($Backup -eq $False){
-        $SecondaryVersion=(Get-NcSystemVersionInfo -Controller $mySecondaryController).VersionTupleV
+        $SecondaryVersion=(Get-NcSystemVersionInfo -Controller $mySecondaryController)[0].VersionTuple
         $SecondaryVersion_text=$SecondaryVersion | Out-String
         if($SecondaryVersion.Major -ge 9){
             if($SecondaryVersion.Minor -ge 3){
@@ -12372,8 +12381,8 @@ Try {
         return $True
     }
     Write-LogDebug "Check ONTAP version"
-	$PrimaryVersion=(Get-NcSystemVersionInfo -Controller $myPrimaryController).VersionTupleV
-	$SecondaryVersion=(Get-NcSystemVersionInfo -Controller $mySecondaryController).VersionTupleV
+	$PrimaryVersion=(Get-NcSystemVersionInfo -Controller $myPrimaryController)[0].VersionTuple
+	$SecondaryVersion=(Get-NcSystemVersionInfo -Controller $mySecondaryController)[0].VersionTuple
 	$PrimaryVersionString=$PrimaryVersion | out-string
 	$SecondaryVersionString=$SecondaryVersion | out-string
 	Write-LogDebug "Primary version is $PrimaryVersionString"

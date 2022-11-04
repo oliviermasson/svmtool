@@ -1354,7 +1354,7 @@ if(($module.Version.Major -ge 9) -and ($module.Version.Minor -ge 11))
     # for this we will look in the logfile created by natoolkit
     $Global:PSTKCall="Rest"
 }
-Write-Log "Running PSTK in $Global:PSTKCall mode"
+Write-LogDebug "Running PSTK in $Global:PSTKCall mode"
 
 #$PSTKVersion = Get-NaToolkitVersion
 <# if ($PSTKVersion.Major -lt $Global:MIN_MAJOR -and $PSTKVersion.Minor -lt $Global:MIN_MINOR -and $PSTKVersion.Minor -lt $Global:MIN_BUILD) {
