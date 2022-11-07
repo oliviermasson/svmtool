@@ -261,6 +261,10 @@
 	Optional argument to pass the credentials for joining AD in NonInteractive Mode during ConfigureDR, Restore or CloneDR
 .PARAMETER DefaultLDAPCredentials
 	Optional argument to pass the credentials for binding LDAP server during ConfigureDR, Restore or CloneDR
+.PARAMETER DefaulChapCredentials
+    Optional argument to pass the iSCSI CHAP username and password used to configure iSCSI session security.
+    In NonInteractive Mode, username and password of this pre-created credential are used
+    Can be used during ConfigureDR, UpdateDR, CloneDR, Restore, UpdateReverse, Migrate, ReActivate and RestoreObject
 .PARAMETER TemporarySecondaryCifsIp
     For cifs, sometimes a secondary lif is needed to join in Active Directory (duplicate ip conflict)
     This ip address will be used to create that temporary lif
@@ -1097,7 +1101,17 @@ Param (
 	[Parameter(Mandatory = $false, ParameterSetName = 'ConfigureDR')]
     [Parameter(Mandatory = $false, ParameterSetName = 'UpdateDR')]
 	[ValidateSet("auto", "snapshot-only", "all", "none", $null)]
-    [string]$TieringPolicy = $null
+    [string]$TieringPolicy = $null,
+
+    [Parameter(Mandatory = $false, ParameterSetName = 'ConfigureDR')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'UpdateDR')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'UpdateReverse')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'Migrate')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'CloneDR')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'Restore')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'ReActivate')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'RestoreObject')]
+    [pscredential]$DefaultChapCredentials = $null
 )
 
 #############################################################################################
@@ -1156,6 +1170,7 @@ $Global:SkipVscanFpolicy = $SkipVscanFpolicy
 $Global:DefaultLocalUserCredentials = $DefaultLocalUserCredentials
 $Global:ActiveDirectoryCredentials = $ActiveDirectoryCredentials
 $Global:DefaultLDAPCredentials = $DefaultLDAPCredentials
+$Global:DefaultChapCredentials = $DefaultChapCredentials
 $Global:ForceClean = $ForceClean
 $Global:SkipVscanFpolicy = $SkipVscanFpolicy
 $Global:ForceCloneOriginal = $ForceCloneOriginal

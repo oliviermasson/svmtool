@@ -6,7 +6,7 @@
 # Generated on: 2018-10-09
 #
 # Updated by : Olivier Masson
-# Updated on : 2020-11-13
+# Updated on : 2022-11-07
 #
 # Version Control :
 #   1.0.0 : Initial version
@@ -26,6 +26,7 @@
 #   1.1.4 : Add NonInteractive parameter to Restore-SvmDr
 #           Add ForceRestoreOriginal parameter to Restore-SvmDr
 #   1.1.5 : Add ForceRestoreOriginal parameter to Restore-ObjectSvmDr
+#   1.1.6 : Add DefaultChapCredentials paramater
 #           
 @{
 
@@ -33,7 +34,7 @@
     RootModule        = '.\svmtool.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.1.5'
+    ModuleVersion     = '1.1.6'
 
     # Supported PSEditions
     # CompatiblePSEditions = @()

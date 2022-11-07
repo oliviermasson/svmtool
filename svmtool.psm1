@@ -452,6 +452,11 @@ function New-SvmDr {
         # Use this parameter to join the dr vserver in AD without interaction
         [pscredential]$ActiveDirectoryCredentials,
 
+        # Optional argument to pass the iSCSI CHAP username and password used to configure iSCSI session security.
+        # In NonInteractive Mode, username and password of this pre-created credential are used
+        # Can be used during ConfigureDR, UpdateDR, CloneDR, Restore, UpdateReverse, Migrate, ReActivate and RestoreObject
+        [pscredential]$DefaultChapCredentials,
+
         # Optional, when the vserver dr is created, all lifs are taken offline (duplicate ip conflicts)
         # Hence if the vserver needs to be joined in AD, there is no lif available
         # By passing an temporary ip-address and in combination with parameter "SecondaryCifsLifMaster"
@@ -869,6 +874,11 @@ function Update-SvmDr {
         # Optional, when running in Non-Interactive mode, this script cannot prompt for AD credentials
         # Use this parameter to join the dr vserver in AD without interaction
         [pscredential]$ActiveDirectoryCredentials,
+
+        # Optional argument to pass the iSCSI CHAP username and password used to configure iSCSI session security.
+        # In NonInteractive Mode, username and password of this pre-created credential are used
+        # Can be used during ConfigureDR, UpdateDR, CloneDR, Restore, UpdateReverse, Migrate, ReActivate and RestoreObject
+        [pscredential]$DefaultChapCredentials,
 
         # Optional, when the vserver dr is created, all lifs are taken offline (duplicate ip conflicts)
         # Hence if the vserver needs to be joined in AD, there is no lif available
@@ -1363,6 +1373,11 @@ function Update-SvmDrReverse {
         # If you pass this parameter, the password will used to create missing users
         [pscredential]$DefaultLocalUserCredentials,
 
+        # Optional argument to pass the iSCSI CHAP username and password used to configure iSCSI session security.
+        # In NonInteractive Mode, username and password of this pre-created credential are used
+        # Can be used during ConfigureDR, UpdateDR, CloneDR, Restore, UpdateReverse, Migrate, ReActivate and RestoreObject
+        [pscredential]$DefaultChapCredentials,
+
         # Loglevel of the console output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
         [string]$LogLevelConsole = "Info",
@@ -1473,6 +1488,11 @@ function Invoke-SvmDrRecoverFromDr {
         # In Non-Interactive Mode, the script cannot create missing users
         # If you pass this parameter, the password will used to create missing users
         [pscredential]$DefaultLocalUserCredentials,
+
+        # Optional argument to pass the iSCSI CHAP username and password used to configure iSCSI session security.
+        # In NonInteractive Mode, username and password of this pre-created credential are used
+        # Can be used during ConfigureDR, UpdateDR, CloneDR, Restore, UpdateReverse, Migrate, ReActivate and RestoreObject
+        [pscredential]$DefaultChapCredentials,
 
         # Snapmirror Policy to use
         [Parameter(Mandatory = $false)]
@@ -1883,6 +1903,11 @@ function Invoke-SvmDrMigrate {
         # In Non-Interactive Mode, the script cannot create missing users
         # If you pass this parameter, the contained password will be used to create missing users
         [pscredential]$DefaultLocalUserCredentials,
+
+        # Optional argument to pass the iSCSI CHAP username and password used to configure iSCSI session security.
+        # In NonInteractive Mode, username and password of this pre-created credential are used
+        # Can be used during ConfigureDR, UpdateDR, CloneDR, Restore, UpdateReverse, Migrate, ReActivate and RestoreObject
+        [pscredential]$DefaultChapCredentials,
 
         # Loglevel of the console output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
@@ -2526,6 +2551,11 @@ function New-SvmDrClone {
         # Use this parameter to join the dr vserver in AD without interaction
         [pscredential]$ActiveDirectoryCredentials,
 
+        # Optional argument to pass the iSCSI CHAP username and password used to configure iSCSI session security.
+        # In NonInteractive Mode, username and password of this pre-created credential are used
+        # Can be used during ConfigureDR, UpdateDR, CloneDR, Restore, UpdateReverse, Migrate, ReActivate and RestoreObject
+        [pscredential]$DefaultChapCredentials,
+
         # Optional, when the vserver clone is created, all lifs are taken offline (duplicate ip conflicts)
         # Hence if the vserver needs to be joined in AD, there is no lif available
         # By passing an temporary ip-address and in combination with parameter "SecondaryCifsLifMaster"
@@ -2748,6 +2778,11 @@ function Restore-ObjectSvmDr {
         # Use this parameter to join the dr vserver in AD without interaction
         [pscredential]$ActiveDirectoryCredentials,
 
+        # Optional argument to pass the iSCSI CHAP username and password used to configure iSCSI session security.
+        # In NonInteractive Mode, username and password of this pre-created credential are used
+        # Can be used during ConfigureDR, UpdateDR, CloneDR, Restore, UpdateReverse, Migrate, ReActivate and RestoreObject
+        [pscredential]$DefaultChapCredentials,
+
         <# # Optional, when the vserver dr is created, all lifs are taken offline (duplicate ip conflicts)
         # Hence if the vserver needs to be joined in AD, there is no lif available
         # By passing an temporary ip-address and in combination with parameter "SecondaryCifsLifMaster"
@@ -2862,6 +2897,11 @@ function Restore-SvmDr {
         # Optional, when running in Non-Interactive mode, this script cannot prompt for AD credentials
         # Use this parameter to join the dr vserver in AD without interaction
         [pscredential]$ActiveDirectoryCredentials,
+
+        # Optional argument to pass the iSCSI CHAP username and password used to configure iSCSI session security.
+        # In NonInteractive Mode, username and password of this pre-created credential are used
+        # Can be used during ConfigureDR, UpdateDR, CloneDR, Restore, UpdateReverse, Migrate, ReActivate and RestoreObject
+        [pscredential]$DefaultChapCredentials,
 
         # Optional, when the vserver dr is created, all lifs are taken offline (duplicate ip conflicts)
         # Hence if the vserver needs to be joined in AD, there is no lif available

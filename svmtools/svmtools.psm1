@@ -1209,12 +1209,12 @@ Function read_cred_from_file ([string]$cred_file) {
                 }
         }
         $login=$read_vars.login
-        if ($login -eq $null ) {
+        if ($null -eq $login ) {
                 Write-LogError "ERROR: login not found in $cred_file" 
                 return $null
         }
         $password=$read_vars.password
-        if ($password -eq $null ) {
+        if ($null -eq $password ) {
                 Write-LogError "ERROR: password not found in $cred_file" 
                 return $null
         }
@@ -1233,17 +1233,19 @@ Function get_pwd_from_cli ([string]$workOn,[string]$for,[string]$name="",[switch
     }
     if($for -match "LDAP"){
         $DefaultPass=$Global:DefaultLDAPCredentials
+    }elseif($for -match "CHAP"){
+        $DefaultPass=$Global:DefaultChapCredentials
     }else{
         $DefaultPass=$Global:DefaultLocalUserCredentials
     }
     Write-Log "[$workOn] Please Enter password for $for1"
     do{
         $ReEnter=$false
-        if(-not $Global:NonInteractive -and $DefaultPass -eq $null){
+        if(-not $Global:NonInteractive -and $null -eq $DefaultPass){
             $pass1=Read-Host "[$workOn] Enter Password for $for2" -AsSecureString
             $pass2=Read-Host "[$workOn] Confirm Password for $for2" -AsSecureString
         }else{
-            if($DefaultPass -ne $null){
+            if($null -ne $DefaultPass){
                 Write-Log ("[$workOn] Password extracted from default credentials [{0}]" -f $DefaultPass.GetNetworkCredential().UserName)
                 $pass1=$DefaultPass.GetNetworkCredential().SecurePassword
                 $pass2=$DefaultPass.GetNetworkCredential().SecurePassword
@@ -8666,7 +8668,7 @@ Function compare_ISCSI_service (
 	[DataONTAP.C.Types.Iscsi.IscsiServiceInfo] $RefIscsiService, 
 	[DataONTAP.C.Types.Iscsi.IscsiServiceInfo] $IscsiService ) {
 	
-	if ( ($RefIscsiService -eq $null) -or ($IscsiService -eq $null ) ) {
+	if ( ($null -eq $RefIscsiService) -or ($null -eq $IscsiService ) ) {
 		Write-LogError "ERROR: compare_ISCS_Service null entry" 
 		return $False
 	}
@@ -11203,24 +11205,59 @@ Try {
             $out = Add-NcIscsiService -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcIscsiService failed [$ErrorVar]" }
             if($ForClone -eq $False){
-                Write-LogDebug "Disable-NcIscsi -VserverContext  $mySecondaryVserver -Controller  $mySecondaryController "
-                $out = Disable-NcIscsi -VserverContext  $mySecondaryVserver -Controller  $mySecondaryController  -ErrorVariable ErrorVar
-                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Disable-NcIscsi failed [$ErrorVar]" }
-                Write-LogDebug "Set-NcIscsiNodeName -Name $PrimaryIscsiService.NodeName -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                $out = Set-NcIscsiNodeName -Name $PrimaryIscsiService.NodeName -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcIscsiNodeName failed [$ErrorVar]" }
+                if(-not $Global:InsideMCC){
+                    Write-LogDebug "Disable-NcIscsi -VserverContext  $mySecondaryVserver -Controller  $mySecondaryController "
+                    $out = Disable-NcIscsi -VserverContext  $mySecondaryVserver -Controller  $mySecondaryController  -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Disable-NcIscsi failed [$ErrorVar]" }
+                    Write-LogDebug "Set-NcIscsiNodeName -Name $PrimaryIscsiService.NodeName -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                    $out = Set-NcIscsiNodeName -Name $PrimaryIscsiService.NodeName -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcIscsiNodeName failed [$ErrorVar]" }
+                }else{
+                    Write-Log "[$workOn] Working inside an MCC, so we cannot set target name [$PrimaryIscsiService.NodeName] on secondary"
+                }
             }
         } elseif($ForClone -eq $False) {
             if ( ( compare_ISCSI_service -RefIscsiService $PrimaryIscsiService -IscsiService $SecondaryIscsiService ) -eq $True ) {
-                Write-Log "[$workOn] Set ISCSI Services Attributes on [$mySecondaryVserver]"
-                $out = Disable-NcIscsi -VserverContext  $mySecondaryVserver -Controller  $mySecondaryController  -ErrorVariable ErrorVar
-                if ( $? -ne $True ) {
-                    Write-LogError "ERROR: Failed to disable ISCSI services in [$mySecondaryVserver]" 
-                    $Return  = $False
+                if(-not $Global:InsideMCC){
+                    Write-Log "[$workOn] Set ISCSI Services Attributes on [$mySecondaryVserver]"
+                    $out = Disable-NcIscsi -VserverContext  $mySecondaryVserver -Controller  $mySecondaryController  -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) {
+                        Write-LogError "ERROR: Failed to disable ISCSI services in [$mySecondaryVserver]" 
+                        $Return  = $False
+                    }
+                    Write-LogDebug "Set-NcIscsiNodeName -Name  -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                    $out = Set-NcIscsiNodeName -Name $PrimaryIscsiService.NodeName -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcIscsiNodeName failed [$ErrorVar]" }
+                }else{
+                    $ISCIinitiatorName=$PrimaryIscsiService.NodeName
+                    Write-Log "[$workOn] Working inside an MCC, so we cannot set iSCSI node name [$ISCIinitiatorName] on secondary"
                 }
-                Write-LogDebug "Set-NcIscsiNodeName -Name  -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                $out = Set-NcIscsiNodeName -Name $PrimaryIscsiService.NodeName -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcIscsiNodeName failed [$ErrorVar]" }
+            }
+        }
+        $PrimaryIscsiSessions=Get-NcIscsiSession -VserverContext $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
+        if ( $? -ne $True ) { $Return = $True ; Write-LogWarn "WARNING: Get-NcIscsiSession failed [$ErrorVar]" } else{
+            $InitiatorSecurityDone=@()
+            foreach($IscsiSession in $PrimaryIscsiSessions){
+                $InitiatorName=$IscsiSession.InitiatorNodename
+                $AuthenticationType=$IscsiSession.Connections.AuthenticationType
+                if($AuthenticationType -eq "chap"){
+                    if($InitiatorSecurityDone -notcontains $InitiatorName){
+                        Write-LogDebug "Need to set CHAP authentication on secondary"
+                        if($null -ne $Global:DefaultChapCredentials -or $Global:Run_Mode -eq "ConfigureDR"){
+                            $ChapPassword=get_pwd_from_cli -workOn $workOn -for "CHAP" -name $InitiatorName
+                            Write-LogDebug "Remove-NcIscsiInitiatorAuth -Initiator $InitiatorName  -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False"
+                            $ret=Remove-NcIscsiInitiatorAuth -Initiator $InitiatorName  -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
+                            Write-LogDebug "Set-NcIscsiInitiatorAuth -Initiator $InitiatorName -Chap -Username $InitiatorName -Password ********** -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                            $ret=Set-NcIscsiInitiatorAuth -Initiator $InitiatorName -Chap -Username $InitiatorName -Password $ChapPassword -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                            if($? -ne $True){
+                                Write-LogWarn "[$workOn] WARNING: Set-NcIscsiInitiatorAuth failed [$ErrorVar]"
+                            }
+                        }else{
+                            Write-LogWarn "WARNING: SKIPPING CHAP configuration without default credentials"
+                        }
+                        $InitiatorSecurityDone+=$InitiatorName
+                    }
+                }
             }
         }
     }
@@ -12237,7 +12274,7 @@ Try {
     if( $null -ne $Global:DefaultLocalUserCredentials -or $True -eq $runBackup ){
         if ( ( $ret=create_update_localuser_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all local user"}
     }else{
-        Write-LogWarn "SKIPPING local user create/update in NonInteractive Mode with no default credentials"
+        Write-LogWarn "WARNING: SKIPPING local user create/update in NonInteractive Mode with no default credentials"
     }
     if ( ( $ret=create_update_localunixgroupanduser_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all Local Unix User and Group"}
     # if ( ( $ret=create_update_usermapping_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create User Mapping"}
@@ -12297,7 +12334,7 @@ Try {
                     $Return=$False			
                 }
             }else{
-                Write-LogWarn "SKIPPING cifs user create/update in NonInteractive Mode with no default credentials"
+                Write-LogWarn "WARNING: SKIPPING cifs user create/update in NonInteractive Mode with no default credentials"
             }
             if($Backup -eq $False -and $Restore -eq $False){
                 if ( -not $Global:SecondaryCifsLifCreated ){
@@ -13974,7 +14011,7 @@ try{
             }else{
                 if($Global:Run_Mode -ne "Migrate"){
                     Write-LogDebug "No Temporary Secondary LIF information provided. Impossible to continue Update_cifs_usergroup"
-                    Write-LogWarn "SKIPPING update CIFS local user & group without one LIF up & ready on secondary"
+                    Write-LogWarn "WARNING: SKIPPING update CIFS local user & group without one LIF up & ready on secondary"
                     Write-LogWarn "You must create at least one temporay CIFS LIF on secondary for AD authentication"
                     Write-LogWarn "Or you must use argument TemporarySecondaryCifsIp and SecondaryCifsLifMaster to let UpdateDR creates this temporary CIFS LIF on secondary for you"
                     Write-LogDebug "[$myPrimaryVserver]: end"
@@ -14407,7 +14444,7 @@ Function update_vserver_dr (
         }
        
     }else{
-        Write-LogWarn "SKIPPING local user create/update without default credentials"
+        Write-LogWarn "WARNING: SKIPPING local user create/update without default credentials"
     }
     # execute update_cifs_usergroup for each UpdateDR
     # or if you provide DefaultLocalUserCredentials
@@ -14431,7 +14468,7 @@ Function update_vserver_dr (
         }
     }
     <# }else{
-        Write-LogWarn "SKIPPING local  user create/update in NonInteractive Mode or without default credentials or during UpdateDR"
+        Write-LogWarn "WARNING: SKIPPING local  user create/update in NonInteractive Mode or without default credentials or during UpdateDR"
          Write-LogWarn "Use ConfigureDR if you need to update CIFS Local User and Group on Secondary"
     } #>
 
