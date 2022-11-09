@@ -8964,10 +8964,12 @@ Try {
                             if($value.count -eq 0){$value=$true}
                             $newvar=@{$option=$value}
                             try{
-                                Write-Log "[$workOn] Update CIFS option [$Property] to [$value]"
-                                Write-LogDebug "CIFS option Specified on Primary : [$isPrimarySpecified] Specified on Secondary : [$isSecondarySpecified] difference : `n$Differences_string"
-                                Write-LogDebug "Set-NcCifsOption -$($option) $value -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                                $out=Set-NcCifsOption @newvar -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                if($option -notmatch "Comment|Metric|Svm|AdDomain|Security|Netbios|Options|Statistics|Name"){
+                                    Write-Log "[$workOn] Update CIFS option [$Property] to [$value]"
+                                    Write-LogDebug "CIFS option Specified on Primary : [$isPrimarySpecified] Specified on Secondary : [$isSecondarySpecified] difference : `n$Differences_string"
+                                    Write-LogDebug "Set-NcCifsOption -$($option) $value -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                                    $out=Set-NcCifsOption @newvar -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                }
                             }catch{
                                 $ErrorVar = $_.Exception.Message
                                 Write-LogWarn "[$myPrimaryVserver] ERROR : Failed to set CIFS option [$option] : [$ErrorVar]" 
@@ -8985,11 +8987,13 @@ Try {
                         if($value.count -eq 0){$value=$true}
                         $newvar=@{$option=$value}
                         try{
-                            Write-Log "[$workOn] Update CIFS option [$Property] to [$value]"
-                            Write-LogDebug "CIFS options difference : `n$Differences_string"
-                            Write-LogDebug "Set-NcCifsOption -$($option) $value -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                            $out=Set-NcCifsOption @newvar -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                            if($? -ne $True){throw "Failed to set CIFS option [$option]"}
+                            if($option -notmatch "Comment|Metric|Svm|AdDomain|Security|Netbios|Options|Statistics|Name"){
+                                Write-Log "[$workOn] Update CIFS option [$Property] to [$value]"
+                                Write-LogDebug "CIFS options difference : `n$Differences_string"
+                                Write-LogDebug "Set-NcCifsOption -$($option) $value -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                                $out=Set-NcCifsOption @newvar -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                if($? -ne $True){throw "Failed to set CIFS option [$option]"}
+                            }
                         }catch{
                             $ErrorVar = $_.Exception.Message
                             Write-LogWarn "[$myPrimaryVserver] Failed to set CIFS options reason : [$ErrorVar]" 
@@ -9633,13 +9637,16 @@ Try {
                     $reason=$_.Exception.Message
                     Write-LogDebug "Failed Remove-NcLdapConfig reason [$reason]"
                 }
-                try{
-                    Write-LogDebug "Remove-NcLdapClient -Name $PrimClient -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$false"
-                    $out=Remove-NcLdapClient -Name $PrimClient -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$false -ErrorVariable ErrorVar
-                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Remove-NcLdapClient failed [$ErrorVar]" }
-                }catch{
-                    $reason=$_.Exception.Message
-                    Write-LogDebug "Failed Remove-NcLdapClient reason [$reason]"    
+                
+                if($Global:PSTKCall -ne "Rest"){
+                    try{
+                        Write-LogDebug "Remove-NcLdapClient -Name $PrimClient -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$false"
+                        $out=Remove-NcLdapClient -Name $PrimClient -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$false -ErrorVariable ErrorVar
+                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Remove-NcLdapClient failed [$ErrorVar]" }
+                    }catch{
+                        $reason=$_.Exception.Message
+                        Write-LogDebug "Failed Remove-NcLdapClient reason [$reason]"    
+                    }
                 }
             }
             Write-Log "[$workOn] Configure LDAP configuration on [$mySecondaryVserver]"
@@ -9651,7 +9658,7 @@ Try {
                 $index=0
                 while($index -lt $existingPreferedADServers.count){
                     if($Restore -eq $False){
-                        if($existingServers.count -gt 0){
+                        if($existingPreferedADServers.count -gt 0){
                             if($existingPreferedADServers.GetType().Name -match "\[\]"){
                                 $previousPreferedServer=$existingPreferedADServers[$index]
                                 $index++
@@ -9663,7 +9670,7 @@ Try {
                             $ldapserver=Read-HostDefault -question "[$mySecondaryVserver] Enter AD Prefered LDAP server IP" -default $previousPreferedServer
                         }while(-not (validate_ip_format $ldapserver))
                         $ldapserverslist+=$ldapserver
-                        $ANS=Read-HostOptions -question "[$mySecondaryVserver] Do you want to add another AD Prefered LDAP server ?" -options "y/n" -default "n"
+                        # $ANS=Read-HostOptions -question "[$mySecondaryVserver] Do you want to add another AD Prefered LDAP server ?" -options "y/n" -default "n"
                     }else{
                         if($existingPreferedADServers.GetType().Name -match "\[\]"){
                             $previousPreferedServer=$existingPreferedADServers[$index]
@@ -9714,52 +9721,53 @@ Try {
                         Write-LogDebug "[$workOn]: end"
                         return $False
                     }
+                }else{
+                    Write-LogDebug "New-NcLdapClient -Name $PrimClient -VserverContext $mySecondaryVserver `
+                    -Schema $LDAPclientSchema `
+                    -AdDomain $LDAPclientAdDomain `
+                    -PreferredAdServers $LDAPclientADServers `
+                    -TcpPort $LDAPclientTcpPort `
+                    -QueryTimeout $LDAPclientQueryTimeout `
+                    -MinBindLevel $LDAPclientMinBindLevel `
+                    -BindDn $LDAPclientBindDn `
+                    -BindPassword ********** `
+                    -BaseDn $LDAPclientBaseDn `
+                    -BaseScope $LDAPclientBaseScope `
+                    -UserDn $LDAPclientUserDn `
+                    -UserScope $LDAPclientUserScope `
+                    -GroupDn $LDAPclientGroupDn `
+                    -GroupScope $LDAPclientGroupScope `
+                    -NetGroupDn $LDAPclientNetgroupDn `
+                    -NetGroupScope $LDAPclientNetgroupScope `
+                    -IsNetgroupByHostEnabled $LDAPclientIsNetgroupByhostEnabled `
+                    -NetgroupByHostScope $LDAPclientNetgroupByhostScope `
+                    -SessionSecurity $LDAPclientSessionSecurity `
+                    -Controller $mySecondaryController -Confirm:$false"
+                    $out=New-NcLdapClient -Name $PrimClient -VserverContext $mySecondaryVserver `
+                    -Schema $LDAPclientSchema `
+                    -AdDomain $LDAPclientAdDomain `
+                    -PreferredAdServers $LDAPclientADServers `
+                    -TcpPort $LDAPclientTcpPort `
+                    -QueryTimeout $LDAPclientQueryTimeout `
+                    -MinBindLevel $LDAPclientMinBindLevel `
+                    -BindDn $LDAPclientBindDn `
+                    -BindPassword $LDAPclientBindPassword `
+                    -BaseDn $LDAPclientBaseDn `
+                    -BaseScope $LDAPclientBaseScope `
+                    -UserDn $LDAPclientUserDn `
+                    -UserScope $LDAPclientUserScope `
+                    -GroupDn $LDAPclientGroupDn `
+                    -GroupScope $LDAPclientGroupScope `
+                    -NetGroupDn $LDAPclientNetgroupDn `
+                    -NetGroupScope $LDAPclientNetgroupScope `
+                    -IsNetgroupByHostEnabled $LDAPclientIsNetgroupByhostEnabled `
+                    -NetgroupByHostScope $LDAPclientNetgroupByhostScope `
+                    -SessionSecurity $LDAPclientSessionSecurity `
+                    -Controller $mySecondaryController -Confirm:$false -ErrorVariable ErrorVar
+
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcLdapClient failed [$ErrorVar]" ; } 
                 }
-                Write-LogDebug "New-NcLdapClient -Name $PrimClient -VserverContext $mySecondaryVserver `
-                -Schema $LDAPclientSchema `
-                -AdDomain $LDAPclientAdDomain `
-                -PreferredAdServers $LDAPclientADServers `
-                -TcpPort $LDAPclientTcpPort `
-                -QueryTimeout $LDAPclientQueryTimeout `
-                -MinBindLevel $LDAPclientMinBindLevel `
-                -BindDn $LDAPclientBindDn `
-                -BindPassword ********** `
-                -BaseDn $LDAPclientBaseDn `
-                -BaseScope $LDAPclientBaseScope `
-                -UserDn $LDAPclientUserDn `
-                -UserScope $LDAPclientUserScope `
-                -GroupDn $LDAPclientGroupDn `
-                -GroupScope $LDAPclientGroupScope `
-                -NetGroupDn $LDAPclientNetgroupDn `
-                -NetGroupScope $LDAPclientNetgroupScope `
-                -IsNetgroupByHostEnabled $LDAPclientIsNetgroupByhostEnabled `
-                -NetgroupByHostScope $LDAPclientNetgroupByhostScope `
-                -SessionSecurity $LDAPclientSessionSecurity `
-                -Controller $mySecondaryController -Confirm:$false"
-                $out=New-NcLdapClient -Name $PrimClient -VserverContext $mySecondaryVserver `
-                -Schema $LDAPclientSchema `
-                -AdDomain $LDAPclientAdDomain `
-                -PreferredAdServers $LDAPclientADServers `
-                -TcpPort $LDAPclientTcpPort `
-                -QueryTimeout $LDAPclientQueryTimeout `
-                -MinBindLevel $LDAPclientMinBindLevel `
-                -BindDn $LDAPclientBindDn `
-                -BindPassword $LDAPclientBindPassword `
-                -BaseDn $LDAPclientBaseDn `
-                -BaseScope $LDAPclientBaseScope `
-                -UserDn $LDAPclientUserDn `
-                -UserScope $LDAPclientUserScope `
-                -GroupDn $LDAPclientGroupDn `
-                -GroupScope $LDAPclientGroupScope `
-                -NetGroupDn $LDAPclientNetgroupDn `
-                -NetGroupScope $LDAPclientNetgroupScope `
-                -IsNetgroupByHostEnabled $LDAPclientIsNetgroupByhostEnabled `
-                -NetgroupByHostScope $LDAPclientNetgroupByhostScope `
-                -SessionSecurity $LDAPclientSessionSecurity `
-                -Controller $mySecondaryController -Confirm:$false -ErrorVariable ErrorVar
-
-                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcLdapClient failed [$ErrorVar]" ; } 
-
+                Write-Log "[$workOn] LDAP AD Client created successfully"
             }else{
                 $serverslist=@()
                 $existingServers=$LDAPclientServers
@@ -9874,30 +9882,36 @@ Try {
 
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcLdapClient failed [$ErrorVar]" ; } 
                 }
+                Write-Log "[$workOn] LDAP Client created successfully"
             }
 
-            Write-LogDebug "Get-NcLdapConfig -vserver $mySecondaryVserver -controller $mySecondaryController"
-            $SecondaryLdapConfig=Get-NcLdapConfig -vserver $mySecondaryVserver -controller $mySecondaryController -ErrorVariable ErrorVar
-            if($? -ne $True){Throw "ERROR: Failed to get LDAP Config on [$mySecondaryVserver] reason [$ErrorVar]"}
-            if($null -ne $SecondaryLdapConfig)
-            {
-                Write-LogDebug "Remove-NcLdapConfig -Vservercontext $mySecondaryVserver -Controller $mySecondaryController"
-                $out=Remove-NcLdapConfig -Vservercontext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
-                if($? -ne $True){Throw "ERROR: Failed to remove LDAP Config on [$mySecondaryVserver] reason [$ErrorVar]"}
-            }
-            $version=Get-NcSystemVersionInfo -Controller $mySecondaryController
-            if($version[0].VersionTuple.Major -ge 9 -and $version[0].VersionTuple.Minor -ge 3){
-                if($PrimClientEnabled -eq $True){
+            # ! only with ZAPICALL because with REST call create a new LDAP client configuration also create and attach an LDAP config service automatically
+            if($Global:PSTKCall -ne "Rest"){
+                Write-LogDebug "Get-NcLdapConfig -vserver $mySecondaryVserver -controller $mySecondaryController"
+                $SecondaryLdapConfig=Get-NcLdapConfig -vserver $mySecondaryVserver -controller $mySecondaryController -ErrorVariable ErrorVar
+                if($? -ne $True){Throw "ERROR: Failed to get LDAP Config on [$mySecondaryVserver] reason [$ErrorVar]"}
+                if($null -ne $SecondaryLdapConfig)
+                {
+                    Write-LogDebug "Remove-NcLdapConfig -Vservercontext $mySecondaryVserver -Controller $mySecondaryController"
+                    $out=Remove-NcLdapConfig -Vservercontext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
+                    if($? -ne $True){Throw "ERROR: Failed to remove LDAP Config on [$mySecondaryVserver] reason [$ErrorVar]"}
+                }
+                $version=Get-NcSystemVersionInfo -Controller $mySecondaryController
+                if($version[0].VersionTuple.Major -ge 9 -and $version[0].VersionTuple.Minor -ge 3){
+                    if($PrimClientEnabled -eq $True){
+                        Write-LogDebug "New-NcLdapConfig -ClientConfig $PrimClient -ClientEnabled $PrimClientEnabled -SkipConfigValidation -Vservercontext $mySecondaryVserver -Controller $mySecondaryController"
+                        $out=New-NcLdapConfig -ClientConfig $PrimClient -ClientEnabled $PrimClientEnabled -SkipConfigValidation -Vservercontext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                        if($? -ne $True){Throw "ERROR: Failed to create LDAP Config on [$mySecondaryVserver] reason [$ErrorVar]"}
+                        Write-Log "[$workOn] LDAP Config [$PrimClient] created successfully"
+                    }else{
+                        Write-Log "[$workOn] LDAP config not created on [$mySecondaryVserver] because it is disable on [$myPrimaryVserver]"
+                    }
+                }else{
                     Write-LogDebug "New-NcLdapConfig -ClientConfig $PrimClient -ClientEnabled $PrimClientEnabled -SkipConfigValidation -Vservercontext $mySecondaryVserver -Controller $mySecondaryController"
                     $out=New-NcLdapConfig -ClientConfig $PrimClient -ClientEnabled $PrimClientEnabled -SkipConfigValidation -Vservercontext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
                     if($? -ne $True){Throw "ERROR: Failed to create LDAP Config on [$mySecondaryVserver] reason [$ErrorVar]"}
-                }else{
-                    Write-Log "[$workOn] LDAP config not created on [$mySecondaryVserver] because it is disable on [$myPrimaryVserver]"
+                    Write-Log "[$workOn] LDAP Config [$PrimClient] created successfully"
                 }
-            }else{
-                Write-LogDebug "New-NcLdapConfig -ClientConfig $PrimClient -ClientEnabled $PrimClientEnabled -SkipConfigValidation -Vservercontext $mySecondaryVserver -Controller $mySecondaryController"
-                $out=New-NcLdapConfig -ClientConfig $PrimClient -ClientEnabled $PrimClientEnabled -SkipConfigValidation -Vservercontext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
-                if($? -ne $True){Throw "ERROR: Failed to create LDAP Config on [$mySecondaryVserver] reason [$ErrorVar]"}
             }
         }
     }else{
@@ -10359,7 +10373,7 @@ Try {
         $SecondaryCifsServerInfos = Get-NcCifsServer -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsServer failed [$ErrorVar]" }
 
-        if ( $PrimaryCifsServerInfos -eq $null ) {
+        if ( $null -eq $PrimaryCifsServerInfos ) {
             Write-Log "[$workOn] No CIFS Server in Vserver [$myPrimaryVserver]:[$myPrimaryController]"
             Write-LogDebug "[$myPrimaryVserver]: end"
             return $True
@@ -12281,10 +12295,7 @@ Try {
     if ( ( $ret=create_update_DNS_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create DNS service" ; $Return = $False }
     if ( ( $ret=create_update_ISCSI_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create iSCSI service" ; $Return = $False }
     if ( ( $ret=create_update_CIFS_server_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore -TemporarySecondaryCifsIp $TemporarySecondaryCifsIp -SecondaryCifsLifMaster $SecondaryCifsLifMaster -SecondaryCifsLifCustomVlan $SecondaryCifsLifCustomVlan -ActiveDirectoryCustomOU $ActiveDirectoryCustomOU) -ne $True ) {Write-LogError "ERROR: create_update_CIFS_server_dr" ; $Return = $False } 
-    $ret=update_CIFS_server_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore
-    if ( $? -ne $True ) {
-        Write-LogWarn "[$workOn] Some CIFS options has not been set on"    
-    }
+    if ( ( $ret=update_CIFS_server_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogWarn "[$workOn] Some CIFS options has not been set on" }
     if ( ( $ret=create_update_LDAP_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create LDAP config" ; $Return = $False }
     if ( ( $ret=create_update_NIS_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create NIS service" ; $Return = $False }
     if ( ( $ret=create_update_NFS_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create NFS service" ; $Return = $False }
