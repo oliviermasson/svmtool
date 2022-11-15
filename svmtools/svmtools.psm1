@@ -1566,7 +1566,7 @@ Function select_data_aggr_from_cli ([NetApp.Ontapi.Filer.C.NcController]$myContr
 			}
 			$index=[int]$ans ; $index --
 			$AggrSelected=$AggrSelectedList[$index]
-			if ( $AggrSelected -ne $null ) { $ErrAggr = $False }
+			if ( $null -ne $AggrSelected ) { $ErrAggr = $False }
         }
 
         $ans=Read-HostOptions -question "[$ctrlName] You have selected the aggregate [$AggrSelected] ?" -options "y/n" -default "y" -autoselect:$autoselect
@@ -1595,7 +1595,7 @@ Function create_update_vscan_dr (
         if($Restore -eq $True){Write-LogDebug "run in Restore mode [$myPrimaryVserver]"}
 
         if($Restore -eq $False){
-            Write-logDebug "Get-NcVscanScannerPool -VserverContext $myPrimaryVserver -Controller $myPrimaryController"
+            Write-LogDebug "Get-NcVscanScannerPool -VserverContext $myPrimaryVserver -Controller $myPrimaryController"
             $PrimaryScannerPoolList=Get-NcVscanScannerPool -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar 
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVscanScannerPool failed on [$myPrimaryController] [$ErrorVar]" }
         }else{
@@ -1609,7 +1609,7 @@ Function create_update_vscan_dr (
         }
         if($Backup -eq $True){
             $PrimaryScannerPoolList | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcVscanScannerPool.json") -Encoding ASCII -Width 65535
-            if( ($ret=get-item $($Global:JsonPath+"Get-NcVscanScannerPool.json") -ErrorAction SilentlyContinue) -ne $null ){
+            if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcVscanScannerPool.json") -ErrorAction SilentlyContinue) ){
                 Write-LogDebug "$($Global:JsonPath+"Get-NcVscanScannerPool.json") saved successfully"
             }else{
                 Write-LogError "ERROR: Failed to save $($Global:JsonPath+"Get-NcVscanScannerPool.json")"
@@ -1629,10 +1629,10 @@ Function create_update_vscan_dr (
                     $PrimaryScannerPoolSesTeardTimeout=$PrimaryScannerPool.SessionTeardownTimeout
                     $PrimaryScannerPoolMaxSesSetupRetry=$PrimaryScannerPool.MaxSessionSetupRetries
                     
-                    Write-logDebug "Get-NcVscanScannerPool -Name $PrimaryScannerPoolName -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                    Write-LogDebug "Get-NcVscanScannerPool -Name $PrimaryScannerPoolName -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
                     $SecondaryScannerPool = Get-NcVscanScannerPool -Name $PrimaryScannerPoolName -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVscanScannerPool failed on [$mySecondaryController] [$ErrorVar]" }
-                    if ( $SecondaryScannerPool -ne $null ) 
+                    if ( $null -ne $SecondaryScannerPool ) 
                     {
                         $SecondaryScannerPoolVscanServers=$SecondaryScannerPool.Servers
                         $SecondaryScannerPoolPolicy=$SecondaryScannerPool.ScannerPolicy
@@ -1723,11 +1723,11 @@ Function create_update_vscan_dr (
             #    Write-LogWarn "SKIPPING vscan scanner pool in non-interactive mode"    
             #}
         }
-        if($PrimaryScannerPoolList -ne $Null)
+        if($null -ne $PrimaryScannerPoolList)
         {
             # add OnAccessPolicy Code
             if($Restore -eq $False){
-                Write-logDebug "Get-NcVscanOnAccessPolicy -VserverContext $myPrimaryVserver -Controller $myPrimaryController"
+                Write-LogDebug "Get-NcVscanOnAccessPolicy -VserverContext $myPrimaryVserver -Controller $myPrimaryController"
                 $PrimaryOnAccessPolicyList=Get-NcVscanOnAccessPolicy -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar 
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVscanOnAccessPolicy failed on [$myPrimaryController] [$ErrorVar]" }
             }else{
@@ -1741,7 +1741,7 @@ Function create_update_vscan_dr (
             }
             if($Backup -eq $True){
                 $PrimaryOnAccessPolicyList | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcVscanOnAccessPolicy.json") -Encoding ASCII -Width 65535
-                if( ($ret=get-item $($Global:JsonPath+"Get-NcVscanOnAccessPolicy.json") -ErrorAction SilentlyContinue) -ne $null ){
+                if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcVscanOnAccessPolicy.json") -ErrorAction SilentlyContinue) ){
                     Write-LogDebug "$($Global:JsonPath+"Get-NcVscanOnAccessPolicy.json") saved successfully"
                 }else{
                     Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcVscanOnAccessPolicy.json")"
@@ -1762,7 +1762,7 @@ Function create_update_vscan_dr (
                     $PrimaryOnAccessPolicyPathtoExclude=$PrimaryOnAccessPolicy.PathsToExclude
                     $PrimaryOnAccessPolicyPathtoExclude_str=[string]$PrimaryOnAccessPolicyPathtoExclude
 
-                    Write-logDebug "Get-NcVscanOnAccessPolicy -Name $PrimaryOnAccessPolicyName -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                    Write-LogDebug "Get-NcVscanOnAccessPolicy -Name $PrimaryOnAccessPolicyName -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
                     $SecondaryOnAccessPolicy = Get-NcVscanOnAccessPolicy -Name $PrimaryOnAccessPolicyName -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVscanOnAccessPolicy failed on [$mySecondaryController] [$ErrorVar]" }
                     if ( $null -ne $SecondaryOnAccessPolicy ) 
@@ -1791,20 +1791,44 @@ Function create_update_vscan_dr (
                             if($PrimaryOnAccessPolicyFilters.count -eq 0 ){$PrimaryOnAccessPolicyFilters+="-"}
                             # Get Admin Owner name of this Policy
                             if($SecondaryOnAccessPolicyAdminOwner -eq "cluster"){
-                                $VserverContext=(get-ncvserver -Controller $mySecondaryController -query @{VserverType="admin"}).Vserver
+                            #     if($Global:PSTKCall -eq "Rest"){
+                            # ! REST API and associated cmdlet does not permit to get admin svm, so need to use a private/cli request
+                            #         $SecondaryCredential = get_local_cDotcred($mySecondaryController)
+                            #         $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/vserver?type=admin")
+                            #         Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
+                            #         $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+                            #         if($? -ne $True){
+                            #             Write-LogError "ERROR: Unable to get admin SVM. Reason [$ErrorVar]" 
+                            #         }else{
+                            #             $VserverContext=$ret.records[0].vserver
+                            #         }
+                            #     }else{
+                            #         $VserverContext=(Get-NcVserver -Controller $mySecondaryController -query @{VserverType="admin"}).Vserver
+                            #     }
+                            # }else{
+                            #     $VserverContext=$mySecondaryVserver
+                            # }
+                                $VserverContext=(Get-NcCluster -Controller $mySecondaryController | Select-Object clustername).ClusterName
                             }else{
                                 $VserverContext=$mySecondaryVserver
                             }
-                            Write-Log "[$workOn] Modify VscanOnAccessPolicy [$PrimaryOnAccessPolicyName]"
-                            Write-LogDebug "Set-NcVscanOnAccessPolicy -Name $PrimaryOnAccessPolicyName -IsScanMandatory $PrimaryOnAccessPolicyMandatory -Filter $PrimaryOnAccessPolicyFilters -MaxFileSize $PrimaryOnAccessPolicyMaxFileSize -ExcludePath $PrimaryOnAccessPolicyPathtoExclude -ExcludeExtension $PrimaryOnAccessPolicyFileExtToExclude -VserverContext $VserverContext -Controller $mySecondaryController  -ErrorVariable ErrorVar"
-                            $out=Set-NcVscanOnAccessPolicy -Name $PrimaryOnAccessPolicyName `
-                            -IsScanMandatory $PrimaryOnAccessPolicyMandatory `
-                            -Filter $PrimaryOnAccessPolicyFilters `
-                            -MaxFileSize $PrimaryOnAccessPolicyMaxFileSize `
-                            -ExcludePath $PrimaryOnAccessPolicyPathtoExclude `
-                            -ExcludeExtension $PrimaryOnAccessPolicyFileExtToExclude `
-                            -VserverContext $VserverContext -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcVscanOnAccessPolicy failed [$ErrorVar]" }
+                            # TODO AdminOwner is always null with REST, need to check it through a private/cli to get the real admin owner on primary and adapt what to do on secondary in consequences
+                        
+                            if($SecondaryOnAccessPolicyAdminOwner -eq "vserver"){
+                                Write-Log "[$workOn] Modify VscanOnAccessPolicy [$PrimaryOnAccessPolicyName]"
+                                Write-LogDebug "Set-NcVscanOnAccessPolicy -Name $PrimaryOnAccessPolicyName -IsScanMandatory $PrimaryOnAccessPolicyMandatory -Filter $PrimaryOnAccessPolicyFilters -MaxFileSize $PrimaryOnAccessPolicyMaxFileSize -ExcludePath $PrimaryOnAccessPolicyPathtoExclude -ExcludeExtension $PrimaryOnAccessPolicyFileExtToExclude -VserverContext $VserverContext -Controller $mySecondaryController  -ErrorVariable ErrorVar"
+                                $out=Set-NcVscanOnAccessPolicy -Name $PrimaryOnAccessPolicyName `
+                                -IsScanMandatory $PrimaryOnAccessPolicyMandatory `
+                                -Filter $PrimaryOnAccessPolicyFilters `
+                                -MaxFileSize $PrimaryOnAccessPolicyMaxFileSize `
+                                -ExcludePath $PrimaryOnAccessPolicyPathtoExclude `
+                                -ExcludeExtension $PrimaryOnAccessPolicyFileExtToExclude `
+                                -VserverContext $VserverContext -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Set-NcVscanOnAccessPolicy failed [$ErrorVar]" }
+                            }else{
+                                Write-Log "[$workOn] skip On Access Policy [$PrimaryOnAccessPolicyName] because it's not a vserver policy"
+                                Write-LogDebug "[$PrimaryOnAccessPolicyName] is not a Vserver owned Policy, cannot modify it, bypass it"
+                            }
                         }
                     } 
                     else 
@@ -1839,7 +1863,7 @@ Function create_update_vscan_dr (
                             Write-LogDebug "Get-NcVscanOnAccessPolicy -Query $template -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
                             $policyEnabled=Get-NcVscanOnAccessPolicy -Query $template -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                             if($? -ne $True) { $Return = $False ; throw "ERROR: Failed to get enabled policy [$ErrorVar]" }
-                            if($policyEnabled -ne $null)
+                            if($null -ne $policyEnabled)
                             {
                                 $policyEnabledName=$policyEnabled.PolicyName
                                 Write-LogDebug "Disable-NcVscanOnAccessPolicy -Name $policyEnabledName -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
@@ -1847,13 +1871,13 @@ Function create_update_vscan_dr (
                                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Disable-NcScanOnAccessPolicy failed [$ErrorVar]" }
                             }
                             
-                            Write-logDebug "Enable-NcScanOnAccessPolicy -Name $PrimaryOnAccessPolicyName -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                            Write-LogDebug "Enable-NcScanOnAccessPolicy -Name $PrimaryOnAccessPolicyName -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
                             $out=Enable-NcVscanOnAccessPolicy -Name $PrimaryOnAccessPolicyName -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Enable-NcScanOnAccessPolicy failed [$ErrorVar]" }  
                         }
                         else
                         {
-                            Write-logDebug "Disable-NcScanOnAccessPolicy -Name $PrimaryOnAccessPolicyName -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                            Write-LogDebug "Disable-NcScanOnAccessPolicy -Name $PrimaryOnAccessPolicyName -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
                             $out=Disable-NcVscanOnAccessPolicy -Name $PrimaryOnAccessPolicyName -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Disable-NcScanOnAccessPolicy failed [$ErrorVar]" }
                         }
@@ -1861,7 +1885,7 @@ Function create_update_vscan_dr (
                 }
             }
             if($Restore -eq $False){
-                Write-logDebug "Get-NcVscanStatus -Vserver $myPrimaryVserver -Controller $myPrimaryController"
+                Write-LogDebug "Get-NcVscanStatus -Vserver $myPrimaryVserver -Controller $myPrimaryController"
                 $PrimaryVscan=Get-NcVscanStatus -Vserver $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVscanStatus failed [$ErrorVar]" }
             }else{
@@ -1875,7 +1899,7 @@ Function create_update_vscan_dr (
             }
             if($Backup -eq $True){
                 $PrimaryVscan | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcVscanStatus.json") -Encoding ASCII -Width 65535
-                if( ($ret=get-item $($Global:JsonPath+"Get-NcVscanStatus.json") -ErrorAction SilentlyContinue) -ne $null ){
+                if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcVscanStatus.json") -ErrorAction SilentlyContinue) ){
                     Write-LogDebug "$($Global:JsonPath+"Get-NcVscanStatus.json") saved successfully"
                 }else{
                     Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcVscanStatus.json")"
@@ -1887,20 +1911,20 @@ Function create_update_vscan_dr (
                 #if(check_update_CIFS_server_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $mySecondaryVserver -Backup $RunBackup -Restore $RunRestore){
                 if($Global:NEED_CIFS_SERVER -eq $True){
 
-                    Write-logDebug "Get-NcVscanStatus -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+                    Write-LogDebug "Get-NcVscanStatus -Vserver $mySecondaryVserver -Controller $mySecondaryController"
                     $SecondaryVscan=Get-NcVscanStatus -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVscanStatus failed [$ErrorVar]" }
                     if ($PrimaryVscan.Enabled -ne $SecondaryVscan.Enabled)
                     {
                         if($PrimaryVscan.Enabled -eq $True)
                         {
-                            Write-logDebug "Enable-NcVscan -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                            Write-LogDebug "Enable-NcVscan -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
                             $out=Enable-NcVscan -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Enable-NcVscan failed [$ErrorVar]" }
                         }
                         else
                         {
-                            Write-logDebug "Disable-NcVscan -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                            Write-LogDebug "Disable-NcVscan -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
                             $out=Disable-NcVscan -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Disable-NcVscan failed [$ErrorVar]" }
                         }
@@ -2133,14 +2157,22 @@ Function create_update_usermapping_dr(
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNameMapping failed [$ErrorVar]" }
                 if($SecondaryMapping.count -eq 0){
                     $patternIpNetmask = "^([1-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])(\.([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])){3}\/([1-9]|1[0-9]|2[0-9]|3[0-2])$"
-                    if(-not ($MappingAddress -match $patternIpNetmask)){
+                    if($null -ne $MappingAddress -and (-not ($MappingAddress -match $patternIpNetmask))){
                         Write-LogDebug "Ignore MappingAddress [$MappingAddress] cause not in format [X.X.X.X/Netmask length]"
                         $MappingAddress=""
                     }
                     Write-Log "[$workOn] Add new User Mapping entry [$MappingDirection] [$MappingPosition] [$MappingPattern] [$MappingReplacement] [$MappingAddress] [$MappingHostname] on [$mySecondaryVserver]"
-                    Write-LogDebug "New-NcNameMapping -Direction $MappingDirection -Position $MappingPosition -Pattern $MappingPattern -Replacement $MappingReplacement -Address $MappingAddress -Hostname $MappingHostname -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                    $out=New-NcNameMapping -Direction $MappingDirection -Position $MappingPosition -Pattern $MappingPattern -Replacement $MappingReplacement -Address $MappingAddress -Hostname $MappingHostname -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcNameMapping failed [$ErrorVar]" }
+                    if(($null -eq $MappingAddress -or $MappingAddress.Length -eq 0) -and ($null -eq $MappingHostname -or $MappingHostname.Length -eq 0)){
+                        Write-LogDebug "New-NcNameMapping -Direction $MappingDirection -Position $MappingPosition -Pattern $MappingPattern -Replacement $MappingReplacement -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                        $out=New-NcNameMapping -Direction $MappingDirection -Position $MappingPosition -Pattern $MappingPattern -Replacement $MappingReplacement -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                    }elseif($null -eq $MappingAddress -or $MappingAddress.Length -eq 0){
+                        Write-LogDebug "New-NcNameMapping -Direction $MappingDirection -Position $MappingPosition -Pattern $MappingPattern -Replacement $MappingReplacement -Hostname $MappingHostname -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                        $out=New-NcNameMapping -Direction $MappingDirection -Position $MappingPosition -Pattern $MappingPattern -Replacement $MappingReplacement -Hostname $MappingHostname -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                    }else{
+                        Write-LogDebug "New-NcNameMapping -Direction $MappingDirection -Position $MappingPosition -Pattern $MappingPattern -Replacement $MappingReplacement -Address $MappingAddress -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                        $out=New-NcNameMapping -Direction $MappingDirection -Position $MappingPosition -Pattern $MappingPattern -Replacement $MappingReplacement -Address $MappingAddress -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                    }
+                    if ( $? -ne $True ) { Write-LogError "ERROR: New-NcNameMapping failed [$ErrorVar]" }
                 }else{
                     $SecondaryMappingAddress=$SecondaryMapping.Address
                     $SecondaryMappingDirection=$SecondaryMapping.Direction
@@ -2154,8 +2186,17 @@ Function create_update_usermapping_dr(
                         Write-LogDebug "Remove-NcNameMapping -Direction $SecondaryMappingDirection -Position $SecondaryMappingPosition -Confirm:$flase -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
                         $out=Remove-NcNameMapping -Direction $SecondaryMappingDirection -Position $SecondaryMappingPosition -Confirm:$flase -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -Confirm:$False
                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Remove-NcNameMapping failed [$ErrorVar]" }
-                        Write-LogDebug "New-NcNameMapping -Direction $MappingDirection -Position $MappingPosition -Pattern $MappingPattern -Replacement $MappingReplacement -Address $MappingAddress -Hostname $MappingHostname -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                        $out=New-NcNameMapping -Direction $MappingDirection -Position $MappingPosition -Pattern $MappingPattern -Replacement $MappingReplacement -Address $MappingAddress -Hostname $MappingHostname -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+
+                        if(($null -eq $MappingAddress -or $MappingAddress.Length -eq 0) -and ($null -eq $MappingHostname -or $MappingHostname.Length -eq 0)){
+                            Write-LogDebug "New-NcNameMapping -Direction $MappingDirection -Position $MappingPosition -Pattern $MappingPattern -Replacement $MappingReplacement -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                            $out=New-NcNameMapping -Direction $MappingDirection -Position $MappingPosition -Pattern $MappingPattern -Replacement $MappingReplacement -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                        }elseif($null -eq $MappingAddress -or $MappingAddress.Length -eq 0){
+                            Write-LogDebug "New-NcNameMapping -Direction $MappingDirection -Position $MappingPosition -Pattern $MappingPattern -Replacement $MappingReplacement -Hostname $MappingHostname -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                            $out=New-NcNameMapping -Direction $MappingDirection -Position $MappingPosition -Pattern $MappingPattern -Replacement $MappingReplacement -Hostname $MappingHostname -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                        }else{
+                            Write-LogDebug "New-NcNameMapping -Direction $MappingDirection -Position $MappingPosition -Pattern $MappingPattern -Replacement $MappingReplacement -Address $MappingAddress -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                            $out=New-NcNameMapping -Direction $MappingDirection -Position $MappingPosition -Pattern $MappingPattern -Replacement $MappingReplacement -Address $MappingAddress -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                        }
                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcNameMapping failed [$ErrorVar]" } 
                     }   
                 }
@@ -3580,7 +3621,7 @@ Function create_update_qospolicy_dr(
                     Write-LogDebug "QOS Policy Group old name [$PrimaryQosGroupName]"
                     $QosPolicyGroupName=$PrimaryQosGroupName+"___"+($mySecondaryVserver -replace "\.","_")
                     Write-LogDebug "QOS Policy Group new name [$QosPolicyGroupName]"
-                    Write-logDebug "Set-NcVserver -name $mySecondaryVserver -QOsPolicyGroup $QosPolicyGroupName -Controller $mySecondaryController"
+                    Write-LogDebug "Set-NcVserver -name $mySecondaryVserver -QOsPolicyGroup $QosPolicyGroupName -Controller $mySecondaryController"
                     $out=Set-NcVserver -Name $mySecondaryVserver -QOsPolicyGroup $QosPolicyGroupName -Controller $mySecondaryController  -ErrorVariable ErrorVar
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcVserver failed [$ErrorVar]" }     
                 }else{
@@ -3590,7 +3631,7 @@ Function create_update_qospolicy_dr(
                         if($PrimaryQosPolicyGroupOnSVM -ne $SecondaryQosPolicyGroupOnSVM)
                         {
                             Write-LogDebug "Work in SINGLE_CLUSTER mode"
-                            Write-logDebug "Set-NcVserver -name $mySecondaryVserver -QOsPolicyGroup $PrimaryQosPolicyGroupOnSVM`_$mySecondaryVserver -Controller $mySecondaryController"
+                            Write-LogDebug "Set-NcVserver -name $mySecondaryVserver -QOsPolicyGroup $PrimaryQosPolicyGroupOnSVM`_$mySecondaryVserver -Controller $mySecondaryController"
                             $out=Set-NcVserver -Name $mySecondaryVserver -QOsPolicyGroup $($PrimaryQosPolicyGroupOnSVM+"_"+$mySecondaryVserver) -Controller $mySecondaryController  -ErrorVariable ErrorVar
                             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcVserver failed [$ErrorVar]" }  
                         }
@@ -3600,7 +3641,7 @@ Function create_update_qospolicy_dr(
                         if($PrimaryQosPolicyGroupOnSVM -ne $SecondaryQosPolicyGroupOnSVM)
                         {
                             Write-LogDebug "Work in normal mode"
-                            Write-logDebug "Set-NcVserver -name $mySecondaryVserver -QOsPolicyGroup $PrimaryQosPolicyGroupOnSVM -Controller $mySecondaryController"
+                            Write-LogDebug "Set-NcVserver -name $mySecondaryVserver -QOsPolicyGroup $PrimaryQosPolicyGroupOnSVM -Controller $mySecondaryController"
                             $out=Set-NcVserver -Name $mySecondaryVserver -QOsPolicyGroup $PrimaryQosPolicyGroupOnSVM -Controller $mySecondaryController  -ErrorVariable ErrorVar
                             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcVserver failed [$ErrorVar]" }  
                         }
@@ -3616,7 +3657,7 @@ Function create_update_qospolicy_dr(
                 if($Selected.state -ne $True)
                 {
                     Write-Log "[$workOn] Failed to get Selected Volume from DB, check selectvolume.db file inside $Global:SVMTOOL_DB"
-                    Write-logDebug "end with error"
+                    Write-LogDebug "end with error"
                     return $False  
                 }else{
                     $VolList=$Selected.volumes
@@ -3910,7 +3951,7 @@ Try {
         if($Selected.state -ne $True)
         {
             Write-Log "[$workOn] Failed to get Selected Volume from DB, check selectvolume.db file inside $Global:SVMTOOL_DB"
-            Write-logDebug "end with error"
+            Write-LogDebug "end with error"
             return $False  
         }else{
             $SelectedVolumes=$Selected.volumes
@@ -4407,7 +4448,7 @@ Try {
     }
     if($Backup -eq $True){
         $PrimaryIgroupList | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcIgroup.json") -Encoding ASCII -Width 65535
-        if( ($ret=get-item $($Global:JsonPath+"Get-NcIgroup.json") -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcIgroup.json") -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$($Global:JsonPath+"Get-NcIgroup.json") saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcIgroup.json")"
@@ -4415,7 +4456,7 @@ Try {
         }
     }
     if($Backup -eq $False){
-        if ( $PrimaryIgroupList -eq $null ) {
+        if ( $null -eq $PrimaryIgroupList ) {
             Write-Log "[$workOn] No igroup found on cluster [$myPrimaryController]"
             Write-LogDebug "[$myPrimaryVserver]: end"
             return $True
@@ -4431,9 +4472,9 @@ Try {
             Write-LogDebug "igroup $PrimaryName"
             $SecondaryIgroup = Get-NcIgroup -Name $PrimaryName -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcIgroup failed [$ErrorVar]" } 
-            if ( $SecondaryIgroup -eq $null ) {
-                Write-LogDebug "New-NcIgroup -Name $PrimaryName -Protocol $PrimaryProtocol -Type $Type -Portset $PrimaryPortset -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                $out=New-NcIgroup -Name $PrimaryName -Protocol $PrimaryProtocol -Type $Type -Portset $PrimaryPortset -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+            if ( $null -eq $SecondaryIgroup ) {
+                Write-LogDebug "New-NcIgroup -Name $PrimaryName -Protocol $PrimaryProtocol -Type $PrimaryType -Portset $PrimaryPortset -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                $out=New-NcIgroup -Name $PrimaryName -Protocol $PrimaryProtocol -Type $PrimaryType -Portset $PrimaryPortset -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcIgroup failed [$ErrorVar]" }
                 $add_initiator = $True
             } else {
@@ -4457,15 +4498,24 @@ Try {
                     $add_initiator = $True
                 }
                 if ( $PrimaryALUA -ne $SecondaryALUA ) {
-                    $out=Set-NcIgroup -key alua False -Name $PrimaryName -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcIgroup failed [$ErrorVar]" }
+                    if($PrimaryALUA -eq $True){
+                        Write-Log "[$workOn] Set Igroup with ALUA mode"
+                        Write-LogDebug "Set-NcIgroup -key alua -Name $PrimaryName -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+                        $out=Set-NcIgroup -key "alua" -Name $PrimaryName -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcIgroup failed [$ErrorVar]" }
+                    }else{
+                        Write-Log "[$workOn] Set Igroup with os-type mode"
+                        Write-LogDebug "Set-NcIgroup -key os-type -Name $PrimaryName -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+                        $out=Set-NcIgroup -key "os-type" -Name $PrimaryName -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcIgroup failed [$ErrorVar]" }
+                    }
                 }
             }
             if ( $add_initiator -eq $True ) {
                 foreach ( $initiator in ( $PrimaryInitiators | Skip-Null ) ) {
                     $tmpStr = $initiator.InitiatorName
-                    Write-LogDebug "Add-NCIgroupInitiator -Name $PrimaryName -Initiator $tmpStr -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                    $out=Add-NCIgroupInitiator -Name $PrimaryName -Initiator $tmpStr -VserverContext $mySecondaryVserver -Controller $mySecondaryController
+                    Write-LogDebug "Add-NcIgroupInitiator -Name $PrimaryName -Initiator $tmpStr -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                    $out=Add-NcIgroupInitiator -Name $PrimaryName -Initiator $tmpStr -VserverContext $mySecondaryVserver -Controller $mySecondaryController
                 }
             }
         }
@@ -4512,7 +4562,7 @@ Try {
         if($Selected.state -ne $True)
         {
             Write-Log "[$workOn] Failed to get Selected Volume from DB, check selectvolume.db file inside $Global:SVMTOOL_DB"
-            Write-logDebug "end with error"
+            Write-LogDebug "end with error"
             return $False  
         }else{
             $VolList=$Selected.volumes
@@ -4685,7 +4735,7 @@ Function set_serial_lundr (
             if($Selected.state -ne $True)
             {
                 Write-Log "[$workOn] Failed to get Selected Volume from DB, check selectvolume.db file inside $Global:SVMTOOL_DB"
-                Write-logDebug "end with error"
+                Write-LogDebug "end with error"
                 return $False  
             }else{
                 $VolList=$Selected.volumes
@@ -5128,7 +5178,7 @@ Function check_update_voldr(
 Try {
     $Return = $True
     Write-Log "[$workOn] Check SVM Volumes options"
-    Write-logDebug "[$myPrimaryVserver]: start"
+    Write-LogDebug "[$myPrimaryVserver]: start"
 	if($Backup -eq $True){Write-LogDebug "run in Backup mode [$myPrimaryVserver]"}
     if($Restore -eq $True){Write-LogDebug "run in Restore mode [$myPrimaryVserver]"}
 
@@ -5209,7 +5259,7 @@ Try {
         if($Selected.state -ne $True)
         {
             Write-Log "[$workOn] Failed to get Selected Volume from DB, check selectvolume.db file inside $Global:SVMTOOL_DB"
-            Write-logDebug "end with error"
+            Write-LogDebug "end with error"
             return $False  
         }else{
             Write-LogDebug "Get-NcVol -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Query `@`{Name=`($Selected.volumes -join `",`"`)`;VolumeIdAttributes=`@`{StyleExtended=`"flexvol|flexgroup`"}}"
@@ -5265,7 +5315,7 @@ Try {
                             Write-LogDebug "Work in reverse mode with flexgroup, so remove _dst at the end of volume name"
                             $SecondaryName=$PrimaryFlexgroupMaster.Name -Replace "_dst$",""
                         }
-                        Write-logDebug "Secondary Name [$SecondaryName]"
+                        Write-LogDebug "Secondary Name [$SecondaryName]"
                         if($SecondaryName -notin $ListFlexgroup){
                             $ListFlexgroup+=$SecondaryName
                         }else {
@@ -5380,7 +5430,7 @@ Try {
             }
         }
     }
-    Write-logDebug "[$myPrimaryVserver]: end"
+    Write-LogDebug "[$myPrimaryVserver]: end"
 	return $Return 
 }
 Catch {
@@ -6923,7 +6973,7 @@ Function set_snapmirror_schedule_dr(
     {
 
         $Return = $True 
-        Write-logDebug "start"
+        Write-LogDebug "start"
         $myPrimaryCluster = (Get-NcCluster -Controller $myPrimaryController  -ErrorVariable ErrorVar).ClusterName          
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCluster failed [$ErrorVar]" }
         $mySecondaryCluster = (Get-NcCluster -Controller $mySecondaryController  -ErrorVariable ErrorVar).ClusterName          
@@ -6963,7 +7013,7 @@ Function set_snapmirror_schedule_dr(
                 }
             }
         }
-        Write-logDebug "end"
+        Write-LogDebug "end"
         return $Return 
     }
     Catch 
@@ -7223,7 +7273,7 @@ Try {
         if($Selected.state -ne $True)
         {
             Write-Log "[$workOn] Failed to get Selected Volume from DB, check selectvolume.db file inside $Global:SVMTOOL_DB"
-            Write-logDebug "end with error"
+            Write-LogDebug "end with error"
             return $False  
         }else{
             $VolList=$Selected.volumes
@@ -7658,7 +7708,7 @@ Function remove_snapmirror_dr (
 Try {
 
 	$Return = $True 
-    Write-logDebug "start"
+    Write-LogDebug "start"
 	$myPrimaryCluster = (Get-NcCluster -Controller $myPrimaryController  -ErrorVariable ErrorVar).ClusterName			
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCluster failed [$ErrorVar]" }
 	$mySecondaryCluster = (Get-NcCluster -Controller $mySecondaryController  -ErrorVariable ErrorVar).ClusterName			
@@ -7737,7 +7787,7 @@ Try {
             #}
 	    }
     }
-    Write-logDebug "end"
+    Write-LogDebug "end"
 	return $Return 
 }
 Catch {
@@ -8709,14 +8759,14 @@ Try {
     }
     if($Backup -eq $True){
         $PrimaryNfsService | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcNfsService.json") -Encoding ASCII -Width 65535
-        if( ($ret=get-item $($Global:JsonPath+"Get-NcNfsService.json") -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcNfsService.json") -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$($Global:JsonPath+"Get-NcNfsService.json") saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcNfsService.json")"
             $Return=$False
         }
     }
-	if ( $PrimaryNfsService -eq $null ) {
+	if ( $null -eq $PrimaryNfsService ) {
 		Write-Log "[$workOn] No NFS services in vserver [$myPrimaryVserver]"
         Write-LogDebug "[$myPrimaryVserver]: end"
 		return $true
@@ -8726,7 +8776,7 @@ Try {
     if($Backup -eq $False){
         $SecondaryNfsService = Get-NcNfsService -VserverContext  $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNfsService failed [$ErrorVar]" }
-        if ( $SecondaryNfsService -eq $null ) {
+        if ( $null -eq $SecondaryNfsService ) {
             Write-Log "[$workOn] Add NFS services"
             Write-LogDebug "Add-NcNfsService -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
             $out = Add-NcNfsService -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
@@ -9104,7 +9154,7 @@ Try {
             if($Selected.state -ne $True)
             {
                 Write-Log "[$workOn] Failed to get Selected Volume from DB, check selectvolume.db file inside $Global:SVMTOOL_DB"
-                Write-logDebug "end with error"
+                Write-LogDebug "end with error"
                 return $False  
             }else{
                 $VolList=$Selected.volumes
@@ -10206,7 +10256,7 @@ Try {
                             }
                         }
                         if($duplicateIP -eq $False){
-                            Write-logDebug "Set-NcNetInterface -Name $myInterfaceName -Vserver $mySecondaryVserver -AdministrativeStatus up -Controller $mySecondaryController"
+                            Write-LogDebug "Set-NcNetInterface -Name $myInterfaceName -Vserver $mySecondaryVserver -AdministrativeStatus up -Controller $mySecondaryController"
                             $out=Set-NcNetInterface -Name $myInterfaceName -Vserver $mySecondaryVserver -AdministrativeStatus "up" -Controller $mySecondaryController  -ErrorVariable ErrorVar
                             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcNetInterface up failed [$ErrorVar]" ; }    
                             $oneDRLIFupReady=$True
@@ -10250,26 +10300,26 @@ Try {
                     $ADCred = get_local_cred ($SecondaryDomain)
                     if($null -eq $SecondaryCifsNetbiosAlias){
                         if($Global:PSTKCall -eq "Rest"){
-                            Write-logDebug "Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite $SecondaryDefaultSite -AdminCredential $ADCred -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -Controller $mySecondaryController" 
+                            Write-LogDebug "Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite $SecondaryDefaultSite -AdminCredential $ADCred -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -Controller $mySecondaryController" 
                             $out = Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite  $SecondaryDefaultSite -AdminCredential $ADCred -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                         }else{
-                            Write-logDebug "Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite $SecondaryDefaultSite -AdminCredential $ADCred -Force -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -Controller $mySecondaryController" 
+                            Write-LogDebug "Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite $SecondaryDefaultSite -AdminCredential $ADCred -Force -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -Controller $mySecondaryController" 
                             $out = Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite  $SecondaryDefaultSite -AdminCredential $ADCred -Force -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                         }
                         if ( $? -ne $True ) { throw "ERROR: Add-NcCifsServer failed [$ErrorVar]" ; }else{ Write-Log "[$workOn] Cifs server is joined"}
                     }else{
                         if($Global:PSTKCall -eq "Rest"){
-                            Write-logDebug "Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite $SecondaryDefaultSite -AdminCredential $ADCred -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -NetbiosAlias $SecondaryCifsNetbiosAlias -Controller $mySecondaryController" 
+                            Write-LogDebug "Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite $SecondaryDefaultSite -AdminCredential $ADCred -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -NetbiosAlias $SecondaryCifsNetbiosAlias -Controller $mySecondaryController" 
                             $out = Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite  $SecondaryDefaultSite -AdminCredential $ADCred -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -NetbiosAlias $SecondaryCifsNetbiosAlias -Controller $mySecondaryController  -ErrorVariable ErrorVar
                         }else{
-                            Write-logDebug "Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite $SecondaryDefaultSite -AdminCredential $ADCred -Force -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -NetbiosAlias $SecondaryCifsNetbiosAlias -Controller $mySecondaryController" 
+                            Write-LogDebug "Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite $SecondaryDefaultSite -AdminCredential $ADCred -Force -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -NetbiosAlias $SecondaryCifsNetbiosAlias -Controller $mySecondaryController" 
                             $out = Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite  $SecondaryDefaultSite -AdminCredential $ADCred -Force -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -NetbiosAlias $SecondaryCifsNetbiosAlias -Controller $mySecondaryController  -ErrorVariable ErrorVar
                         }
                         if ( $? -ne $True ) { throw "ERROR: Add-NcCifsServer failed [$ErrorVar]" ; }else{ Write-Log "[$workOn] Cifs server is joined"}
                     }
                     if( ($myInterfaceName.Length -gt 0) -and ($Global:RESTORE_ORIGINAL -eq $False -and ( -not ($Global:ForceCloneOriginal.IsPresent))) )
                     {
-                        Write-logDebug "Set-NcNetInterface -Name $myInterfaceName -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController"
+                        Write-LogDebug "Set-NcNetInterface -Name $myInterfaceName -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController"
                         $out=Set-NcNetInterface -Name $myInterfaceName -Vserver $mySecondaryVserver -AdministrativeStatus "down" -Controller $mySecondaryController  -ErrorVariable ErrorVar
 
                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcNetInterface down failed [$ErrorVar]" ; }  
@@ -11651,7 +11701,7 @@ Function show_vserver_dr (
                 if($Selected.state -ne $True)
                 {
                     Write-Log "Failed to get Selected Volume from DB, check selectvolume.db file inside $Global:SVMTOOL_DB"
-                    Write-logDebug "end with error"
+                    Write-LogDebug "end with error"
                     return $False  
                 }else{
                     $VolList=$Selected.volumes
@@ -12365,7 +12415,7 @@ Try {
             Write-Log "[$workOn] Removing Temporary LIF"
             Write-LogDebug "Get-NcNetInterface -Vserver $mySecondaryVserver -Controller $mySecondaryController | Where-Object {$_.InterfaceName -match `"^tmp_lif_to_join_in_ad_`"}"
             $TempCifsLif=Get-NcNetInterface -Vserver $mySecondaryVserver -Controller $mySecondaryController | Where-Object {$_.InterfaceName -match "^tmp_lif_to_join_in_ad_"}
-            Write-logDebug "Set-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController -ErrorVariable ErrorVar"
+            Write-LogDebug "Set-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController -ErrorVariable ErrorVar"
             $out = Set-NcNetInterface -Name $TempCifsLif.InterfaceName -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcNetInterface failed [$ErrorVar]" ; }
             Write-LogDebug "Remove-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $mySecondaryVserver -Confirm:$false -Controller $mySecondaryController -ErrorVariable ErrorVar"
@@ -12378,7 +12428,7 @@ Try {
                 $TempCifsLif=Get-NcNetInterface -Vserver $mySecondaryVserver -Controller $mySecondaryController | Where-Object {$_.InterfaceName -match "^tmp_lif_to_join_in_ad_"}
                 if($null -ne $TempCifsLif){
                     Write-LogDebug "[$workOn] Removing Temporary LIF"
-                    Write-logDebug "Set-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController -ErrorVariable ErrorVar"
+                    Write-LogDebug "Set-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController -ErrorVariable ErrorVar"
                     $out = Set-NcNetInterface -Name $TempCifsLif.InterfaceName -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController -ErrorVariable ErrorVar
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcNetInterface failed [$ErrorVar]" ; }
                     Write-LogDebug "Remove-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $mySecondaryVserver -Confirm:$false -Controller $mySecondaryController -ErrorVariable ErrorVar"
@@ -12523,7 +12573,7 @@ Function restamp_msid (
 
 Try {
     $Return=$True
-    Write-logDebug "start"
+    Write-LogDebug "start"
     $NcCluster = Get-NcCluster -Controller $myPrimaryController
     $SourceCluster = $NcCluster.ClusterName
     $NcCluster = Get-NcCluster -Controller $mySecondaryController
@@ -12537,7 +12587,7 @@ Try {
     $DestVserver=Get-NcVserver -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" }
     if($DestVserver.IsConfigLockedForChanges -eq $True){
-        Write-logDebug "Unlock-NcVserver -Vserver $mySecondaryVserver -Force -Confirm:$False -Controller $mySecondaryController"
+        Write-LogDebug "Unlock-NcVserver -Vserver $mySecondaryVserver -Force -Confirm:$False -Controller $mySecondaryController"
         $ret=Unlock-NcVserver -Vserver $mySecondaryVserver -Force -Confirm:$False -Controller $mySecondaryController -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Unlock-NcVserver failed [$ErrorVar]" }
     }
@@ -12559,7 +12609,7 @@ Try {
 		
         if($destMSID -ne $sourceMSID){
             Write-Log "[$mySecondaryVserver] Restamp MSID for volume [$VolName]"
-            #Write-logDebug "Dismount-NcVol -Name $VolName -VserverContext $mySecondaryVserver -Force -Confirm:$False -Controller $mySecondaryController"
+            #Write-LogDebug "Dismount-NcVol -Name $VolName -VserverContext $mySecondaryVserver -Force -Confirm:$False -Controller $mySecondaryController"
             #$ret=Dismount-NcVol -Name $VolName -VserverContext $mySecondaryVserver -Force -Confirm:$False -Controller $mySecondaryController -ErrorVariable ErrorVar
             #if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Dismount-NcVol failed [$ErrorVar]" }
             $ret=analyse_junction_path -myController $mySecondaryController -myVserver $mySecondaryVserver -Dest    
@@ -12579,13 +12629,13 @@ Try {
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol failed [$ErrorVar]" }
                 $QOSPolModified=$True
             }
-            Write-logDebug "Invoke-NcSsh -Command ""set diag; debug vserverdr restamp-volume-msid -vserver $mySecondaryVserver -volume $VolName -new-msid $sourceMSID -msid $destMSID"" -Controller $mySecondaryController"
+            Write-LogDebug "Invoke-NcSsh -Command ""set diag; debug vserverdr restamp-volume-msid -vserver $mySecondaryVserver -volume $VolName -new-msid $sourceMSID -msid $destMSID"" -Controller $mySecondaryController"
             $ret=Invoke-NcSsh -Command "set diag; debug vserverdr restamp-volume-msid -vserver $mySecondaryVserver -volume $VolName -new-msid $sourceMSID -msid $destMSID" -Controller $mySecondaryController -Timeout 60000 -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Invoke-NcSsh failed [$ErrorVar]" }
             $detailInvoke=$ret | Out-String
             $onelinedetailInvoke=$detailInvoke -replace "`r`n"," "
             Write-LogDebug "Restamp MSID return :"
-            Write-logDebug "$detailInvoke"
+            Write-LogDebug "$detailInvoke"
             $restampSucceeded=$False
             if($onelinedetailInvoke -match "Successfully.+restamped.+MSID.+for.+volume"){
                 $restampSucceeded=$True    
@@ -12610,7 +12660,7 @@ Try {
             $DestVserver=Get-NcVserver -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" }
             if($DestVserver.IsConfigLockedForChanges -eq $True){
-                Write-logDebug "Unlock-NcVserver -Vserver $mySecondaryVserver -Force -Confirm:$False -Controller $mySecondaryController"
+                Write-LogDebug "Unlock-NcVserver -Vserver $mySecondaryVserver -Force -Confirm:$False -Controller $mySecondaryController"
                 $ret=Unlock-NcVserver -Vserver $mySecondaryVserver -Force -Confirm:$False -Controller $mySecondaryController -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Unlock-NcVserver failed [$ErrorVar]" }
             }
@@ -12623,7 +12673,7 @@ Try {
             }
 
             #if($JunctionPath.Length -gt 0){
-            #    Write-logDebug "Mount-NcVol -Name $VolName -VserverContext $mySecondaryVserver -JunctionPath $JunctionPath -Controller $mySecondaryController"
+            #    Write-LogDebug "Mount-NcVol -Name $VolName -VserverContext $mySecondaryVserver -JunctionPath $JunctionPath -Controller $mySecondaryController"
             #    $ret=Mount-NcVol -Name $VolName -VserverContext $mySecondaryVserver -JunctionPath $JunctionPath -Controller $mySecondaryController -ErrorVariable ErrorVar
             #    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Mount-NcVol failed [$ErrorVar]" }
             #}
@@ -12635,7 +12685,7 @@ Try {
             Write-LogDebug "Skip volume [$VolName] because MSID [$destMSID] is already equal to source MSID [$sourceMSID]"
         }
     }
-    Write-logDebug "end" 
+    Write-LogDebug "end" 
     return $Return
 }catch{
     handle_error $_ $myPrimaryVserver
@@ -13224,7 +13274,7 @@ try{
                     $detailInvoke=$ret | Out-String
                     $onelinedetailInvoke=$detailInvoke -replace "`r`n"," "
                     Write-LogDebug "Vserver config override return :"
-                    Write-logDebug "$detailInvoke"
+                    Write-LogDebug "$detailInvoke"
                     $checkLIF=Get-NcNetInterface -vserver $ReplicatedSVM -Name $InterfaceName -Controller $mySecondaryController
                     $checkLIFIP=$checkLIF.Address
                     Write-LogDebug "LIF overrided IP address is now [$checkLIFIP]"
@@ -13243,7 +13293,7 @@ try{
                 $detailInvoke=$ret | Out-String
                 $onelinedetailInvoke=$detailInvoke -replace "`r`n"," "
                 Write-LogDebug "Vserver config override return :"
-                Write-logDebug "$detailInvoke"
+                Write-LogDebug "$detailInvoke"
                 $checkLIF=Get-NcNetInterface -vserver $ReplicatedSVM -Name $InterfaceName -Controller $mySecondaryController
                 $checkLIFIP=$checkLIF.Address
                 Write-LogDebug "LIF overrided IP address is now [$checkLIFIP]"
@@ -13465,7 +13515,7 @@ try{
 
             # Write-Log "[$mySecondaryVserver] Restore CIFS Source Identity & Objects on Destination Cluster [$mySecondaryController]"
             # $ADcred=get_local_cred($PrimaryCIFSdomain)
-            # Write-logDebug "Add-NcCifsServer -Name $PrimaryCIFSidentity -Domain $PrimaryCIFSdomain -OrganizationalUnit $SecondaryOrganizationalUnit -AdminCredential $ADCred -Force -AdministrativeStatus up -VserverContext $mySecondaryVserver -Controller $mySecondaryController" 
+            # Write-LogDebug "Add-NcCifsServer -Name $PrimaryCIFSidentity -Domain $PrimaryCIFSdomain -OrganizationalUnit $SecondaryOrganizationalUnit -AdminCredential $ADCred -Force -AdministrativeStatus up -VserverContext $mySecondaryVserver -Controller $mySecondaryController" 
             # $out = Add-NcCifsServer -Name $PrimaryCIFSidentity -Domain $PrimaryCIFSdomain -OrganizationalUnit $SecondaryOrganizationalUnit -AdminCredential $ADCred -Force -AdministrativeStatus "up" -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
             # if ( $? -ne $True ) { throw "ERROR: Add-NcCifsServer failed [$ErrorVar]" }else{ Write-Log "[$mySecondaryVserver] Cifs server [$PrimaryCIFSidentity] is joined"} 
 
@@ -13513,7 +13563,7 @@ try{
         #         Write-Log "[$mySecondaryVserver] Recreate CIFS server with identity name [$PrimaryCIFSidentity]"
         #         Write-LogDebug "Remove-NcCifsServer -ForceAccountDelete -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
         #         $out=Remove-NcCifsServer -ForceAccountDelete -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
-        #         Write-logDebug "Add-NcCifsServer -Name $PrimaryCIFSidentity -Domain $PrimaryCIFSdomain -OrganizationalUnit $SecondaryOrganizationalUnit -AdminCredential $ADCred -Force -AdministrativeStatus up -VserverContext $mySecondaryVserver -Controller $mySecondaryController" 
+        #         Write-LogDebug "Add-NcCifsServer -Name $PrimaryCIFSidentity -Domain $PrimaryCIFSdomain -OrganizationalUnit $SecondaryOrganizationalUnit -AdminCredential $ADCred -Force -AdministrativeStatus up -VserverContext $mySecondaryVserver -Controller $mySecondaryController" 
         #         Start-Sleep -Seconds 10
         #         $out = Add-NcCifsServer -Name $PrimaryCIFSidentity -Domain $PrimaryCIFSdomain -OrganizationalUnit $SecondaryOrganizationalUnit -AdminCredential $ADCred -Force -AdministrativeStatus "up" -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
         #         if ( $? -ne $True ) { throw "ERROR: Add-NcCifsServer failed [$ErrorVar]" }else{ Write-Log "[$mySecondaryVserver] Cifs server [$PrimaryCIFSidentity] is joined"}  
@@ -14562,7 +14612,7 @@ Function update_vserver_dr (
         Write-Log "[$mySecondaryVserver] Removing Temporary LIF"
         Write-LogDebug "Get-NcNetInterface -Vserver $mySecondaryVserver -Controller $mySecondaryController | Where-Object {$_.InterfaceName -match `"^tmp_lif_to_join_in_ad_`"}"
         $TempCifsLif=Get-NcNetInterface -Vserver $mySecondaryVserver -Controller $mySecondaryController | Where-Object {$_.InterfaceName -match "^tmp_lif_to_join_in_ad_"}
-        Write-logDebug "Set-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController -ErrorVariable ErrorVar"
+        Write-LogDebug "Set-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController -ErrorVariable ErrorVar"
         $out = Set-NcNetInterface -Name $TempCifsLif.InterfaceName -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcNetInterface failed [$ErrorVar]" ; }
         Write-LogDebug "Remove-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $mySecondaryVserver -Confirm:$false -Controller $mySecondaryController -ErrorVariable ErrorVar"
@@ -14574,7 +14624,7 @@ Function update_vserver_dr (
         $TempCifsLif=Get-NcNetInterface -Vserver $mySecondaryVserver -Controller $mySecondaryController | Where-Object {$_.InterfaceName -match "^tmp_lif_to_join_in_ad_"}
         if($null -ne $TempCifsLif){
             Write-Log "[$mySecondaryVserver] Removing Temporary LIF"
-            Write-logDebug "Set-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController -ErrorVariable ErrorVar"
+            Write-LogDebug "Set-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController -ErrorVariable ErrorVar"
             $out = Set-NcNetInterface -Name $TempCifsLif.InterfaceName -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcNetInterface failed [$ErrorVar]" ; }
             Write-LogDebug "Remove-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $mySecondaryVserver -Confirm:$false -Controller $mySecondaryController -ErrorVariable ErrorVar"
@@ -14687,7 +14737,7 @@ Function enable_network_protocol_vserver_dr (
 	[string] $myVserver ) {
 Try {
 	$Return = $True
-    Write-logDebug "start"
+    Write-LogDebug "start"
     if( ( (Get-NcVserver -Vserver $myVserver -controller $myNcController).State) -ne "running"){
         Write-Log "[$myVserver] Start Vserver"
         Write-LogDebug "Start-NcVserver -Name $myVserver -Controller $myNcController"
@@ -14757,7 +14807,7 @@ Try {
 			}
 		}
 	}
-    Write-logDebug "end"
+    Write-LogDebug "end"
 	return $Return 
 }
 Catch {
@@ -15819,7 +15869,7 @@ Function mount_volume (
 {
     
     $Return = $True 
-    Write-logDebug "start $myVolumeName"
+    Write-LogDebug "start $myVolumeName"
     $RootVolume = (Get-NcVserver -Controller $myController -Vserver $myVserver  -ErrorVariable ErrorVar).RootVolume
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed to get RootVolume [$ErrorVar]" } 
     if ($RootVolume -eq $null ) { Write-LogDebug "mount_volume()|root volume not found for [$myVserver]" }
@@ -15842,11 +15892,11 @@ Function mount_volume (
         Write-LogDebug "Volume [$myVolumeName] is mounted under [$mountpath]"
         if($mountpath -eq $JunctionPath){
             Write-LogDebug "Volume [$myVolumeName] is correctly mounted"
-            Write-logDebug "end $myVolumeName"
+            Write-LogDebug "end $myVolumeName"
             return $True
         }
     Write-LogDebug "First need to unmount volume [$myVolumeName] from [$mountpath] on [$myVserver]"
-    Write-logDebug "Dismount-NcVol -Name $myVolumeName -VserverContext $myVserver -Controller $myController"
+    Write-LogDebug "Dismount-NcVol -Name $myVolumeName -VserverContext $myVserver -Controller $myController"
     $out=Dismount-NcVol -Name $myVolumeName -VserverContext $myVserver -Controller $myController -Force -Confirm:$False -ErrorVariable ErrorVar
     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Dismount-NcVol [$myVolumeName] failed [$ErrorVar]" }        
     }
@@ -15910,7 +15960,7 @@ Function mount_volume (
             }  
         }
         try{
-            Write-logDebug "Mount-NcVol -Name $myVolumeName -JunctionPath $JunctionPath -VserverContext $myVserver -Controller $myController"
+            Write-LogDebug "Mount-NcVol -Name $myVolumeName -JunctionPath $JunctionPath -VserverContext $myVserver -Controller $myController"
             $out=Mount-NcVol -Name $myVolumeName -JunctionPath $JunctionPath -VserverContext $myVserver -Controller $myController -ErrorVariable ErrorVar
             if ( $? -ne $True ) {throw "ERROR: Mount-NcVol [$myVolumeName] failed [$ErrorVar]" } 
         }catch{
@@ -15926,13 +15976,13 @@ Function mount_volume (
         #$ret=analyse_junction_path -myController $mySecondaryController -myVserver $mySecondaryVserver -Dest
         $ret=analyse_junction_path -myController $myController -myVserver $myVserver -Dest
         if ($ret -ne $True){$Return=$False;Throw "ERROR : Failed to analyse_junction_path"}
-        Write-logDebug "end $myVolumeName"
+        Write-LogDebug "end $myVolumeName"
         return $Return  
     }catch{
         handle_error $_ $myVserver
         return $Return    
     }                 
-    Write-logDebug "end $myVolumeName"
+    Write-LogDebug "end $myVolumeName"
     return $Return
 }
 
@@ -15943,13 +15993,13 @@ Function umount_volume (
     [string] $myVolumeName) {
 
     $Return = $True 
-    Write-logDebug "start $myVolumeName"
+    Write-LogDebug "start $myVolumeName"
     if ( ($script:vol_junction_dest | Where-Object {$_.Name -eq $myVolumeName} | Measure-Object).count -eq 0 ){
         Write-LogDebug "Volume [$myVolumeName] is not mounted in Namespace"
     }else{
         $volume=$script:vol_junction_dest | Where-Object {$_.Name -eq $myVolumeName}
         $volumeName=$volume.Name
-        Write-logDebug "Dismount-NcVol -Name $volumeName -VserverContext $myVserver -Controller $myController"
+        Write-LogDebug "Dismount-NcVol -Name $volumeName -VserverContext $myVserver -Controller $myController"
         $out=Dismount-NcVol -Name $volumeName -VserverContext $myVserver -Controller $myController -Force -Confirm:$False -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Dismount-NcVol [$volumeName] failed [$ErrorVar]" }
         # $script:vol_junction_dest | Where-Object {$_.Name -eq $myVolumeName} | foreach{
@@ -15959,10 +16009,10 @@ Function umount_volume (
             #     if($ret -ne $True){$Return=$False;Throw "ERROR : Failed to umount volume [$child] on [$myVserver]"}
             # }
             # try{
-            #     Write-logDebug "Dismount-NcVol -Name $myVolumeName -VserverContext $myVserver -Controller $myController"
+            #     Write-LogDebug "Dismount-NcVol -Name $myVolumeName -VserverContext $myVserver -Controller $myController"
             #     $out=Dismount-NcVol -Name $myVolumeName -VserverContext $myVserver -Controller $myController -Force -Confirm:$False -ErrorVariable ErrorVar
             #     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Dismount-NcVol [$myVolumeName] failed [$ErrorVar]" }
-            #     Write-logDebug "end"
+            #     Write-LogDebug "end"
             #     $ret=analyse_junction_path -myController $mySecondaryController -myVserver $mySecondaryVserver -Dest	
             #     if ($ret -ne $True){$Return=$False;Throw "ERROR : Failed to analyse_junction_path"}
             #     return $Return
@@ -15994,7 +16044,7 @@ Function umount_volume (
             # }
         # }
     }
-    Write-logDebug "end $myVolumeName"
+    Write-LogDebug "end $myVolumeName"
     return $Return
 }
 
@@ -16005,9 +16055,9 @@ Function remove_volume (
     [string] $myVolumeName) {
 Try {
         $Return = $True 
-        Write-logDebug "start"
+        Write-LogDebug "start"
         Write-Log "[$myVserver] Remove volume [$myVolumeName]"
-        Write-logDebug "Get-NcVol -Controller $myController -Vserver $myVserver -Name $myVolumeName"
+        Write-LogDebug "Get-NcVol -Controller $myController -Vserver $myVserver -Name $myVolumeName"
         $SecondaryVol=Get-NcVol -Controller $myController -Vserver $myVserver -Name $myVolumeName -ErrorVariable ErrorVar 
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
         if($SecondaryVol -ne $null){  
@@ -16026,7 +16076,7 @@ Try {
         }else{
             Write-LogDebug "volume [$myVolumeName] does not exist on [$myVserver]"
         }
-        Write-logDebug "end"
+        Write-LogDebug "end"
         return $Return
     }catch{
         handle_error $_ $myVserver
@@ -16045,7 +16095,7 @@ Function delete_snapmirror_relationship (
 Try {
 
     $Return = $True 
-    Write-logDebug "start"
+    Write-LogDebug "start"
     $NcCluster = Get-NcCluster -Controller $myPrimaryController
     $SourceCluster = $NcCluster.ClusterName
     $NcCluster = Get-NcCluster -Controller $mySecondaryController
@@ -16120,7 +16170,7 @@ Try {
                 $Return = $True 
             }
     }
-    Write-logDebug "end"
+    Write-LogDebug "end"
     return $Return
     }catch{
         handle_error $_ $myPrimaryVserver
@@ -16323,7 +16373,7 @@ Try {
     Write-LogDebug "Get-NcVserverPeer -Controller $myPrimaryController -VserverContext $myPrimaryVserver -Query @{PeerCluster=$DestCluster}"
     $AllPeerList=Get-NcVserverPeer -Controller $myPrimaryController -VserverContext $myPrimaryVserver -Query @{PeerCluster=$DestCluster} -ErrorVariable ErrorVar 
     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserverPeer failed [$ErrorVar]" }
-	Write-logDebug "Get-NcSnapmirrorDestination -SourceVserver $myPrimaryVserver -VserverContext $myPrimaryVserver -Controller $myPrimaryController -DestinationVserver $mySecondaryVserver -ErrorVariable ErrorVar"
+	Write-LogDebug "Get-NcSnapmirrorDestination -SourceVserver $myPrimaryVserver -VserverContext $myPrimaryVserver -Controller $myPrimaryController -DestinationVserver $mySecondaryVserver -ErrorVariable ErrorVar"
 	$relationlist=Get-NcSnapmirrorDestination -SourceVserver $myPrimaryVserver -VserverContext $myPrimaryVserver -Controller $myPrimaryController -DestinationVserver $mySecondaryVserver -ErrorVariable ErrorVar
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
 	foreach ( $relation in $relationlist ) {
@@ -17079,7 +17129,7 @@ Function Set_CIFS_from_JSON (
                 
                 Start-Sleep -Seconds 30
 
-                Write-logDebug "Add-NcCifsServer -Name $newCIFSName -Domain $newCIFSDomain -OrganizationalUnit $newCIFSOU -AdminCredential $ADCred -Force -AdministrativeStatus up -NetbiosAlias $newCIFSNetbiosAliases -VserverContext $ToVserver -Controller $ToNcController" 
+                Write-LogDebug "Add-NcCifsServer -Name $newCIFSName -Domain $newCIFSDomain -OrganizationalUnit $newCIFSOU -AdminCredential $ADCred -Force -AdministrativeStatus up -NetbiosAlias $newCIFSNetbiosAliases -VserverContext $ToVserver -Controller $ToNcController" 
                 $out = Add-NcCifsServer -Name $newCIFSName -Domain $newCIFSDomain -OrganizationalUnit $newCIFSOU -AdminCredential $ADCred -Force -AdministrativeStatus "up" -NetbiosAlias $newCIFSNetbiosAliases -VserverContext $ToVserver -Controller $ToNcController  -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { throw "ERROR: Add-NcCifsServer failed [$ErrorVar]" ; }else{ Write-Log "[$ToVserver] Cifs server [$newCIFSName] is joined"} 
                 
@@ -17140,11 +17190,11 @@ Function Add_CIFS_from_JSON (
         $CifsServerOnSource=Get-NcCifsServer -VserverContext $ToVserver -Controller $ToNcController  -ErrorVariable ErrorVar
         if($null -eq $CifsServerOnSource){
             $ADCred = get_local_cred ($CIFSDomain) 
-            Write-logDebug "Add-NcCifsServer -Name $CIFSName -Domain $CIFSDomain -OrganizationalUnit $CIFSOU -DefaultSite  $CIFSDefaultSite -AdminCredential $ADCred -Force -AdministrativeStatus down -VserverContext $ToVserver -Controller $ToNcController" 
+            Write-LogDebug "Add-NcCifsServer -Name $CIFSName -Domain $CIFSDomain -OrganizationalUnit $CIFSOU -DefaultSite  $CIFSDefaultSite -AdminCredential $ADCred -Force -AdministrativeStatus down -VserverContext $ToVserver -Controller $ToNcController" 
             $out = Add-NcCifsServer -Name $CIFSName -Domain $CIFSDomain -OrganizationalUnit $CIFSOU -DefaultSite  $CIFSDefaultSite -AdminCredential $ADCred -Force -AdministrativeStatus down -VserverContext $ToVserver -Controller $ToNcController  -ErrorVariable ErrorVar
             if ( $? -ne $True ) { throw "ERROR: Add-NcCifsServer failed [$ErrorVar]" }else{Write-Log "[$ToVserver] Cifs server [$CIFSName] joined"}
         }elseif($CifsServerOnSource.AdministrativeStatus -eq "down" -and $CifsServerOnSource.CifsServer -eq $CIFSName){
-            Write-logDebug "Start-NcCifsServer -VserverContext $ToVserver -Controller $ToNcController" 
+            Write-LogDebug "Start-NcCifsServer -VserverContext $ToVserver -Controller $ToNcController" 
             $out = Start-NcCifsServer -VserverContext $ToVserver -Controller $ToNcController  -ErrorVariable ErrorVar
             if ( $? -ne $True ) { throw "ERROR: Add-NcCifsServer failed [$ErrorVar]" }else{Write-Log "[$ToVserver] Cifs server [$CIFSName] started"}    
         }elseif($CifsServerOnSource.CifsServer -ne $CIFSName){
@@ -17643,7 +17693,7 @@ Function save_vol_options_to_voldb (
                     $VOL_DB_DST_FILE=$VOL_DB_DST_FILE -Replace "\\","/"     
                 }
      			# Create all missing Destination Volumes
-                Write-logDebug "Get-NcVol -Name $SourceVolume -Controller $myController -Vserver $myVserver"
+                Write-LogDebug "Get-NcVol -Name $SourceVolume -Controller $myController -Vserver $myVserver"
     			$PrimaryVol = Get-NcVol -Name $SourceVolume -Controller $myController -Vserver $myVserver  -ErrorVariable ErrorVar 
     			if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
     			$PrimaryVolName=$PrimaryVol.Name
@@ -17706,7 +17756,7 @@ Function set_vol_options_from_voldb (
     Try 
     {
     	$Return = $true
-        Write-logDebug "start"
+        Write-LogDebug "start"
         if($Restore.IsPresent -or $Restore -eq $True){
             if(Test-Path $($Global:JsonPath+"Get-NcVserver.json")){
                 $PrimaryVserver=Get-Content $($Global:JsonPath+"Get-NcVserver.json") -Raw | ConvertFrom-Json
@@ -18212,7 +18262,7 @@ Function set_vol_options_from_voldb (
                 }
             }
         }
-        Write-logDebug "end"
+        Write-LogDebug "end"
         return $Return
     }
     Catch 
@@ -18400,7 +18450,7 @@ Function set_shareacl_options_from_shareacldb (
     Try 
     {
     	$Return = $true
-        Write-logDebug "start"
+        Write-LogDebug "start"
     	#$VolumeListToRestartQuota= @()
         if($NoCheck -eq $False){
             Write-LogDebug "Use $Global:VserverDR as VserverDR name"
@@ -18460,7 +18510,7 @@ Function set_shareacl_options_from_shareacldb (
                     else 
                     {
     					$temp=Get-Content $SHAREACL_DB_FILE
-                        if($temp.count -eq 0){Write-LogDebug "Empty Share ACL DB. No Share ACL to manage";Write-logDebug "set_shareacl_options_from_shareacldb: end";return $True}
+                        if($temp.count -eq 0){Write-LogDebug "Empty Share ACL DB. No Share ACL to manage";Write-LogDebug "set_shareacl_options_from_shareacldb: end";return $True}
                         Write-LogDebug "Share ACL DB [$temp]"
                         $ShareAclList_DB=New-Object System.Collections.ArrayList($null)
                         if(($temp.count) -gt 1)
@@ -18509,7 +18559,7 @@ Function set_shareacl_options_from_shareacldb (
     		    }
       	    }
         }
-        Write-logDebug "end"
+        Write-LogDebug "end"
         return $Return
     }
     Catch 
@@ -19077,7 +19127,7 @@ Function restart_quota_vol_from_list (
 	[array]$myVolumeList ) {
 Try {
     $Return = $True
-    Write-logDebug "start"
+    Write-LogDebug "start"
     # Restart Quota on Corrected volumes	
     if ( $null -ne $myVolumeList ) { 
         $myVolumeList | Select-Object -uniq | ForEach-Object {
@@ -19139,7 +19189,7 @@ Try {
             }
         }
     }
-    Write-logDebug "end"
+    Write-LogDebug "end"
     return $Return
 }
 Catch {

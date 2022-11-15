@@ -2163,7 +2163,7 @@ if ( $Restore ) {
     }
     ForEach ($JobRestore in $($Jobs_Restore | Where-Object { $_.Handle.IsCompleted -eq $True })) {
         $jobname = $JobRestore.Name
-        Write-logDebug "$jobname finished"
+        Write-LogDebug "$jobname finished"
         $result_Restore = $JobRestore.Thread.EndInvoke($JobRestore.Handle)
         if ($result_Restore.count -gt 0) {
             $ret = $result_Restore[-1]
@@ -2598,7 +2598,7 @@ if ( $ConfigureDR ) {
         $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" 
     }
     if ($DestVserver.IsConfigLockedForChanges -eq $True) {
-        Write-logDebug "Unlock-NcVserver -Vserver $VserverDR -Force -Confirm:$False -Controller $NcSecondaryCtrl"
+        Write-LogDebug "Unlock-NcVserver -Vserver $VserverDR -Force -Confirm:$False -Controller $NcSecondaryCtrl"
         $ret = Unlock-NcVserver -Vserver $VserverDR -Force -Confirm:$False -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar
         if ( $? -ne $True ) {
             $Return = $False ; throw "ERROR: Dest Vserver [$VserverDR] has its config locked. Unlock-NcVserver failed [$ErrorVar]" 
