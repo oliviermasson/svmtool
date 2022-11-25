@@ -3220,12 +3220,21 @@ Function create_update_fpolicy_dr(
                         $SecondaryFpolPolAllowPrivilegedUserName=$SecondaryFpolPol.PrivilegedUserName
                         $SecondaryFpolPolAllowIsPassthroughReadEnabled=$SecondaryFpolPol.IsPassthroughReadEnabled
                         $SecondaryFpolPolScope=$SecondaryFpolPol.Scope
+
+                        if($null -ne $PrimaryFpolPolScope){
+                            $PropertiesToCheck=($PrimaryFpolPolScope | Get-Member -MemberType Property).Name
+                        }else{
+                            $PropertiesToCheck=$null
+                        }
                         
+                        if($null -eq $SecondaryFpolPolScope){
+                            $SecondaryFpolPolScope=$PrimaryFpolPolScope
+                        }
                         if ( ($PrimaryFpolPolIsMandatory -ne $SecondaryFpolPolIsMandatory) `
                             -or ($PrimaryFpolPolAllowPrivilegedAccess -ne $SecondaryFpolPolAllowPrivilegedAccess) `
                             -or ($PrimaryFpolPolAllowPrivilegedUserName -ne $SecondaryFpolPolAllowPrivilegedUserName) `
                             -or ($PrimaryFpolPolAllowIsPassthroughReadEnabled -ne $SecondaryFpolPolAllowIsPassthroughReadEnabled) `
-                            -or ($PrimaryFpolPolScope -ne $SecondaryFpolPolScope))
+                            -or ($null -ne (Compare-Object -ReferenceObject $PrimaryFpolPolScope -DifferenceObject $SecondaryFpolPolScope -Property $PropertiesToCheck)) )
                         {
                             Write-Log "[$workOn] Modify Fpolicy Policy [$PrimaryFpolPolName]"
                             if($Global:PSTKCall -ne "Rest"){
@@ -3239,6 +3248,12 @@ Function create_update_fpolicy_dr(
                                 -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
                                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcFpolicyPolicy failed [$ErrorVar]" }
                             }else{
+                                if((Get-NcFpolicypolicy -Vserver $mySecondaryVserver -Name $PrimaryFpolPolName -Controller $mySecondaryController).Enabled){
+                                    # Need to disable fpolicy policy it's enabled
+                                    Write-LogDebug "Disable-NcFpolicyPolicy -Name $PrimaryFpolPolName -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                                    $out=Disable-NcFpolicyPolicy -Name $PrimaryFpolPolName -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Disable-NcFpolicyPolicy failed [$ErrorVar]" }
+                                }
                                 Write-LogDebug "Set-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -EngineName $PrimaryFpolicyEngineName `
                                 -Mandatory $PrimaryFpolPolIsMandatory -Scope $PrimaryFpolPolScope `
                                 -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
@@ -3246,7 +3261,7 @@ Function create_update_fpolicy_dr(
                                 $out=Set-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -EngineName $PrimaryFpolicyEngineName `
                                 -Mandatory $PrimaryFpolPolIsMandatory -Scope $PrimaryFpolPolScope `
                                 -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                -VserverContext $mySecondaryVserver -Controller $mySecondaryController - -ErrorVariable ErrorVar
+                                -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
                                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcFpolicyPolicy failed [$ErrorVar]" }
                             }
                         }
@@ -3269,15 +3284,28 @@ Function create_update_fpolicy_dr(
                                     -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" } 
                                 }else{
-                                    Write-LogDebug "New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
-                                    -EngineName $PrimaryFpolicyEngineName -Scope $PrimaryFpolPolScope `
-                                    -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                    -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                                    $out=New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
-                                    -EngineName $PrimaryFpolicyEngineName -Scope $PrimaryFpolPolScope `
-                                    -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                    -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" }
+                                    if(($null -ne $PrimaryFpolPolScope) -and ($null -ne (Get-NcFpolicyScope -PolicyName $PrimaryFpolPolName -Vserver $mySecondaryVserver -Controller $mySecondaryController))){
+                                        Write-LogDebug "New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
+                                        -EngineName $PrimaryFpolicyEngineName -Scope $PrimaryFpolPolScope `
+                                        -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                                        $out=New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
+                                        -EngineName $PrimaryFpolicyEngineName -Scope $PrimaryFpolPolScope `
+                                        -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" }
+                                    }else{
+                                        # ! Force ONTAPI Mode because of bug in New-NcFpolicyPolicy in REST which require a mandaotry existing scope variable
+                                        Write-LogDebug "New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
+                                        -EngineName $PrimaryFpolicyEngineName -Scope $PrimaryFpolPolScope `
+                                        -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
+                                        $out=New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
+                                        -EngineName $PrimaryFpolicyEngineName -Scope $PrimaryFpolPolScope `
+                                        -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
+                                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" }
+                                    }
                                 }
                             }
                             else
@@ -3293,15 +3321,28 @@ Function create_update_fpolicy_dr(
                                     -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" }
                                 }else{
-                                    Write-LogDebug "New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
-                                    -EngineName $PrimaryFpolicyEngineName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                    -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -Scope $PrimaryFpolPolScope  `
-                                    -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                                    $out=New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
-                                    -EngineName $PrimaryFpolicyEngineName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                    -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -Scope $PrimaryFpolPolScope `
-                                    -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" }
+                                    if(($null -ne $PrimaryFpolPolScope) -and ($null -ne (Get-NcFpolicyScope -PolicyName $PrimaryFpolPolName -Vserver $mySecondaryVserver -Controller $mySecondaryController))){
+                                        Write-LogDebug "New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
+                                        -EngineName $PrimaryFpolicyEngineName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
+                                        -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -Scope $PrimaryFpolPolScope  `
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                                        $out=New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
+                                        -EngineName $PrimaryFpolicyEngineName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
+                                        -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -Scope $PrimaryFpolPolScope `
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" }
+                                    }else{
+                                        # ! Force ONTAPI Mode because of bug in New-NcFpolicyPolicy in REST which require a mandaotry existing scope variable
+                                        Write-LogDebug "New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
+                                        -EngineName $PrimaryFpolicyEngineName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
+                                        -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -Scope $PrimaryFpolPolScope  `
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
+                                        $out=New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
+                                        -EngineName $PrimaryFpolicyEngineName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
+                                        -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -Scope $PrimaryFpolPolScope `
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
+                                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" }
+                                    }
                                 }
                             }
                         } 
@@ -3320,15 +3361,28 @@ Function create_update_fpolicy_dr(
                                     -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" } 
                                 }else{
-                                    Write-LogDebug "New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -NonMandatory `
-                                    -EngineName $PrimaryFpolicyEngineName -Scope $PrimaryFpolPolScope `
-                                    -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                    -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                                    $out=New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -NonMandatory `
-                                    -EngineName $PrimaryFpolicyEngineName -Scope $PrimaryFpolPolScope `
-                                    -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                    -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" } 
+                                    if(($null -ne $PrimaryFpolPolScope) -and ($null -ne (Get-NcFpolicyScope -PolicyName $PrimaryFpolPolName -Vserver $mySecondaryVserver -Controller $mySecondaryController))){
+                                        Write-LogDebug "New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -NonMandatory `
+                                        -EngineName $PrimaryFpolicyEngineName -Scope $PrimaryFpolPolScope `
+                                        -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                                        $out=New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -NonMandatory `
+                                        -EngineName $PrimaryFpolicyEngineName -Scope $PrimaryFpolPolScope `
+                                        -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" } 
+                                    }else{
+                                        # ! Force ONTAPI Mode because of bug in New-NcFpolicyPolicy in REST which require a mandaotry existing scope variable
+                                        Write-LogDebug "New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -NonMandatory `
+                                        -EngineName $PrimaryFpolicyEngineName -Scope $PrimaryFpolPolScope `
+                                        -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
+                                        $out=New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -NonMandatory `
+                                        -EngineName $PrimaryFpolicyEngineName -Scope $PrimaryFpolPolScope `
+                                        -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
+                                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" } 
+                                    }
                                 }
                             }
                             else
@@ -3344,21 +3398,34 @@ Function create_update_fpolicy_dr(
                                     -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" }
                                 }else{
-                                    Write-LogDebug "New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -NonMandatory `
-                                    -EngineName $PrimaryFpolicyEngineName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                    -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                    -Scope $PrimaryFpolPolScope -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                                    $out=New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -NonMandatory `
-                                    -EngineName $PrimaryFpolicyEngineName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                    -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -Scope $PrimaryFpolPolScope `
-                                    -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" }
+                                    if(($null -ne $PrimaryFpolPolScope) -and ($null -ne (Get-NcFpolicyScope -PolicyName $PrimaryFpolPolName -Vserver $mySecondaryVserver -Controller $mySecondaryController))){
+                                        Write-LogDebug "New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -NonMandatory `
+                                        -EngineName $PrimaryFpolicyEngineName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
+                                        -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
+                                        -Scope $PrimaryFpolPolScope -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                                        $out=New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -NonMandatory `
+                                        -EngineName $PrimaryFpolicyEngineName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
+                                        -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -Scope $PrimaryFpolPolScope `
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" }
+                                    }else{
+                                        # ! Force ONTAPI Mode because of bug in New-NcFpolicyPolicy in REST which require a mandaotry existing scope variable
+                                        Write-LogDebug "New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -NonMandatory `
+                                        -EngineName $PrimaryFpolicyEngineName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
+                                        -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
+                                        -Scope $PrimaryFpolPolScope -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
+                                        $out=New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -NonMandatory `
+                                        -EngineName $PrimaryFpolicyEngineName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
+                                        -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -Scope $PrimaryFpolPolScope `
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
+                                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" }
+                                    }
                                 }
                             }
                         }
-
                     }
                 }
+
                 # add code to get/create Scope
                 if($Restore -eq $False){
                     Write-LogDebug "Get-NcFpolicyScope -PolicyName $PrimaryFpolPolName -Vserver $myPrimaryVserver -Controller $myPrimaryController"
@@ -3385,6 +3452,7 @@ Function create_update_fpolicy_dr(
                 if($null -eq $PrimaryFpolScope) {$Return = $Fale ; Write-LogWarn "Missing Fpolicy Scope on Primary Vserver"; continue}
                 
                 $PrimaryFpolScopeCheckExtensionsOnDirectories=$PrimaryFpolScope.CheckExtensionsOnDirectories
+                $PrimaryFpolScopeIsMonitoringOfObjectsWithNoExtensionEnabled=$PrimaryFpolScope.IsMonitoringOfObjectsWithNoExtensionEnabled
                 $PrimaryFpolScopeExportPoliciesToExclude=$PrimaryFpolScope.ExportPoliciesToExclude
                 $PrimaryFpolScopeExportPoliciesToInclude=$PrimaryFpolScope.ExportPoliciesToInclude
                 $PrimaryFpolScopeFileExtensionsToExclude=$PrimaryFpolScope.FileExtensionsToExclude
@@ -3400,7 +3468,7 @@ Function create_update_fpolicy_dr(
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcFpolicyScope failed [$ErrorVar]" }
                     if($null -ne $SecondaryFpolScope)
                     {
-                        Write-Log "[$workOn] Modify Fpolicy Scope [$workOn]"
+                        Write-Log "[$workOn] Modify Fpolicy Scope for policy [$PrimaryFpolPolName]"
                         $SecondaryFpolScopeCheckExtensionsOnDirectories=$SecondaryFpolScope.CheckExtensionsOnDirectories
                         $SecondaryFpolScopeExportPoliciesToExclude=$SecondaryFpolScope.ExportPoliciesToExclude
                         $SecondaryFpolScopeExportPoliciesToInclude=$SecondaryFpolScope.ExportPoliciesToInclude
@@ -3427,8 +3495,8 @@ Function create_update_fpolicy_dr(
                                 if($null -eq $PrimaryFpolScope.FileExtensionsToInclude){$PrimaryFpolScopeFileExtensionsToInclude="-"}
                                 if($null -eq $PrimaryFpolScope.SharesToExclude){$PrimaryFpolScopeSharesToExclude="-"}
                                 if($null -eq $PrimaryFpolScope.SharesToInclude){$PrimaryFpolScopeSharesToInclude="-"}
-                                if($null -eq $PrimaryFpolScope.VolumesToExclude){$PrimaryFpolScopeVolumesToExclude="-"}
-                                if($null -eq $PrimaryFpolScope.VolumesToInclude){$PrimaryFpolScopeVolumesToInclude="-"}
+                                if($null -eq $PrimaryFpolScope.VolumesToExclude){$PrimaryFpolScopeVolumesToExclude=$null}
+                                if($null -eq $PrimaryFpolScope.VolumesToInclude){$PrimaryFpolScopeVolumesToInclude=$null}
                                 Write-LogDebug "Set-NcFpolicyScope -PolicyName $PrimaryFpolPolName -SharesToInclude $PrimaryFpolScopeSharesToInclude `
                                 -SharesToExclude $PrimaryFpolScopeSharesToExclude -VolumesToInclude $PrimaryFpolScopeVolumesToInclude `
                                 -VolumesToExclude $PrimaryFpolScopeVolumesToExclude -ExportPoliciesToInclude $PrimaryFpolScopeExportPoliciesToInclude `
@@ -3481,6 +3549,7 @@ Function create_update_fpolicy_dr(
                         }
                     }
                 }
+
                 if($Restore -eq $False){
                     # add code to get/enable Fpolicy
                     Write-LogDebug "Get-NcFpolicyStatus -Name $PrimaryFpolPolName -Vserver $myPrimaryVserver -Controller $myPrimaryController"
@@ -3504,7 +3573,7 @@ Function create_update_fpolicy_dr(
                         $Return=$False
                     }
                 }
-                if ($null -eq $PrimaryFpolStatus) {$Return = $Fale ; Write-LogWarn "Missing Fpolicy on Primary Vserver"; continue}
+                if ($null -eq $PrimaryFpolStatus) {$Return = $False ; Write-LogWarn "Missing Fpolicy on Primary Vserver"; continue}
                 $PrimaryFpolStatusEnabled=$PrimaryFpolStatus.Enabled
                 $PrimaryFpolStatusSequenceNumber=$PrimaryFpolStatus.SequenceNumber
                 if($Backup -eq $False){
