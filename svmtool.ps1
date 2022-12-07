@@ -2481,7 +2481,7 @@ Write-LogDebug "connect_cluster -myController $PRIMARY_CLUSTER -myCred $MyCred -
 if ( ( $NcPrimaryCtrl = connect_cluster -myController $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
     Write-LogError "ERROR: Unable to Connect to NcController [$PRIMARY_CLUSTER]" 
 }else{
-    $Global:PrimaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $myPrimaryCtrl)[0].VersionTuple.Generation)+','+[string]((Get-NcSystemVersionInfo -Controller $myPrimaryCtrl)[0].VersionTuple.Major)))
+    $Global:OntapPrimaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $myPrimaryCtrl)[0].VersionTuple.Generation)+','+[string]((Get-NcSystemVersionInfo -Controller $myPrimaryCtrl)[0].VersionTuple.Major)))
 }
 
 $myCred = get_local_cDotcred ($SECONDARY_CLUSTER) 
@@ -2491,7 +2491,7 @@ Write-LogDebug "connect_cluster -myController $SECONDARY_CLUSTER -myCred $MyCred
 if ( ( $NcSecondaryCtrl = connect_cluster -myController $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
     Write-LogError "ERROR: Unable to Connect to NcController [$SECONDARY_CLUSTER]"
 }else{
-    $Global:SecondaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Generation)+','+[string]((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Major)))
+    $Global:OntapSecondaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Generation)+','+[string]((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Major)))
 }
 
 if ( $ShowDR ) {

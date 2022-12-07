@@ -5335,11 +5335,23 @@ Try {
 	if($Backup -eq $True){Write-LogDebug "run in Backup mode [$myPrimaryVserver]"}
     if($Restore -eq $True){Write-LogDebug "run in Restore mode [$myPrimaryVserver]"}
 
-    # Duplicate root volume exportPolicy Destination Volumes
+    # Duplicate root volume exportPolicy 
 
     if($Restore -eq $False){
-        $PrimaryRootVolumeName = (Get-NcVserver -Controller $myPrimaryController -Vserver $myPrimaryVserver  -ErrorVariable ErrorVar).RootVolume
-        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed to get RootVolume [$ErrorVar]" }    
+        if($Global:PSTKCall -ne "Rest"){
+            $PrimaryRootVolumeName = (Get-NcVserver -Controller $myPrimaryController -Vserver $myPrimaryVserver  -ErrorVariable ErrorVar).RootVolume
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed to get RootVolume [$ErrorVar]" }
+        }else{
+            $PrimaryCredential = get_local_cDotcred($myPrimaryController)
+            $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/vserver?vserver="+$myPrimaryVserver+"&fields=rootvolume,aggregate,rootvolume_security_style")
+            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck"
+            $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+            if($? -ne $True){
+                Write-LogError "ERROR: Unable to get svm rootvolume name. Reason [$ErrorVar]" 
+            }else{
+                $PrimaryRootVolumeName=$ret.records[0].rootvolume
+            }    
+        }
     }else{
         if(Test-Path $($Global:JsonPath+"Get-NcVserver.json")){
             $PrimaryRootVolumeName=Get-Content $($Global:JsonPath+"Get-NcVserver.json") -Raw | ConvertFrom-Json
@@ -5350,11 +5362,23 @@ Try {
             Throw "ERROR: failed to read $filepath"
         }    
     }
-    if ($null -eq $PrimaryRootVolumeName ) { Write-LogDebug "check_update_voldr()|root volume not found for $myPrimaryVserver" }
+    if ($null -eq $PrimaryRootVolumeName ) { Write-LogDebug "root volume not found for $myPrimaryVserver" }
     if($Backup -eq $False){
-        $SecondaryRootVolumeName = (Get-NcVserver -Controller $mySecondaryController -Vserver $mySecondaryVserver  -ErrorVariable ErrorVar).RootVolume
-        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed to get RootVolume [$ErrorVar]" } 
-        if ($null -eq $SecondaryRootVolumeName) { Write-LogDebug "check_update_voldr()|root volume not found for $mySecondaryVserver" }
+        if($Global:PSTKCall -ne "Rest"){
+            $SecondaryRootVolumeName = (Get-NcVserver -Controller $mySecondaryController -Vserver $mySecondaryVserver  -ErrorVariable ErrorVar).RootVolume
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed to get RootVolume [$ErrorVar]" } 
+            if ($null -eq $SecondaryRootVolumeName) { Write-LogDebug "root volume not found for $mySecondaryVserver" }
+        }else{
+            $SecondaryCredential = get_local_cDotcred($mySecondaryController)
+            $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/vserver?vserver="+$mySecondaryVserver+"&fields=rootvolume,aggregate,rootvolume_security_style")
+            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
+            $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+            if($? -ne $True){
+                Write-LogError "ERROR: Unable to get svm rootvolume name. Reason [$ErrorVar]" 
+            }else{
+                $SecondaryRootVolumeName=$ret.records[0].rootvolume
+            }
+        }
     }
     if($Restore -eq $False){
         $PrimaryRootVolume = Get-NcVol -Controller $myPrimaryController -Vserver $myPrimaryVserver -Volume $PrimaryRootVolumeName  -ErrorVariable ErrorVar
@@ -5369,11 +5393,11 @@ Try {
             Throw "ERROR: failed to read $filepath"
         }    
     }
-	if ($PrimaryRootVolume -eq $null ) { $Return = $False ; Write-logError "root volume $PrimaryRootVolume not found for $myPrimaryVserver" }
+	if ($null -eq $PrimaryRootVolume ) { $Return = $False ; Write-logError "root volume $PrimaryRootVolume not found for $myPrimaryVserver" }
     if($Backup -eq $False){
         $SecondaryRootVolume = Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $SecondaryRootVolumeName  -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed to get RootVolume [$ErrorVar]" } 
-        if ($SecondaryRootVolume -eq $null ) { $Return = $False ; Write-logError "root volume $SecondaryRootVolume not found for $mySecondaryVserver" }
+        if ($null -eq $SecondaryRootVolume ) { $Return = $False ; Write-logError "root volume $SecondaryRootVolume not found for $mySecondaryVserver" }
     }
     if($Backup -eq $False){
         $PrimaryRootVolExportPolicy=$PrimaryRootVolume.VolumeExportAttributes.Policy
@@ -5421,8 +5445,11 @@ Try {
         }    
     }else{
         if($Restore -eq $False){
-            Write-LogDebug "Get-NcVol -Controller $myPrimaryController -Query `@`{`;VolumeIdAttributes=`@`{StyleExtended=`"flexvol|flexgroup`"}} -Controller $myPrimaryController"
-            $PrimaryVolList = Get-NcVol -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -ErrorVariable ErrorVar
+            $template=Get-NcVol -Template -Controller $myPrimaryController -Fill
+            $template.VolumeIdAttributes.StyleExtended="flexgroup|flexvol"
+            $template.Vserver=$myPrimaryVserver
+            Write-LogDebug "Get-NcVol -Controller $myPrimaryController -Query $template"
+            $PrimaryVolList = Get-NcVol -Query $template -Controller $myPrimaryController -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
         }else{
             if(Test-Path $($Global:JsonPath+"Get-NcVol.json")){
@@ -5453,13 +5480,25 @@ Try {
             $PrimaryVolIsInfiniteVolume=$PrimaryVol.IsInfiniteVolume
             $PrimaryVolIsVserverRoot=$PrimaryVol.VolumeStateAttributes.IsVserverRoot
             $PrimaryVolExtendStyle=$PrimaryVol.VolumeIdAttributes.StyleExtended
+            if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapPrimaryVersion -ge "9.10")){
+                # ONTAP >= 9.10
+                # support of AntiRansomware state per volume
+                $PrimaryAntiRansomware=$PrimaryVol.AntiRansomware.state
+            }
+            f(($Global:PSTKCall -eq "Rest") -and ($Global:OntapPrimaryVersion -ge "9.08")){
+                # ONTAP >= 9.8
+                # support of Filesystem Analytics per volume
+                $PrimaryFSASupported=$PrimaryVol.Analytics.Supported
+                $PrimaryFSAState=$PrimaryVol.Analytics.State
+            }
             if ( ( $PrimaryVolState -eq "online" ) -and ($PrimaryVolType -eq "rw" ) -and ($PrimaryVolIsVserverRoot -eq $False ) -and ( $PrimaryVolIsInfiniteVolume -eq $False ) ) 
             {
                 if($PrimaryVolExtendStyle -match "flexgroup"){
                     if($Restore -eq $False){
-                        $PrimaryFlexgroupUuid=$PrimaryVol.VolumeIdAttributes.FlexgroupUuid
-                        Write-LogDebug "Get-NcVol -VserverContext $PrimaryVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended=`"flexgroup`"`}`} -Controller $myPrimaryController"
-                        $PrimaryFlexgroupMaster=Get-NcVol -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
+                        # $PrimaryFlexgroupUuid=$PrimaryVol.VolumeIdAttributes.FlexgroupUuid
+                        # Write-LogDebug "Get-NcVol -VserverContext $PrimaryVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended=`"flexgroup`"`}`} -Controller $myPrimaryController"
+                        # $PrimaryFlexgroupMaster=Get-NcVol -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
+                        $PrimaryFlexgroupMaster=$PrimaryVol
                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup master informations [$PrimaryVolName] [$ErrorVar]" }
                         if($InReverse -eq $False){
                             Write-LogDebug "Work in normal mode with flexgroup, so add _dst ad the end of volume name"
@@ -5494,7 +5533,7 @@ Try {
                 }
                 $SecondaryVol = Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $SecondaryName  -ErrorVariable ErrorVar 
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
-                if ( $SecondaryVol -eq $null )  
+                if ( $null -eq $SecondaryVol )  
                 {
                     Write-LogDebug "volume $PrimaryVol doesnt' exist" 
                     Write-LogError "ERROR: check_update_voldr: volume $PrimaryVolName do not exist vserver $mySecondaryVserver" 
@@ -5517,6 +5556,17 @@ Try {
                     $SecondaryVolJunctionPath=$SecondaryVol.VolumeIdAttributes.JunctionPath
                     $SecondaryVolIsInfiniteVolume=$SecondaryVol.IsInfiniteVolume
                     $SecondaryVolIsVserverRoot=$SecondaryVol.VolumeStateAttributes.IsVserverRoot
+                    if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapSecondaryVersion -ge "9.10")){
+                        # ONTAP >= 9.10
+                        # support of AntiRansomware state per volume
+                        $SecondaryAntiRansomware=$SecondaryVol.AntiRansomware.state 
+                    }
+                    f(($Global:PSTKCall -eq "Rest") -and ($Global:OntapSecondaryVersion -ge "9.08")){
+                        # ONTAP >= 9.8
+                        # support of Filesystem Analytics per volume
+                        $SecondaryFSASupported=$SecondaryVol.Analytics.Supported
+                        $SecondaryFSAState=$SecondaryVol.Analytics.State
+                    }
                     if ( $PrimaryVolLang -ne $SecondaryVolLang ) 
                     {
                         Write-LogError "ERROR: Secondary Volume [$SecondaryVolName] use different Language [$SecondaryVolLang] instead of [$PrimaryVolLang]" 
@@ -5723,7 +5773,11 @@ Try {
 
      # Get Primary Volumes list
      if($Restore -eq $False){
-        $PrimaryVolList = Get-NcVol -Controller $myPrimaryController -VserverContext $myPrimaryVserver -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -ErrorVariable ErrorVar  
+        $template=Get-NcVol -Template -Controller $myPrimaryController
+        $template.Vserver=$myPrimaryVserver
+        $template.VolumeIdAttributes.StyleExtended="flexvol|flexgroup"
+        $PrimaryVolList = Get-NcVol -Controller $myPrimaryController -Query $template -ErrorVariable ErrorVar
+        # $PrimaryVolList = Get-NcVol -Controller $myPrimaryController -VserverContext $myPrimaryVserver -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -ErrorVariable ErrorVar  
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
      }else{
         if(Test-Path $($Global:JsonPath+"Get-NcVol.json")){
@@ -5820,6 +5874,11 @@ Try {
             $PrimaryVolIsVserverRoot=$PrimaryVol.VolumeStateAttributes.IsVserverRoot
             $PrimaryVolComment=$PrimaryVol.VolumeIdAttributes.Comment
             $PrimaryVolExtendStyle=$PrimaryVol.VolumeIdAttributes.StyleExtended
+            if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapPrimaryVersion -ge "9.10")){
+                # ONTAP >= 9.10
+                # support of Snaplock per volume
+                $PrimarySnaplockVolume=$PrimaryVol.Snaplock.Type 
+            }
             if($PrimaryVolExtendStyle -eq "flexvol"){
                 # Create a flexvol
                 if ( ( $PrimaryVolState -eq "online" ) -and ($PrimaryVolType -eq "rw" ) -and ($PrimaryVolIsVserverRoot -eq $False ) -and ( $PrimaryVolIsInfiniteVolume -eq $False ) ) {
@@ -5853,7 +5912,7 @@ Try {
                     # check this volume Name on secondary SVM
                     $SecondaryVol = Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $PrimaryVolName  -ErrorVariable ErrorVar 
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
-                    if ( $SecondaryVol -eq $null )  {
+                    if ( $null -eq $SecondaryVol )  {
                         # Create this volume if it does not exist on secondary
                         #  THIS NOW WORKS DIFFERENTLY
                         #  WE ALWAYS TRY TO FIND A MATCH IN NON INTERACTIVE MODE
@@ -5883,7 +5942,7 @@ Try {
                         $Aggr = Get-NcAggr -Controller $mySecondaryController -Name $myDataAggr  -ErrorVariable ErrorVar 
                         $AggrName=$Aggr.Name
                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcAggr failed [$ErrorVar]" } 
-                        if ( $Aggr -eq $null ) {
+                        if ( $null -eq $Aggr ) {
                             Write-LogError "ERROR: aggr [$myDataAggr] not found on [$mySecondaryController] : Exit"
                             clean_and_exit 1 
                         }
@@ -5999,7 +6058,7 @@ Try {
                                 $VolList=Get-Content $($Global:JsonPath+"Get-NcVol.json") -Raw | ConvertFrom-Json
                                 $VolDetail=$VolList | where-object {$_.Name -eq $PrimaryVolName}
                                 $EncryptedVolume=$VolDetail.Encrypt
-                                if($EncryptedVolume -eq $null){$EncryptedVolume=$False}
+                                if($null -eq $EncryptedVolume){$EncryptedVolume=$False}
                             }else{
                                 Write-LogWarn "Failed to read Get-NcVol.json backup file"
                                 Write-LogWarn "Will restore with basic options"
@@ -6031,7 +6090,7 @@ Try {
                         # ADD Volume Type
                         $SecondaryVolType=$SecondaryVol.VolumeIdAttributes.Type
                         if ( $SecondaryVolType -ne "DP" -and $Restore -eq $False -and $Backup -eq $False) {
-                            Write-LogError "ERROR: volume $SecondaryVol is not DP Volume"
+                            Write-LogError "ERROR: volume $SecondaryVol is not a DP Volume"
                         }
                         # If possible, convert destination volumes into encrypted volumes
                         if($Global:AllowEncryption -eq "True"){
@@ -6039,7 +6098,7 @@ Try {
                                 $VolDetail=Get-NcVol -Name $PrimaryVolName -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
                                 if($? -ne $True){$Return=$False; Write-Error "Failed to get volume detail"}
                                 $IsEncrypted=$VolDetail.Encrypt
-                                if($IsEncrypted -eq $null){$IsEncrypted=$False}
+                                if($null -eq $IsEncrypted){$IsEncrypted=$False}
                                 if($IsEncrypted -eq $False){
                                     if($ChooseEncryptionConversion -ne $false){
                                         $AnsChoiceEncryption = Read-HostOptions -question "[$workOn] Do you want to Encrypted volume [$PrimaryVolName] ?" -options "y/n/All/None" -default "n"
@@ -6072,6 +6131,8 @@ Try {
                             }
                         }
                     }
+                }else{
+                    Write-Log "Ignoring Volume [$PrimaryVolName] because of Vol State [$PrimaryVolState], Vol Type [$PrimaryVolType] and Is Vserver Root [$PrimaryVolIsVserverRoot]"
                 }
             }
             elseif($PrimaryVolExtendStyle -match "flexgroup|flexgroup_constituent"){
@@ -6079,20 +6140,26 @@ Try {
 
                 if($Restore -eq $False){
                     Write-LogDebug "[$workon] Process a Flexgroup volume and all its constituent [$PrimaryVolName]"
-                    # get all constituent informations
+                    # get all flexgroup constituent informations
                     $PrimaryFlexgroupUuid=$PrimaryVol.VolumeIdAttributes.FlexgroupUuid
-                    Write-LogDebug "Get-NcVol -VserverContext $PrimaryVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended=`"flexgroup_constituent`"`}`} -Controller $myPrimaryController"
-                    $PrimaryFlexgroupConstituent=Get-NcVol -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup_constituent"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
-                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup constituent informations [$PrimaryVolName] [$ErrorVar]" }
+                    if($Global:PSTKCall -ne "Rest"){
+                        Write-LogDebug "Get-NcVol -VserverContext $PrimaryVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended=`"flexgroup_constituent`"`}`} -Controller $myPrimaryController"
+                        $PrimaryFlexgroupConstituent=Get-NcVol -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup_constituent"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
+                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup constituent informations [$PrimaryVolName] [$ErrorVar]" }
+                        $ConstituentSizeByte=$PrimaryFlexgroupConstituent[0].TotalSize
+                    }else{
+                        $PrimaryFlexgroupConstituent=$PrimaryVol.Constituents
+                        $ConstituentSizeByte=$PrimaryVol.Constituents[0].Space.Size
+                    }
                     $NumberFlexgroupConstituent=($PrimaryFlexgroupConstituent | Measure-Object).Count
-                    $ConstituentSizeByte=$PrimaryFlexgroupConstituent[0].TotalSize
-                    Write-LogDebug "Get-NcVol -VserverContext $PrimaryVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended=`"flexgroup`"`}`} -Controller $myPrimaryController"
-                    $PrimaryFlexgroupMaster=Get-NcVol -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
-                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup master informations [$PrimaryVolName] [$ErrorVar]" }
-                    $SecondaryFlexgroupMasterName=$($PrimaryFlexgroupMaster.Name+'_dst')
-                    $PrimaryFlexgroupMasterName=$PrimaryFlexgroupMaster.Name
-                    $PrimaryFlexgroupMasterState=$PrimaryFlexgroupMaster.State
-                    $PrimaryFlexgroupMasterType=$PrimaryFlexgroupMaster.VolumeIdAttributes.Type
+                    
+                    # Write-LogDebug "Get-NcVol -VserverContext $PrimaryVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended=`"flexgroup`"`}`} -Controller $myPrimaryController"
+                    # $PrimaryFlexgroupMaster=Get-NcVol -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
+                    # if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup master informations [$PrimaryVolName] [$ErrorVar]" }
+                    $SecondaryFlexgroupMasterName=$($PrimaryVolName+'_dst')
+                    $PrimaryFlexgroupMasterName=$PrimaryVolName
+                    $PrimaryFlexgroupMasterState=$PrimaryVolState
+                    $PrimaryFlexgroupMasterType=$PrimaryVolType
 
                     if( $Global:SelectVolume -eq $True -and $Global:NonInteractive -eq $False )
                     {
@@ -6138,44 +6205,70 @@ Try {
                             #Write-Log "Schedule for flexgroup protect [$Schedule]"
                             $ProtectFlexgroupDone=$False
                             $PathList=$($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName)
-                            Write-LogDebug "Enable-NcSnapmirrorProtect -Policy $Policy -PathList $PathList -Schedule $Schedule -DestinationVserver $mySecondaryVserver -AutoInitialize $False -Controller $mySecondaryController"
-                            $ProtectJob=Enable-NcSnapmirrorProtect -Policy $Policy -PathList $PathList -Schedule $Schedule -DestinationVserver $mySecondaryVserver -AutoInitialize $False -Controller $mySecondaryController -ErrorVariable ErrorVar
-                            if ( $? -ne $True ) { Write-LogError "ERROR: Enable-NcSnapmirrorProtect failed [$ErrorVar]" } 
+                            if($Global:PSTKCall -ne "Rest"){
+                                Write-LogDebug "Enable-NcSnapmirrorProtect -Policy $Policy -PathList $PathList -Schedule $Schedule -DestinationVserver $mySecondaryVserver -AutoInitialize $False -Controller $mySecondaryController"
+                                $ProtectJob=Enable-NcSnapmirrorProtect -Policy $Policy -PathList $PathList -Schedule $Schedule -DestinationVserver $mySecondaryVserver -AutoInitialize $False -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { Write-LogError "ERROR: Enable-NcSnapmirrorProtect failed [$ErrorVar]" }
+                            }else{
+                                $DestinationPath=$($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName)
+                                $CreateDestination=New-Object NetApp.Ontapi.Filer.C.Snapmirror930.CreateDestination
+                                $CreateDestination.Enabled=$True
+                                Write-LogDebug "Enable-NcSnapmirrorProtect -Policy $Policy -PathList $PathList -Schedule $Schedule -DestinationVserver $mySecondaryVserver -DestinationPath $DestinationPath -CreateDestination $CreateDestination -AutoInitialize $False -Controller $mySecondaryController"
+                                $ProtectJob=Enable-NcSnapmirrorProtect -Policy $Policy -PathList $PathList -Schedule $Schedule -DestinationVserver $mySecondaryVserver -DestinationPath $DestinationPath -CreateDestination $CreateDestination -AutoInitialize $False -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { Write-LogError "ERROR: Enable-NcSnapmirrorProtect failed [$ErrorVar]" }
+                            }
                             Start-Sleep -Seconds 5
-                            $ProtectJobDetail=Get-NcJob -Id $ProtectJob.ResultJobid -Controller $mySecondaryController
+                            if($Global:PSTKCall -ne "Rest"){
+                                $ProtectJobDetail=Get-NcJob -Id $ProtectJob.ResultJobid -Controller $mySecondaryController
+                                $SnapmirrorProtectJobID=$ProtectJob.ResultJobid
+                            }else{
+                                $ProtectJobDetail=Get-NcJob -Uuid $ProtectJob.Uuid -Controller $mySecondaryController
+                                $SnapmirrorProtectJobID=$ProtectJob.Uuid
+                            }
                             if($ProtectJobDetail.JobState -eq "failure"){
                                 $reason=$ProtectJobDetail.JobCompletion
-                                Write-LogError "[$mySecondaryVserver] Protect Flexgroup [$SecondaryFlexgroupMasterName] Failed because [$reason]"    
+                                Write-LogWarn "[$mySecondaryVserver] Protect Flexgroup [$SecondaryFlexgroupMasterName] Failed because [$reason]"    
                             }
                             #Write-LogDebug "wait_snapmirror_dr_status -DestinationVserver $mySecondaryVserver -PrimaryVolume $PrimaryFlexgroupMasterName -SecondaryVolumeName $SecondaryFlexgroupMasterName -Status idle -MirrorState uninitialized -mySecondaryController $mySecondaryController" 
                             #$ret=wait_snapmirror_dr_status -DestinationVserver $mySecondaryVserver -PrimaryVolume $PrimaryFlexgroupMasterName -SecondaryVolumeName $SecondaryFlexgroupMasterName -Status "idle" -MirrorState "uninitialized" -mySecondaryController $mySecondaryController
-                            $SnapmirrorProtectJobID=$ProtectJob.ResultJobid
-                            if($ProtectJob.ResultStatus -ne "in_progress"){
-                                $reason=$ProtectJobDetail.JobCompletion
-                                Write-LogError "[$mySecondaryVserver] Protect Flexgroup [$SecondaryFlexgroupMasterName] Failed because [$reason]"
+                            
+                            if($ProtectJob.JobCompletion -ne "success"){
+                                $reason=$($ProtectJobDetail.JobState+":"+$ProtectJobDetail.JobCompletion)
+                                Write-LogError "[$mySecondaryVserver] Protect Flexgroup [$SecondaryFlexgroupMasterName] not compoleted [$reason]"
                             }
-                            Write-LogDebug "Check Snapmirror Protect Job ID[$SnapmirrorProtectJobID]"
-                            Write-LogDebug "Get-NcJobHistory -Id $SnapmirrorProtectJobID -Controller $mySecondaryController"
+                            
                             $StartTime=Get-date
                             $SnapmirrorProtectJobDone=$False
                             while($SnapmirrorProtectJobDone -ne $True){
-                                $JobDetail=Get-NcJobHistory -Id $ProtectJob.ResultJobid -Controller $mySecondaryController -ErrorVariable ErrorVar
-                                if($JobDetail.JobEventType[0] -eq "failed"){
-                                    Write-LogError "ERROR: Enable-NcSnapmirrorProtect Job failed"
-                                    $SnapmirrorProtectJobDone=$True
-                                    $ProtectFlexgroupDone=$False
-                                }
-                                if($JobDetail.JobEventType[0] -eq "succeeded"){
-                                    $SnapmirrorProtectJobDone=$True
-                                    $ProtectFlexgroupDone=$True
-                                }
-                                $CurrentTime=Get-date
-                                $Global:TimeoutTime = ($CurrentTime - $StartTime).TotalSeconds
-                                if ( $Global:TimeoutTime -gt $Global:STOP_TIMEOUT ) { # STOP_TIMEOUT equal to 5 minutes
-                                    Write-LogError "ERROR: Timeout waiting Snapmirror Protect Job for flexgroup [$SecondaryFlexgroupMasterName]"
+                                if($Global:PSTKCall -ne "Rest"){
+                                    Write-LogDebug "Get-NcJobHistory -Id $SnapmirrorProtectJobID -Controller $mySecondaryController"
+                                    $JobDetail=Get-NcJobHistory -Id $ProtectJob.ResultJobid -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                    if($JobDetail.JobEventType[0] -eq "failed"){
+                                        Write-LogError "ERROR: Enable-NcSnapmirrorProtect Job failed"
+                                        $SnapmirrorProtectJobDone=$True
+                                        $ProtectFlexgroupDone=$False
+                                    }
+                                    if($JobDetail.JobEventType[0] -eq "succeeded"){
+                                        $SnapmirrorProtectJobDone=$True
+                                        $ProtectFlexgroupDone=$True
+                                    }
+                                    $CurrentTime=Get-date
+                                    $Global:TimeoutTime = ($CurrentTime - $StartTime).TotalSeconds
+                                    if ( $Global:TimeoutTime -gt $Global:STOP_TIMEOUT ) { # STOP_TIMEOUT equal to 5 minutes
+                                        Write-LogError "ERROR: Timeout waiting Snapmirror Protect Job for flexgroup [$SecondaryFlexgroupMasterName]"
+                                    }
+                                }else{
+                                    Write-LogDebug "Get-NcJob -Uuid $ProtectJob.Uuid -Controller $mySecondaryController"
+                                    $JobDetail=Get-NcJob -Uuid $ProtectJob.Uuid -Controller $mySecondaryController
+                                    if($JobDetail.JobCompletion -eq "success"){
+                                        $SnapmirrorProtectJobDone=$True
+                                        $ProtectFlexgroupDone=$True
+                                    }else{
+                                        $ProtectFlexgroupDone=$False
+                                    }
                                 }
                             }
-                            if( ($Global:Run_Mode -eq "ConfigureDR") -and ($Global:SelectVolume -eq $True)){
+                            if( ($Global:Run_Mode -eq "ConfigureDR") -or ($Global:SelectVolume -eq $True) ){
                                 if($ProtectFlexgroupDone -eq $True){
                                     Write-LogDebug "Invoke-NcSnapmirrorInitialize -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Controller $mySecondaryController"
                                     $ret=Invoke-NcSnapmirrorInitialize -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Controller $mySecondaryController  -ErrorVariable ErrorVar
@@ -6317,41 +6410,90 @@ Try {
 	$Return = $True 
     Write-LogDebug "[$myVserver]: start"
 	
-	$RootVolumeName = (Get-NcVserver -Controller $myController -Vserver $myVserver  -ErrorVariable ErrorVar).RootVolume
-	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed to get RootVolume [$ErrorVar]" } 
+    if($Global:PSTKCall -ne "Rest"){
+	    $RootVolumeName = (Get-NcVserver -Controller $myController -Vserver $myVserver  -ErrorVariable ErrorVar).RootVolume
+	    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed to get RootVolume [$ErrorVar]" } 
+    }else{
+        $PrimaryCredential = get_local_cDotcred($myController)
+        $url=$("https://"+$myController.Name+"/api/private/cli/vserver?vserver="+$myVserver+"&fields=rootvolume")
+        Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck"
+        $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+        if($? -ne $True){
+            Write-LogError "ERROR: Unable to get svm rootvolume name. Reason [$ErrorVar]" 
+        }else{
+            $RootVolumeName=$ret.records[0].rootvolume
+        }
+    }
 	if ($null -eq $RootVolumeName ) { Write-LogDebug "analyse_junction_path()|root volume not found for $myVserver" }			
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCluster failed [$ErrorVar]" }
-    Write-LogDebug "Get-NcVol -VserverContext $myVserver -Query @{VolumeIdAttributes=@{JunctionParentName=""$RootVolumeName""};Vserver=""$myVsezrver"";VolumeStateAttributes=@{State=online;IsVserverRoot=false}} -Controller $myController"
-    $VolListNotNested=Get-NcVol -VserverContext $myVserver -Query @{VolumeIdAttributes=@{JunctionParentName="$RootVolumeName"};Vserver=$myVserver;VolumeStateAttributes=@{State="online";IsVserverRoot=$false}} -Controller $myController -ErrorVariable ErrorVar
-    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get NotNested Volumes failed [$ErrorVar]" }
+    # Get volumes mounted under the root (/) of the vserver namespace. So volume with JunctionParentName = RootVolumeName
+    if($Global:PSTKCall -ne "Rest"){
+        Write-LogDebug "Get-NcVol -VserverContext $myVserver -Query @{VolumeIdAttributes=@{JunctionParentName=""$RootVolumeName""};Vserver=""$myVserver"";VolumeStateAttributes=@{State=online;IsVserverRoot=false}} -Controller $myController"
+        $VolListNotNested=Get-NcVol -VserverContext $myVserver -Query @{VolumeIdAttributes=@{JunctionParentName="$RootVolumeName"};Vserver=$myVserver;VolumeStateAttributes=@{State="online";IsVserverRoot=$false}} -Controller $myController -ErrorVariable ErrorVar
+        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get NotNested Volumes failed [$ErrorVar]" }
+    }else{
+        $url=$("https://"+$myController.Name+"/api/storage/volumes?svm.name="+$myVserver+"&nas.junction_parent.name="+$RootVolumeName+"&fields=name,nas.path,nas.junction_parent.name,style,nas.unix_permissions")
+        Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck"
+        $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+        if($? -ne $True){
+            Write-LogError "ERROR: Unable to get not nested volume. Reason [$ErrorVar]" 
+        }else{
+            $VolListNotNested=$ret.records | ConvertTo-Json | ConvertFrom-Json
+        }
+    }
     $Junctions=@()
     $ListFlexgroup=@()
     foreach ( $vol in ( $VolListNotNested | Skip-Null ) ) {
         $vol_detail = "" | Select-Object Name, JunctionPath, JunctionParent, Child, Permission, IsNested, Level, ParentPath, IsFlexgroup #create customobject
         $vol_detail.Name=$vol.Name
         $vol_detail.JunctionParent=$RootVolumeName
-        $vol_detail.JunctionPath=$vol.VolumeIdAttributes.JunctionPath
-        $volExtendStyle=$vol.VolumeIdAttributes.StyleExtended
+        if($Global:PSTKCall -ne "Rest"){
+            $vol_detail.JunctionPath=$vol.VolumeIdAttributes.JunctionPath
+            $volExtendStyle=$vol.VolumeIdAttributes.StyleExtended
+        }else{
+            $vol_detail.JunctionPath=$vol.nas.path
+            $volExtendStyle=$vol.style
+        }
         $vol_detail.IsNested=$False
-        $vol_detail.ParentPath=""
+        $vol_detail.ParentPath= ""
         if($volExtendStyle -match "flexgroup"){
-            $volFlexgroupUuid=$vol.VolumeIdAttributes.FlexgroupUuid
-            Write-LogDebug "Get-NcVol -VserverContext $myVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$volFlexgroupUuid;StyleExtended=`"flexgroup`"`}`} -Controller $myController"
-            $PrimaryFlexgroupMaster=Get-NcVol -VserverContext $myVserver -Query @{Vserver=$myVserver;VolumeIdAttributes=@{FlexgroupUuid=$volFlexgroupUuid;StyleExtended="flexgroup"}} -Controller $myController -ErrorVariable ErrorVar
-            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup master informations [$($vol_detail.Name)] [$ErrorVar]" }
+            if($Global:PSTKCall -ne "Rest"){
+                $volFlexgroupUuid=$vol.VolumeIdAttributes.FlexgroupUuid
+                Write-LogDebug "Get-NcVol -VserverContext $myVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$volFlexgroupUuid;StyleExtended=`"flexgroup`"`}`} -Controller $myController"
+                $PrimaryFlexgroupMaster=Get-NcVol -VserverContext $myVserver -Query @{Vserver=$myVserver;VolumeIdAttributes=@{FlexgroupUuid=$volFlexgroupUuid;StyleExtended="flexgroup"}} -Controller $myController -ErrorVariable ErrorVar
+                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup master informations [$($vol_detail.Name)] [$ErrorVar]" }
+            }else{
+                $PrimaryFlexgroupMaster=$vol_detail
+            }
             $SecondaryName=$($PrimaryFlexgroupMaster.Name+'_dst')
             $vol_detail.Name=$PrimaryFlexgroupMaster.Name
             $vol_detail.IsFlexgroup=$True
         }else{
             $vol_detail.IsFlexgroup=$False
         }
-        $vol_detail.Level=($vol.VolumeIdAttributes.JunctionPath.split("/")).count
-        if(($vol.VolumeIdAttributes.JunctionPath.split("/")).count -gt 2){
-            $dir=($vol.VolumeIdAttributes.JunctionPath).split("/")[1]
+        if($Global:PSTKCall -ne "Rest"){
+            $vol_detail.Level=($vol.VolumeIdAttributes.JunctionPath.split("/")).count
         }else{
-            $dir=$vol.VolumeIdAttributes.JunctionPath -replace "/",""
+            $vol_detail.Level=($vol.nas.path.split("/")).count
         }
-        $vol_detail.Permission=(Read-NcDirectory -Controller $myController -VserverContext $myVserver -Path $("/vol/"+$RootVolumeName) | Where-Object {$_.Name -match $dir} | Select-Object Perm).Perm
+        if($vol_detail.Level -gt 2){
+            if($Global:PSTKCall -ne "Rest"){
+                $dir=($vol.VolumeIdAttributes.JunctionPath).split("/")[1]
+            }else{
+                $dir=($vol.nas.path).split("/")[1]
+            }
+        }else{
+            if($Global:PSTKCall -ne "Rest"){
+                $dir=$vol.VolumeIdAttributes.JunctionPath -replace "/",""
+            }else{
+                $dir=$vol.nas.path -replace "/",""
+            }
+        }
+        if($Global:PSTKCall -ne "Rest"){
+            $vol_detail.Permission=(Read-NcDirectory -Controller $myController -VserverContext $myVserver -Path $("/vol/"+$RootVolumeName) | Where-Object {$_.Name -match $dir} | Select-Object Perm).Perm
+        }else{
+            $vol_detail.Permission=$vol.nas.unix_permissions
+        }
         $volname=$vol.Name
         $perm=$vol_detail.Permission
         Write-LogDebug "SVM [$myVserver] volume [$volname] Root [$RootVolumeName] dir [$dir] Perm [$perm]"
@@ -6365,33 +6507,64 @@ Try {
             $Junctions+=$vol_detail
         }
     }
+    # Get volume mounted but not under the SVM rootvolume, under / : the root of vserver namespace
+    if($Global:PSTKCall -ne "Rest"){
     Write-LogDebug "Get-NcVol -VserverContext $myVserver -Query @{VolumeStateAttributes=@{IsVserverRoot=$false;State=""online""};VolumeIdAttributes=@{JunctionParentName=""!$RootVolumeName"";JunctionPath=""!-,!/""}} -Controller $myController"
     $VolListNested=Get-NcVol -VserverContext $myVserver -Query @{VolumeIdAttributes=@{JunctionParentName="!$RootVolumeName";JunctionPath="!-,!/"};Vserver=$myVserver;VolumeStateAttributes=@{IsVserverRoot=$false;State="online"}} -Controller $myController -ErrorVariable ErrorVar
     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get Nested Volumes failed [$ErrorVar]" }
+    }else{
+        $url=$("https://"+$myController.Name+"/api/storage/volumes?svm.name="+$myVserver+"&nas.path=!-,!/&nas.junction_parent.name=!"+$RootVolumeName+"&fields=name,nas.path,nas.junction_parent.name,style,nas.unix_permissions")
+        Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck"
+        $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+        if($? -ne $True){
+            Write-LogError "ERROR: Unable to nested volume. Reason [$ErrorVar]" 
+        }else{
+            $VolListNested=$ret.records | ConvertTo-Json | ConvertFrom-Json
+        }
+    }
     $ListFlexgroup=@()
     foreach ( $vol in ( $VolListNested | Skip-Null ) ) {
         $vol_detail = "" | Select-Object Name, JunctionPath, JunctionParent, Child, Permission, IsNested, Level, ParentPath, IsFlexgroup #create customobject
         $vol_detail.Name=$vol.Name
-        $vol_detail.JunctionParent=$vol.VolumeIdAttributes.JunctionParentName
-        $vol_detail.JunctionPath=$vol.VolumeIdAttributes.JunctionPath
         $vol_detail.IsNested=$True
         $vol_detail.ParentPath=""
-        $volExtendStyle=$vol.VolumeIdAttributes.StyleExtended
+        if($Global:PSTKCall -ne "Rest"){
+            $volExtendStyle=$vol.VolumeIdAttributes.StyleExtended
+            $vol_detail.JunctionParent=$vol.VolumeIdAttributes.JunctionParentName
+            $vol_detail.JunctionPath=$vol.VolumeIdAttributes.JunctionPath
+        }else{
+            $vol_detail.JunctionPath=$vol.nas.path
+            $volExtendStyle=$vol.style
+            $vol_detail.JunctionParent=$vol.nas.junction_parent.name
+        }
         if($volExtendStyle -match "flexgroup"){
-            $volFlexgroupUuid=$vol.VolumeIdAttributes.FlexgroupUuid
-            Write-LogDebug "Get-NcVol -VserverContext $myVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$volFlexgroupUuid;StyleExtended=`"flexgroup`"`}`} -Controller $myController"
-            $PrimaryFlexgroupMaster=Get-NcVol -VserverContext $myVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$volFlexgroupUuid;StyleExtended="flexgroup"};Vserver=$myVserver} -Controller $myController -ErrorVariable ErrorVar
-            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup master informations [$($vol_detail.Name)] [$ErrorVar]" }
+            if($Global:PSTKCall -ne "Rest"){
+                $volFlexgroupUuid=$vol.VolumeIdAttributes.FlexgroupUuid
+                Write-LogDebug "Get-NcVol -VserverContext $myVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$volFlexgroupUuid;StyleExtended=`"flexgroup`"`}`} -Controller $myController"
+                $PrimaryFlexgroupMaster=Get-NcVol -VserverContext $myVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$volFlexgroupUuid;StyleExtended="flexgroup"};Vserver=$myVserver} -Controller $myController -ErrorVariable ErrorVar
+                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup master informations [$($vol_detail.Name)] [$ErrorVar]" }
+            }else{
+                $PrimaryFlexgroupMaster=$vol_detail
+            }
             $SecondaryName=$($PrimaryFlexgroupMaster.Name+'_dst')
             $vol_detail.Name=PrimaryFlexgroupMaster.Name
             $vol_detail.IsFlexgroup=$True
         }else{
             $vol_detail.IsFlexgroup=$False
         }
-        $vol_detail.Level=($vol.VolumeIdAttributes.JunctionPath.split("/")).count
+        if($Global:PSTKCall -ne "Rest"){
+            $vol_detail.Level=($vol.VolumeIdAttributes.JunctionPath.split("/")).count
+            $dir=(@(($vol.VolumeIdAttributes.JunctionPath).split("/")))[-1]
+        }else{
+            $vol_detail.Level=($vol.nas.path.split("/")).count
+            $dir=(@($vol.nas.path).split("/"))[1]
+        }
         $RootName=$vol_detail.JunctionParent
-        $dir=(@(($vol.VolumeIdAttributes.JunctionPath).split("/")))[-1]
-        $vol_detail.Permission=(Read-NcDirectory -Controller $myController -VserverContext $myVserver -Path $("/vol/"+$RootName) | Where-Object {$_.Name -match $dir} | Select-Object Perm).Perm
+        if($Global:PSTKCall -ne "Rest"){
+            $vol_detail.Permission=(Read-NcDirectory -Controller $myController -VserverContext $myVserver -Path $("/vol/"+$RootName) | Where-Object {$_.Name -match $dir} | Select-Object Perm).Perm
+        }else{
+            $vol_detail.Permission=$vol.nas.unix_permissions
+        }
         $volname=$vol.Name
         $perm=$vol_detail.Permission
         Write-LogDebug "SVM [$myVserver] volume [$volname] Root [$RootName] dir [$dir] Perm [$perm]"
@@ -6583,7 +6756,7 @@ Try {
     }
     if($Backup -eq $True){
         $script:vol_junction | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"vol_junction.json") -Encoding ASCII -Width 65535
-        if( ($ret=get-item $($Global:JsonPath+"vol_junction.json") -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"vol_junction.json") -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$($Global:JsonPath+"vol_junction.json") saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"vol_junction.json")"
@@ -12351,7 +12524,21 @@ Try {
                 if ( $null -eq $PrimaryVserver ) {
                     Write-LogError "ERROR: Vserver $myPrimaryVserver not found" 
                     clean_and_exit 1
-                }    
+                }
+                $PrimaryRootVolume=$PrimaryVserver.RootVolume   
+            }
+        }else{
+            $PrimaryCredential = get_local_cDotcred($myPrimaryController)
+            $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/vserver?vserver="+$myPrimaryVserver+"&fields=rootvolume,aggregate,rootvolume_security_style")
+            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck"
+            $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+            if($? -ne $True){
+                Write-LogError "ERROR: Unable to get svm rootvolume name. Reason [$ErrorVar]" 
+            }else{
+                $PrimaryRootVolume=$ret.records[0].rootvolume
+                $PrimaryVserver.RootVolume=$PrimaryRootVolume
+                $PrimaryRootVolumeAggr = $ret.records[0].aggregate
+                $PrimaryRootVolumeSecurityStyle = $ret.records[0].rootvolume_security_style
             }
         }
     }
@@ -12376,9 +12563,11 @@ Try {
     }
 
     if($Backup -eq $False){
-        #$PrimaryRootVolume = $PrimaryVserver.RootVolume
-        #$PrimaryRootVolumeAggr = (get-ncvol -Vserver $myPrimaryVserver -Controller $myPrimaryController -Name $PrimaryRootVolume).Aggregate
-        #$PrimaryRootVolumeSecurityStyle = $PrimaryVserver.RootVolumeSecurityStyle
+        if($Global:PSTKCall -ne "Rest"){
+            $PrimaryRootVolume = $PrimaryVserver.RootVolume
+            $PrimaryRootVolumeAggr = (get-ncvol -Vserver $myPrimaryVserver -Controller $myPrimaryController -Name $PrimaryRootVolume).Aggregate
+            $PrimaryRootVolumeSecurityStyle = $PrimaryVserver.RootVolumeSecurityStyle
+        }
         $PrimaryLanguage = $PrimaryVserver.Language
         $PrimaryIPSpace = $PrimaryVserver.Ipspace
         $PrimaryAllowedProtocols=$PrimaryVserver.AllowedProtocols
@@ -12449,7 +12638,16 @@ Try {
                     Write-LogError "ERROR: exit" 
                     clean_and_exit 1
                 }    
-
+                $SecondaryCredential = get_local_cDotcred($mySecondaryController)
+                $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/vserver?vserver="+$mySecondaryVserver+"&fields=rootvolume,aggregate,rootvolume_security_style")
+                Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
+                $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+                if($? -ne $True){
+                    Write-LogError "ERROR: Unable to get svm rootvolume name. Reason [$ErrorVar]" 
+                }else{
+                    $SecondaryRootVolume=$ret.records[0].rootvolume
+                    $SecondaryRootVolumeSecurityStyle = $ret.records[0].rootvolume_security_style
+                } 
 
             } 
             
@@ -12460,8 +12658,10 @@ Try {
                 Write-LogError "ERROR: exit" 
                 clean_and_exit 1
             } else {
-                # $SecondaryRootVolume = $SecondaryVserver.RootVolume
-                # $SecondaryRootVolumeSecurityStyle = $SecondaryVserver.RootVolumeSecurityStyle
+                if($Global:PSTKCall -ne "Rest"){
+                    $SecondaryRootVolume = $SecondaryVserver.RootVolume
+                    $SecondaryRootVolumeSecurityStyle = $SecondaryVserver.RootVolumeSecurityStyle
+                }
                 $SecondaryLanguage = $SecondaryVserver.Language
                 $SecondaryAllowedProtocols=$SecondaryVserver.AllowedProtocols
                 $SecondaryNameMappingSwitch=$SecondaryVserver.NameMappingSwitch
