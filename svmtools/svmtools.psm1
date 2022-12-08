@@ -3651,7 +3651,7 @@ Function create_update_qospolicy_dr(
         }
         if($Backup -eq $True){
             $PrimaryQosGroupList | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcQosPolicyGroup.json") -Encoding ASCII -Width 65535
-            if( ($ret=get-item $($Global:JsonPath+"Get-NcQosPolicyGroup.json") -ErrorAction SilentlyContinue) -ne $null ){
+            if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcQosPolicyGroup.json") -ErrorAction SilentlyContinue) ){
                 Write-LogDebug "$($Global:JsonPath+"Get-NcQosPolicyGroup.json") saved successfully"
             }else{
                 Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcQosPolicyGroup.json")"
@@ -3666,7 +3666,7 @@ Function create_update_qospolicy_dr(
                 Write-LogDebug "Get-NcQosPolicyGroup -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $PrimaryQosGroupName"
                 $SecondaryQosGroup=Get-NcQosPolicyGroup -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $PrimaryQosGroupName -ErrorVariable ErrorVar    
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcQosPolicyGroup failed [$ErrorVar]" }
-                if($SecondaryQosGroup -ne $null)  # QOS Policy group exist, so modify if needed
+                if($null -ne $SecondaryQosGroup)  # QOS Policy group exist, so modify if needed
                 {
                     $SecondaryQosGroupMaxThroughput=$SecondaryQosGroup.MaxThroughput
                     $SecondaryQosGroupMinThroughput=$SecondaryQosGroup.MinThroughput
@@ -3763,7 +3763,7 @@ Function create_update_qospolicy_dr(
                 Throw "ERROR: failed to read $filepath"
             }    
         }
-        if( ( $PrimaryQosPolicyGroupOnSVM -ne $null ) -and ( $PrimaryQosPolicyGroupOnSvm -notmatch "_dpo_default" ) )
+        if( ( $null -ne $PrimaryQosPolicyGroupOnSVM ) -and ( $PrimaryQosPolicyGroupOnSvm -notmatch "_dpo_default" ) )
         {
             if($Backup -eq $False){
                 Write-LogDebug "Get-NcVserver -Name $mySecondaryVserver -Controller $mySecondaryController"
@@ -3833,7 +3833,7 @@ Function create_update_qospolicy_dr(
                 } 
             }
             if($Backup -eq $False){
-                $PrimaryVolWithQosList=$PrimaryVolList | Where-Object {$_.VolumeQosAttributes.PolicyGroupName -ne $null}
+                $PrimaryVolWithQosList=$PrimaryVolList | Where-Object {$null -ne $_.VolumeQosAttributes.PolicyGroupName}
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
                 foreach ( $PrimaryVolWithQos in ( $PrimaryVolWithQosList | Skip-Null ) ) {
                     $PrimaryVolName=$PrimaryVolWithQos.Name
@@ -5485,7 +5485,7 @@ Try {
                 # support of AntiRansomware state per volume
                 $PrimaryAntiRansomware=$PrimaryVol.AntiRansomware.state
             }
-            f(($Global:PSTKCall -eq "Rest") -and ($Global:OntapPrimaryVersion -ge "9.08")){
+            if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapPrimaryVersion -ge "9.08")){
                 # ONTAP >= 9.8
                 # support of Filesystem Analytics per volume
                 $PrimaryFSASupported=$PrimaryVol.Analytics.Supported
@@ -5561,7 +5561,7 @@ Try {
                         # support of AntiRansomware state per volume
                         $SecondaryAntiRansomware=$SecondaryVol.AntiRansomware.state 
                     }
-                    f(($Global:PSTKCall -eq "Rest") -and ($Global:OntapSecondaryVersion -ge "9.08")){
+                    if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapSecondaryVersion -ge "9.08")){
                         # ONTAP >= 9.8
                         # support of Filesystem Analytics per volume
                         $SecondaryFSASupported=$SecondaryVol.Analytics.Supported
@@ -5876,8 +5876,19 @@ Try {
             $PrimaryVolExtendStyle=$PrimaryVol.VolumeIdAttributes.StyleExtended
             if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapPrimaryVersion -ge "9.10")){
                 # ONTAP >= 9.10
-                # support of Snaplock per volume
-                $PrimarySnaplockVolume=$PrimaryVol.Snaplock.Type 
+                $PrimaryVolAntiRansomware=$PrimaryVol.AntiRansomware.state
+                $PrimaryVolSnaplockType=$PrimaryVol.Snaplock.Type 
+                $PrimaryVolActivityTrackState=$PrimaryVol.ActivityTracking.State
+            }
+            if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapPrimaryVersion -ge "9.08")){
+                # ONTAP >= 9.8
+                # support of Filesystem Analytics per volume
+                $PrimaryVolAnalyticsState=$PrimaryVol.Analytics.State
+            }
+            if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapPrimaryVersion -ge "9.11")){
+                # ONTAP >= 9.11
+                $PrimaryVolAsyncDeleteClientState=$PrimaryVol.AsynchronousDirectoryDelete.Enabled
+                $PrimaryVolAsyncDeleteClientTrashDirectory=$PrimaryVol.AsynchronousDirectoryDelete.TrashBin
             }
             if($PrimaryVolExtendStyle -eq "flexvol"){
                 # Create a flexvol
@@ -5916,7 +5927,7 @@ Try {
                         # Create this volume if it does not exist on secondary
                         #  THIS NOW WORKS DIFFERENTLY
                         #  WE ALWAYS TRY TO FIND A MATCH IN NON INTERACTIVE MODE
-
+                        Write-Log "[$workon] Process volume [$PrimaryVolName]"
                         $PrimaryVersion=(Get-NcSystemVersionInfo -Controller $myPrimaryController)[0].VersionTuple
                         $SecondaryVersion=(Get-NcSystemVersionInfo -Controller $mySecondaryController)[0].VersionTuple
         
@@ -6043,13 +6054,107 @@ Try {
                         }else{
                             $SecondaryVolComment=""    
                         }
+                        $ForceRest=$False
+                        $NewNcVolParameters=@{}
+                        
+                        if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapSecondaryVersion -ge "9.10")){
+                            if($PrimaryVolAntiRansomware -eq "enabled"){
+                                $NewNcVolParameters.anti_ransomware=@{"state"="enabled"}
+                                $ForceRest=$True
+                            }
+                            if($PrimaryVolSnaplockType -ne "non_snaplock"){
+                                $NewNcVolParameters.snaplock=@{"type"=$PrimaryVolSnaplockType}
+                                $ForceRest=$True
+                            }
+                            if($PrimaryVolActivityTrackState -eq "on"){
+                                $NewNcVolParameters.activity_tracking=@{"state"="on"}
+                                $ForceRest=$True
+                            }
+                        }
+                        if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapSecondaryVersion -ge "9.08")){
+                            if($PrimaryVolAnalyticsState -eq "on"){
+                                $NewNcVolParameters.analytics=@{"state"="on"}
+                                $ForceRest=$True
+                            }
+                        }
+                        if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapPrimaryVersion -ge "9.11")){
+                            if($PrimaryVolAsyncDeleteClientState -eq $True){
+                                $NewNcVolParameters.asynchronous_directory_delete=@{"enabled"=$True}
+                                $ForceRest=$True
+                            }
+                            if($PrimaryVolAsyncDeleteClientTrashDirectory -ne "-"){
+                                $NewNcVolParameters.asynchronous_directory_delete=@{"trash_bin"=$PrimaryVolAsyncDeleteClientTrashDirectory}
+                                $ForceRest=$True
+                            }
+                        }
+                        
                         if($Restore -eq $False){
+                            if($Global:PSTKCall -eq "Rest"){
+                                #! Force Direct Rest call because of burt with New-NcVol in REST mode with Type = DP
+                                $ForceRest=$True
+                            }
+                            if($ForceRest){
+                                $NewNcVolParameters+=@{
+                                    "name"=$PrimaryVolName;
+                                    "comment"=$SecondaryVolComment;
+                                    "aggregates"=@(@{"name"=$myDataAggr});
+                                    "nas"=@{"export_policy"=@{"name"=$PrimaryVolExportPolicy};"security_style"=$PrimaryVolStyle;};
+                                    "space"=@{"snapshot"=@{"reserve_percent"=$PrimaryVolSnapshotReserve}};
+                                    "guarantee"=@{"type"=$SpaceReserve};
+                                    "language"=$PrimaryVolLang;
+                                    "svm"=@{"name"=$mySecondaryVserver};
+                                    "size"=$PrimaryVolSize;
+                                }
+                                $NewNcVolParameters+=$option
+                                $CredSecondary=get_local_cDotcred($mySecondaryController)
+                                $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes")
+                            }
                             $Encrypt=$Global:AllowEncryption
-                            if($Encrypt -eq "True"){$Encrypt=$True}else{$Encrypt=$False}	
-                            Write-Log "[$workOn] Create new volume DR: [$PrimaryVolName]"
-                            Write-LogDebug "New-NcVol -Name $PrimaryVolName -Comment $SecondaryVolComment -Aggregate $myDataAggr -JunctionPath $null -ExportPolicy $PrimaryVolExportPolicy -SecurityStyle $PrimaryVolStyle -Encrypt:$Encrypt -SpaceReserve $SpaceReserve -SnapshotReserve $PrimaryVolSnapshotReserve -Type DP  -Language $PrimaryVolLang -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Size $PrimaryVolSize $option"
-                            $SecondaryVol = New-NcVol -Name $PrimaryVolName -Comment $SecondaryVolComment -Aggregate $myDataAggr -JunctionPath $null -ExportPolicy $PrimaryVolExportPolicy -SecurityStyle $PrimaryVolStyle -Encrypt:$Encrypt -SpaceReserve $SpaceReserve -SnapshotReserve $PrimaryVolSnapshotReserve -Type DP -Language $PrimaryVolLang -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Size $PrimaryVolSize @option -ErrorVariable ErrorVar 
-                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcVol Failed: Failed to create new volume $PrimaryVolName [$ErrorVar]" }    
+                            if($Encrypt -eq "True"){
+                                $Encrypt=$True
+                                $NewNcVolParameters.encryption=@{"enabled"=$True}
+                            }else{
+                                $Encrypt=$False
+                            }	
+                            Write-Log "[$workOn] Create new DR volume [$PrimaryVolName]"
+                            $NewNcVolParameters.type="dp"
+                            if($ForceRest){
+                                $body=$NewNcVolParameters | ConvertTo-Json
+                                Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
+                                $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                if($? -ne $True){
+                                    Write-LogError "ERROR: Unable to create volume [$PrimaryVolName] Reason [$ErrorVar]"
+                                    Write-LogDebug "[$workOn]: end"
+                                    return $False
+                                }
+                                $JobUuid=$ret.job.uuid
+                                $JobDone=$False
+                                $StartTime=Get-date
+                                $Timeout=$False
+                                While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+                                    $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
+                                    if($JobDetail.JobCompletion -eq "success"){
+                                        $JobDone=$True
+                                    }else{
+                                        $JobStatus=$JobDetail.State
+                                        Write-LogDebug "[$workOn] Vol create job status [$JobStatus]"
+                                    }
+                                    $CurrentTime=Get-date
+                                    $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+                                    if($TimeSpend -gt 10){
+                                        Write-LogWarn "[$workOn] Vol create job take too much time. Check in Ontap its status"
+                                        $Timeout=$True
+                                    }
+                                }
+                            }else{
+                                # $NewNcVolParameters_string=$NewNcVolParameters | Out-String
+                                $option_string=$option | Out-String
+                                # Write-LogDebug "New-NcVol $NewNcVolParameters_string -Encrypt:$Encrypt $option_string -Controller $mySecondaryController"
+                                # $SecondaryVol = New-NcVol @NewNcVolParameters -Encrypt:$Encrypt @option -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                Write-LogDebug "New-NcVol -Name $PrimaryVolName -Comment $SecondaryVolComment -Aggregate $myDataAggr -JunctionPath $null -ExportPolicy $PrimaryVolExportPolicy -SecurityStyle $PrimaryVolStyle -Encrypt:$Encrypt -SpaceReserve $SpaceReserve -SnapshotReserve $PrimaryVolSnapshotReserve -Type DP -Language $PrimaryVolLang -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Size $PrimaryVolSize $option"
+                                $SecondaryVol = New-NcVol -Name $PrimaryVolName -Comment $SecondaryVolComment -Aggregate $myDataAggr -JunctionPath $null -ExportPolicy $PrimaryVolExportPolicy -SecurityStyle $PrimaryVolStyle -Encrypt:$Encrypt -SpaceReserve $SpaceReserve -SnapshotReserve $PrimaryVolSnapshotReserve -Type DP -Language $PrimaryVolLang -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Size $PrimaryVolSize @option -ErrorVariable ErrorVar 
+                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcVol Failed: Failed to create new volume $PrimaryVolName [$ErrorVar]" } 
+                            }
                         }else{
                             $Encrypt=$False
                             #Run a restore, so get some options directly from JSON backup file
@@ -6065,14 +6170,92 @@ Try {
                             }
                             if($Global:VOLUME_TYPE -eq "RW"){
                                 Write-LogDebug "Create RW volume"
-                                Write-LogDebug "New-NcVol -Name $PrimaryVolName -Comment $SecondaryVolComment -Aggregate $myDataAggr -JunctionPath $null -ExportPolicy $PrimaryVolExportPolicy -SecurityStyle $PrimaryVolStyle -SpaceReserve $SpaceReserve -Encrypt:$Encrypt -SnapshotReserve $PrimaryVolSnapshotReserve -Type RW -Language $PrimaryVolLang -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Size $PrimaryVolSize $option"
-                                $SecondaryVol = New-NcVol -Name $PrimaryVolName -Comment $SecondaryVolComment -Aggregate $myDataAggr -JunctionPath $null -ExportPolicy $PrimaryVolExportPolicy -SecurityStyle $PrimaryVolStyle -SpaceReserve $SpaceReserve -Encrypt:$Encrypt -SnapshotReserve $PrimaryVolSnapshotReserve -Type RW -Language $PrimaryVolLang -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Size $PrimaryVolSize @option -ErrorVariable ErrorVar 
-                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcVol Failed: Failed to create new volume $PrimaryVolName [$ErrorVar]" }    
+                                if($ForceRest){
+                                    $body=$NewNcVolParameters | ConvertTo-Json
+                                    Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
+                                    $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                    if($? -ne $True){
+                                        Write-LogError "ERROR: Unable to create volume [$PrimaryVolName] Reason [$ErrorVar]"
+                                        Write-LogDebug "[$workOn]: end"
+                                        return $False
+                                    }
+                                    $JobUuid=$ret.job.uuid
+                                    $JobDone=$False
+                                    $StartTime=Get-date
+                                    $Timeout=$False
+                                    While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+                                        $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
+                                        if($JobDetail.JobCompletion -eq "success"){
+                                            $JobDone=$True
+                                        }else{
+                                            $JobStatus=$JobDetail.State
+                                            Write-LogDebug "[$workOn] Vol create job status [$JobStatus]"
+                                        }
+                                        $CurrentTime=Get-date
+                                        $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+                                        if($TimeSpend -gt 10){
+                                            Write-LogWarn "[$workOn] Vol create job take too much time. Check in Ontap its status"
+                                            $Timeout=$True
+                                        }
+                                    }
+                                }else{
+                                    # $NewNcVolParameters_string=$NewNcVolParameters | Out-String
+                                    $option_string=$option | Out-String
+                                    Write-LogDebug "New-NcVol -Name $PrimaryVolName -Comment $SecondaryVolComment -Aggregate $myDataAggr -JunctionPath $null -ExportPolicy $PrimaryVolExportPolicy -SecurityStyle $PrimaryVolStyle -Encrypt:$Encrypt -SpaceReserve $SpaceReserve -SnapshotReserve $PrimaryVolSnapshotReserve -Type RW -Language $PrimaryVolLang -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Size $PrimaryVolSize $option"
+                                    $SecondaryVol = New-NcVol -Name $PrimaryVolName -Comment $SecondaryVolComment -Aggregate $myDataAggr -JunctionPath $null -ExportPolicy $PrimaryVolExportPolicy -SecurityStyle $PrimaryVolStyle -Encrypt:$Encrypt -SpaceReserve $SpaceReserve -SnapshotReserve $PrimaryVolSnapshotReserve -Type RW -Language $PrimaryVolLang -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Size $PrimaryVolSize @option -ErrorVariable ErrorVar 
+                                    # Write-LogDebug "New-NcVol $NewNcVolParameters_string -Encrypt:$Encrypt $option_string -Controller $mySecondaryController"
+                                    # $SecondaryVol = New-NcVol @NewNcVolParameters -Encrypt:$Encrypt @option -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcVol Failed: Failed to create new volume $PrimaryVolName [$ErrorVar]" }    
+                                }
                             }else{
+                                if($Global:PSTKCall -eq "Rest"){
+                                    #! Force Direct Rest call because of burt with New-NcVol in REST mode with Type = DP
+                                    $ForceRest=$True
+                                }
+                                if($ForceRest){
+                                    $NewNcVolParameters+=$option
+                                    $CredSecondary=get_local_cDotcred($mySecondaryController)
+                                    $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes")
+                                }
                                 Write-LogDebug "Create DP volume"
-                                Write-LogDebug "New-NcVol -Name $PrimaryVolName -Comment $SecondaryVolComment -Aggregate $myDataAggr -JunctionPath $null -ExportPolicy $PrimaryVolExportPolicy -SecurityStyle $PrimaryVolStyle -SpaceReserve $SpaceReserve -Encrypt:$Encrypt -SnapshotReserve $PrimaryVolSnapshotReserve -Type DP  -Language $PrimaryVolLang -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Size $PrimaryVolSize $option"
-                                $SecondaryVol = New-NcVol -Name $PrimaryVolName -Comment $SecondaryVolComment -Aggregate $myDataAggr -JunctionPath $null -ExportPolicy $PrimaryVolExportPolicy -SecurityStyle $PrimaryVolStyle -SpaceReserve $SpaceReserve -Encrypt:$Encrypt -SnapshotReserve $PrimaryVolSnapshotReserve -Type DP -Language $PrimaryVolLang -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Size $PrimaryVolSize @option -ErrorVariable ErrorVar 
-                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcVol Failed: Failed to create new volume $PrimaryVolName [$ErrorVar]" }    
+                                if($ForceRest){
+                                    $NewNcVolParameters.type="dp"
+                                    $body=$NewNcVolParameters | ConvertTo-Json
+                                    Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
+                                    $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                    if($? -ne $True){
+                                        Write-LogError "ERROR: Unable to create volume [$PrimaryVolName] Reason [$ErrorVar]"
+                                        Write-LogDebug "[$workOn]: end"
+                                        return $False
+                                    }
+                                    $JobUuid=$ret.job.uuid
+                                    $JobDone=$False
+                                    $StartTime=Get-date
+                                    $Timeout=$False
+                                    While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+                                        $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
+                                        if($JobDetail.JobCompletion -eq "success"){
+                                            $JobDone=$True
+                                        }else{
+                                            $JobStatus=$JobDetail.State
+                                            Write-LogDebug "[$workOn] Vol create job status [$JobStatus]"
+                                        }
+                                        $CurrentTime=Get-date
+                                        $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+                                        if($TimeSpend -gt 10){
+                                            Write-LogWarn "[$workOn] Vol create job take too much time. Check in Ontap its status"
+                                            $Timeout=$True
+                                        }
+                                    }
+                                }else{
+                                    # $NewNcVolParameters_string=$NewNcVolParameters | Out-String
+                                    $option_string=$option | Out-String
+                                    Write-LogDebug "New-NcVol -Name $PrimaryVolName -Comment $SecondaryVolComment -Aggregate $myDataAggr -JunctionPath $null -ExportPolicy $PrimaryVolExportPolicy -SecurityStyle $PrimaryVolStyle -Encrypt:$Encrypt -SpaceReserve $SpaceReserve -SnapshotReserve $PrimaryVolSnapshotReserve -Type DP  -Language $PrimaryVolLang -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Size $PrimaryVolSize $option"
+                                    $SecondaryVol = New-NcVol -Name $PrimaryVolName -Comment $SecondaryVolComment -Aggregate $myDataAggr -JunctionPath $null -ExportPolicy $PrimaryVolExportPolicy -SecurityStyle $PrimaryVolStyle -Encrypt:$Encrypt -SpaceReserve $SpaceReserve -SnapshotReserve $PrimaryVolSnapshotReserve -Type DP -Language $PrimaryVolLang -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Size $PrimaryVolSize @option -ErrorVariable ErrorVar 
+                                    # Write-LogDebug "New-NcVol $NewNcVolParameters_string -Encrypt:$Encrypt -Type dp $option_string -Controller $mySecondaryController"
+                                    # $SecondaryVol = New-NcVol @NewNcVolParameters -Encrypt:$Encrypt -Type "dp" @option -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcVol Failed: Failed to create new volume $PrimaryVolName [$ErrorVar]" }  
+                                }  
                             }
                         }
                         if($Global:AlwaysChooseDataAggr -eq $true)
@@ -6139,7 +6322,7 @@ Try {
                 # create a flexgroup and all its constituent
 
                 if($Restore -eq $False){
-                    Write-LogDebug "[$workon] Process a Flexgroup volume and all its constituent [$PrimaryVolName]"
+                    Write-Log "[$workon] Process a Flexgroup volume [$PrimaryVolName]"
                     # get all flexgroup constituent informations
                     $PrimaryFlexgroupUuid=$PrimaryVol.VolumeIdAttributes.FlexgroupUuid
                     if($Global:PSTKCall -ne "Rest"){
