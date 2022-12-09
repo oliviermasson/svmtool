@@ -3663,86 +3663,146 @@ Function create_update_qospolicy_dr(
                 $PrimaryQosGroupName=$PrimaryQosGroup.PolicyGroup
                 $PrimaryQosGroupMaxThroughput=$PrimaryQosGroup.MaxThroughput
                 $PrimaryQosGroupMinThroughput=$PrimaryQosGroup.MinThroughput
-                Write-LogDebug "Get-NcQosPolicyGroup -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $PrimaryQosGroupName"
-                $SecondaryQosGroup=Get-NcQosPolicyGroup -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $PrimaryQosGroupName -ErrorVariable ErrorVar    
-                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcQosPolicyGroup failed [$ErrorVar]" }
-                if($null -ne $SecondaryQosGroup)  # QOS Policy group exist, so modify if needed
-                {
-                    $SecondaryQosGroupMaxThroughput=$SecondaryQosGroup.MaxThroughput
-                    $SecondaryQosGroupMinThroughput=$SecondaryQosGroup.MinThroughput
-                    if( ($PrimaryQosGroupMaxThroughput -ne $SecondaryQosGroupMaxThroughput) -or ($PrimaryQosGroupMinThroughput -ne $SecondaryQosGroupMinThroughput) )
+                $PrimaryQosGroupMaxThroughputIOPS=$PrimaryQosGroup.MaxThroughputIOPS
+                $PrimaryQosGroupMaxThroughputMbps=$PrimaryQosGroup.MaxThroughputMbps
+                $PrimaryQosGroupMinThroughputIOPS=$PrimaryQosGroup.MinThroughputIOPS
+                $PrimaryQosGroupMinThroughputMbps=$PrimaryQosGroup.MinThroughputMbps
+                $PrimaryQosGroupIsShared=$PrimaryQosGroup.IsShared
+                if(($null -eq $PrimaryQosGroupMaxThroughput) -and ($null -eq $PrimaryQosGroupMinThroughput)){  
+                    # Process QOS Adaptative Policy Group
+                    Write-LogDebug "PolicyGroup [$PrimaryQosGroupName] is an adaptative PolicyGroup"
+                    Write-LogDebug "Get-NcQosAdaptivePolicyGroup -PolicyGroup $PrimaryQosGroupName -Controller $myPrimaryController"
+                    $PrimaryQosAdaptativeGroup=Get-NcQosAdaptivePolicyGroup -PolicyGroup $PrimaryQosGroupName -Controller $myPrimaryController -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcQosAdaptivePolicyGroup failed [$ErrorVar]" }
+                    
+                    $PrimaryQosAdaptativeGroupAbsoluteMinIops=$PrimaryQosAdaptativeGroup.AbsoluteMinIops
+                    $PrimaryQosAdaptativeGroupExpectedIops=$PrimaryQosAdaptativeGroup.ExpectedIops
+                    $PrimaryQosAdaptativeGroupPeakIops=$PrimaryQosAdaptativeGroup.PeakIops
+                    $PrimaryQosAdaptativeGroupPeakIopsAllocation=$PrimaryQosAdaptativeGroup.PeakIopsAllocation
+                    $PrimaryQosAdaptativeGroupExpectedIopsAllocation=$PrimaryQosAdaptativeGroup.ExpectedIopsAllocation
+                    $PrimaryQosAdaptativeGroupBlockSize=$PrimaryQosAdaptativeGroup.BlockSize
+                    if($Global:InsideMCC){
+                        $QosPolicyGroupName=$($PrimaryQosGroupName+"_"+$mySecondaryVserver)
+                    }else{
+                        $QosPolicyGroupName=$PrimaryQosGroupName
+                    }
+
+                    $SecondaryQosAdaptativeGroup=Get-NcQosAdaptivePolicyGroup -PolicyGroup $QosPolicyGroupName -Controller $mySecondaryController -ErrorVariable ErrorVar
+                    if($null -ne $SecondaryQosAdaptativeGroup)  
                     {
+                        # QOS ADaptative Policy group exist, so modify if needed
+                        Write-Log "[$workOn] Modify QOS Adaptative Policy Group [$QosPolicyGroupName]"
+                        Write-LogDebug "Set-NcQosAdaptivePolicyGroup -PolicyGroup $QosPolicyGroupName -AbsoluteMinIops $PrimaryQosAdaptativeGroupAbsoluteMinIops `
+                        -ExpectedIops $PrimaryQosAdaptativeGroupExpectedIops -PeakIops $PrimaryQosAdaptativeGroupPeakIops -PeakIopsAllocation `
+                        $PrimaryQosAdaptativeGroupPeakIopsAllocation -ExpectedIopsAllocation $PrimaryQosAdaptativeGroupExpectedIopsAllocation `
+                        -BlockSize $PrimaryQosAdaptativeGroupBlockSize -Controller $mySecondaryController"
+                        $ret=Set-NcQosAdaptivePolicyGroup -PolicyGroup $QosPolicyGroupName -AbsoluteMinIops $PrimaryQosAdaptativeGroup.AbsoluteMinIops `
+                        -ExpectedIops $PrimaryQosAdaptativeGroup.ExpectedIops -PeakIops $PrimaryQosAdaptativeGroup.PeakIops -PeakIopsAllocation `
+                        $PrimaryQosAdaptativeGroup.PeakIopsAllocation -ExpectedIopsAllocation $PrimaryQosAdaptativeGroup.ExpectedIopsAllocation `
+                        -BlockSize $PrimaryQosAdaptativeGroup.BlockSize -Controller $mySecondaryController -ErrorVariable ErrorVar
+                        if ( $? -ne $True ) { Write-Error "ERROR: Set-NcQosAdaptivePolicyGroup failed [$ErrorVar]" }
+
+                    }else{  
+                        # QOS ADaptative Policy group does not exist, create it
+                        Write-Log "[$workOn] Create QOS Adaptative Policy Group [$QosPolicyGroupName]"
+                        Write-LogDebug "New-NcQosAdaptivePolicyGroup -Vserver $mySecondaryVserver -PolicyGroup $QosPolicyGroupName -AbsoluteMinIops $PrimaryQosAdaptativeGroupAbsoluteMinIops `
+                        -ExpectedIops $PrimaryQosAdaptativeGroupExpectedIops -PeakIops $PrimaryQosAdaptativeGroupPeakIops -PeakIopsAllocation `
+                        $PrimaryQosAdaptativeGroupPeakIopsAllocation -ExpectedIopsAllocation $PrimaryQosAdaptativeGroupExpectedIopsAllocation `
+                        -BlockSize $PrimaryQosAdaptativeGroupBlockSize -Controller $mySecondaryController"
+                        New-NcQosAdaptivePolicyGroup -Vserver $mySecondaryVserver -PolicyGroup $QosPolicyGroupName -AbsoluteMinIops $PrimaryQosAdaptativeGroup.AbsoluteMinIops `
+                        -ExpectedIops $PrimaryQosAdaptativeGroup.ExpectedIops -PeakIops $PrimaryQosAdaptativeGroup.PeakIops -PeakIopsAllocation `
+                        $PrimaryQosAdaptativeGroup.PeakIopsAllocation -ExpectedIopsAllocation $PrimaryQosAdaptativeGroup.ExpectedIopsAllocation `
+                        -BlockSize $PrimaryQosAdaptativeGroup.BlockSize -Controller $mySecondaryController -ErrorVariable ErrorVar
+                    }
+                }else{ 
+                    # process Qos Policy Group
+                    Write-LogDebug "Get-NcQosPolicyGroup -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $PrimaryQosGroupName"
+                    $SecondaryQosGroup=Get-NcQosPolicyGroup -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $PrimaryQosGroupName -ErrorVariable ErrorVar    
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcQosPolicyGroup failed [$ErrorVar]" }
+                    if($null -ne $SecondaryQosGroup)  # QOS Policy group exist, so modify if needed
+                    {
+                        $SecondaryQosGroupMaxThroughput=$SecondaryQosGroup.MaxThroughput
+                        $SecondaryQosGroupMinThroughput=$SecondaryQosGroup.MinThroughput
+                        if( ($PrimaryQosGroupMaxThroughput -ne $SecondaryQosGroupMaxThroughput) -or ($PrimaryQosGroupMinThroughput -ne $SecondaryQosGroupMinThroughput) )
+                        {
+                            if($ForClone.IsPresent -eq $True){
+                                Write-LogDebug "Work in ForClone mode"
+                                Write-LogDebug "QOS Policy Group old name [$PrimaryQosGroupName]"
+                                $QosPolicyGroupName=$PrimaryQosGroupName+"___"+($mySecondaryVserver -replace "\.","_")
+                                <# if($PrimaryQosGroupName -notmatch ".+___.+$"){
+                                    $QosPolicyGroupName=$PrimaryQosGroupName+"___"+($mySecondaryVserver -replace "\.","_")
+                                }else{
+                                    $splitted=$PrimaryQosGroupName -split "___"
+                                    if($splitted.count -ge 3){
+                                        $QosPolicyGroupName=[string]::join("___",$splitted[0..($splitted.length-2)]) 
+                                    }else{
+                                        $QosPolicyGroupName=$PrimaryQosGroupName    
+                                    }    
+                                } #>
+                                Write-LogDebug "QOS Policy Group new name [$QosPolicyGroupName]"
+                                Write-Log "[$workOn] Update QOS Policy Group [$QosPolicyGroupName]"
+                                Write-LogDebug "Set-NcQosPolicyGroup -Name $QosPolicyGroupName -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController"
+                                $out=Set-NcQosPolicyGroup -Name $QosPolicyGroupName -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController  -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcQosPolicyGroup failed [$ErrorVar]" }
+                            }else{
+                                if($Global:SINGLE_CLUSTER -eq $True)
+                                {
+                                    Write-LogDebug "Work in SINGLE_CLUSTER mode"
+                                    Write-Log "[$workOn] Update QOS Policy Group [$PrimaryQosGroupName`_$workOn]"
+                                    Write-LogDebug "Set-NcQosPolicyGroup -Name $PrimaryQosGroupName`_$mySecondaryVserver -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController"
+                                    $out=Set-NcQosPolicyGroup -Name $($PrimaryQosGroupName+"_"+$mySecondaryVserver) -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController  -ErrorVariable ErrorVar
+                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcQosPolicyGroup failed [$ErrorVar]" }
+                                }
+                                else
+                                {
+                                    Write-LogDebug "Work in ForClone mode"
+                                    Write-Log "[$workOn] Update QOS Policy Group [$PrimaryQosGroupName]"
+                                    Write-LogDebug "Set-NcQosPolicyGroup -Name $PrimaryQosGroupName -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController"
+                                    $out=Set-NcQosPolicyGroup -Name $PrimaryQosGroupName -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController  -ErrorVariable ErrorVar
+                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcQosPolicyGroup failed [$ErrorVar]" }
+                                }
+                            }
+                        }
+                    }
+                    else 
+                    {
+                        # QOS Policy group does not exist, create it
                         if($ForClone.IsPresent -eq $True){
                             Write-LogDebug "Work in ForClone mode"
                             Write-LogDebug "QOS Policy Group old name [$PrimaryQosGroupName]"
                             $QosPolicyGroupName=$PrimaryQosGroupName+"___"+($mySecondaryVserver -replace "\.","_")
-                            <# if($PrimaryQosGroupName -notmatch ".+___.+$"){
-                                $QosPolicyGroupName=$PrimaryQosGroupName+"___"+($mySecondaryVserver -replace "\.","_")
-                            }else{
-                                $splitted=$PrimaryQosGroupName -split "___"
-                                if($splitted.count -ge 3){
-                                    $QosPolicyGroupName=[string]::join("___",$splitted[0..($splitted.length-2)]) 
-                                }else{
-                                    $QosPolicyGroupName=$PrimaryQosGroupName    
-                                }    
-                            } #>
                             Write-LogDebug "QOS Policy Group new name [$QosPolicyGroupName]"
-                            Write-Log "[$workOn] Update QOS Policy Group [$QosPolicyGroupName]"
-                            Write-LogDebug "Set-NcQosPolicyGroup -Name $QosPolicyGroupName -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -controller $mySecondaryController"
-                            $out=Set-NcQosPolicyGroup -Name $QosPolicyGroupName -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -controller $mySecondaryController  -ErrorVariable ErrorVar
-                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcQosPolicyGroup failed [$ErrorVar]" }
+                            Write-Log "[$workOn] Create QOS Policy Group [$QosPolicyGroupName]" 
+                            Write-LogDebug "New-NcQosPolicyGroup -Name $QosPolicyGroupName -Vserver $mySecondaryVserver -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController"
+                            $out=New-NcQosPolicyGroup -Name $QosPolicyGroupName -Vserver $mySecondaryVserver -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController  -ErrorVariable ErrorVar 
+                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcQosPolicyGroup failed [$ErrorVar]" }
                         }else{
                             if($Global:SINGLE_CLUSTER -eq $True)
                             {
                                 Write-LogDebug "Work in SINGLE_CLUSTER mode"
-                                Write-Log "[$workOn] Update QOS Policy Group [$PrimaryQosGroupName`_$workOn]"
-                                Write-LogDebug "Set-NcQosPolicyGroup -Name $PrimaryQosGroupName`_$mySecondaryVserver -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -controller $mySecondaryController"
-                                $out=Set-NcQosPolicyGroup -Name $($PrimaryQosGroupName+"_"+$mySecondaryVserver) -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -controller $mySecondaryController  -ErrorVariable ErrorVar
-                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcQosPolicyGroup failed [$ErrorVar]" }
+                                Write-Log "[$workOn] Create QOS Policy Group [$PrimaryQosGroupName`_$workOn]" 
+                                Write-LogDebug "New-NcQosPolicyGroup -Name $PrimaryQosGroupName`_$mySecondaryVserver -Vserver $mySecondaryVserver -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController"
+                                $out=New-NcQosPolicyGroup -Name $($PrimaryQosGroupName+"_"+$mySecondaryVserver) -Vserver $mySecondaryVserver -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController  -ErrorVariable ErrorVar 
+                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcQosPolicyGroup failed [$ErrorVar]" }
                             }
                             else
                             {
-                                Write-LogDebug "Work in ForClone mode"
-                                Write-Log "[$workOn] Update QOS Policy Group [$PrimaryQosGroupName]"
-                                Write-LogDebug "Set-NcQosPolicyGroup -Name $PrimaryQosGroupName -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -controller $mySecondaryController"
-                                $out=Set-NcQosPolicyGroup -Name $PrimaryQosGroupName -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -controller $mySecondaryController  -ErrorVariable ErrorVar
-                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcQosPolicyGroup failed [$ErrorVar]" }
-                            }
-                        }
-                    }
-                }
-                else # QOS Policy group does not exist, do create it
-                {
-                    if($ForClone.IsPresent -eq $True){
-                        Write-LogDebug "Work in ForClone mode"
-                        Write-LogDebug "QOS Policy Group old name [$PrimaryQosGroupName]"
-                        $QosPolicyGroupName=$PrimaryQosGroupName+"___"+($mySecondaryVserver -replace "\.","_")
-                        Write-LogDebug "QOS Policy Group new name [$QosPolicyGroupName]"
-                        Write-Log "[$workOn] Create QOS Policy Group [$QosPolicyGroupName]" 
-                        Write-LogDebug "New-NcQosPolicyGroup -Name $QosPolicyGroupName -Vserver $mySecondaryVserver -MaxThroughput $PrimaryQosGroupMaxThroughput -controller $mySecondaryController"
-                        $out=New-NcQosPolicyGroup -Name $QosPolicyGroupName -Vserver $mySecondaryVserver -MaxThroughput $PrimaryQosGroupMaxThroughput -controller $mySecondaryController  -ErrorVariable ErrorVar 
-                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcQosPolicyGroup failed [$ErrorVar]" }
-                    }else{
-                        if($Global:SINGLE_CLUSTER -eq $True)
-                        {
-                            Write-LogDebug "Work in SINGLE_CLUSTER mode"
-                            Write-Log "[$workOn] Create QOS Policy Group [$PrimaryQosGroupName`_$workOn]" 
-                            Write-LogDebug "New-NcQosPolicyGroup -Name $PrimaryQosGroupName`_$mySecondaryVserver -Vserver $mySecondaryVserver -MaxThroughput $PrimaryQosGroupMaxThroughput -controller $mySecondaryController"
-                            $out=New-NcQosPolicyGroup -Name $($PrimaryQosGroupName+"_"+$mySecondaryVserver) -Vserver $mySecondaryVserver -MaxThroughput $PrimaryQosGroupMaxThroughput -controller $mySecondaryController  -ErrorVariable ErrorVar 
-                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcQosPolicyGroup failed [$ErrorVar]" }
-                        }
-                        else
-                        {
-                            Write-LogDebug "Work in normal mode"
-                            Write-Log "[$workOn] Create QOS Policy Group [$PrimaryQosGroupName]" 
-                            Write-LogDebug "Check existance of QOS"
-                            Write-LogDebug "Get-NcQosPolicyGroup -Name $PrimaryQosGroupName -controller $mySecondaryController"
-                            $ExistingQOS=Get-NcQosPolicyGroup -Name $PrimaryQosGroupName -controller $mySecondaryController -ErrorVariable ErrorVar
-                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcQosPolicyGroup failed [$ErrorVar]" }
-                            if($null -eq $ExistingQOS){
-                                Write-LogDebug "New-NcQosPolicyGroup -Name $PrimaryQosGroupName -Vserver $mySecondaryVserver -MaxThroughput $PrimaryQosGroupMaxThroughput -controller $mySecondaryController"
-                                $out=New-NcQosPolicyGroup -Name $PrimaryQosGroupName -Vserver $mySecondaryVserver -MaxThroughput $PrimaryQosGroupMaxThroughput -controller $mySecondaryController  -ErrorVariable ErrorVar 
-                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcQosPolicyGroup failed [$ErrorVar]" }
+                                if($Global:InsideMCC){
+                                    $QosPolicyGroupName=$($PrimaryQosGroupName+"_"+$mySecondaryVserver)
+                                }else{
+                                    $QosPolicyGroupName=$PrimaryQosGroupName
+                                }
+                                Write-LogDebug "Work in normal mode"
+                                Write-Log "[$workOn] Create QOS Policy Group [$QosPolicyGroupName]" 
+                                # Write-LogDebug "Check existance of QOS"
+                                # Write-LogDebug "Get-NcQosPolicyGroup -Name $QosPolicyGroupName -controller $mySecondaryController"
+                                # $ExistingQOS=Get-NcQosPolicyGroup -Name $QosPolicyGroupName -controller $mySecondaryController -ErrorVariable ErrorVar
+                                # if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcQosPolicyGroup failed [$ErrorVar]" }
+                                # if($null -eq $ExistingQOS){
+                                    Write-LogDebug "New-NcQosPolicyGroup -Name $QosPolicyGroupName -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -Vserver $mySecondaryVserver -controller $mySecondaryController"
+                                    New-NcQosPolicyGroup -Name $QosPolicyGroupName -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -Vserver $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar 
+                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcQosPolicyGroup failed [$ErrorVar]" }
+                                # }
                             }
                         }
                     }
@@ -3769,6 +3829,11 @@ Function create_update_qospolicy_dr(
                 Write-LogDebug "Get-NcVserver -Name $mySecondaryVserver -Controller $mySecondaryController"
                 $SecondaryQosPolicyGroupOnSVM=(Get-NcVserver -Name $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar).QosPolicyGroup
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" }
+                if($Global:PSTKCall -eq "Rest"){
+                    # in REST QosPolicyGroup at SVM level contains an Uuid not a name. Need to get the name of the policy at another level
+                    $PrimaryQosPolicyGroupOnSVM=(Get-NcQosPolicyGroup -Uuid $PrimaryQosPolicyGroupOnSVM -Controller $myPrimaryController  -ErrorVariable ErrorVar).PolicyGroup
+                    $SecondaryQosPolicyGroupOnSVM=(Get-NcQosPolicyGroup -Uuid $SecondaryQosPolicyGroupOnSVM -Controller $mySecondaryController  -ErrorVariable ErrorVar).PolicyGroup
+                }
                 if($ForClone.IsPresent -eq $True){
                     Write-LogDebug "Work in ForClone mode"
                     Write-LogDebug "QOS Policy Group old name [$PrimaryQosGroupName]"
@@ -3791,6 +3856,11 @@ Function create_update_qospolicy_dr(
                     }
                     else
                     {
+                        if($Global:InsideMCC){
+                            $PrimaryQosPolicyGroupOnSVM=$($PrimaryQosPolicyGroupOnSVM+"_"+$mySecondaryVserver)
+                        }else{
+                            $PrimaryQosPolicyGroupOnSVM=$PrimaryQosPolicyGroupOnSVM
+                        }
                         if($PrimaryQosPolicyGroupOnSVM -ne $SecondaryQosPolicyGroupOnSVM)
                         {
                             Write-LogDebug "Work in normal mode"
@@ -3833,11 +3903,36 @@ Function create_update_qospolicy_dr(
                 } 
             }
             if($Backup -eq $False){
-                $PrimaryVolWithQosList=$PrimaryVolList | Where-Object {$null -ne $_.VolumeQosAttributes.PolicyGroupName}
-                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+                if($Global:PSTKCall -ne "Rest"){
+                    $PrimaryVolWithQosList=$PrimaryVolList | Where-Object {$null -ne $_.VolumeQosAttributes.PolicyGroupName}
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+                }else{
+                    $PrimaryCredential = get_local_cDotcred($myPrimaryController)
+                    $url=$("https://"+$myPrimaryController.Name+"/api/storage/volumes?svm.name="+$myPrimaryVserver+"&qos.policy.name=!-&fields=qos.policy.name")
+                    Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck"
+                    $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+                    if($? -ne $True){
+                        Write-LogError "ERROR: Unable to get policy admin owner. Reason [$ErrorVar]" 
+                    }else{
+                        $PrimaryVolWithQosList=$ret.records
+                    }
+                }
                 foreach ( $PrimaryVolWithQos in ( $PrimaryVolWithQosList | Skip-Null ) ) {
-                    $PrimaryVolName=$PrimaryVolWithQos.Name
-                    $PrimaryVolQosName=$PrimaryVolWithQos.VolumeQosAttributes.PolicyGroupName
+                    if($Global:PSTKCall -ne "Rest"){
+                        $PrimaryVolName=$PrimaryVolWithQos.Name
+                        $PrimaryVolQosName=$PrimaryVolWithQos.VolumeQosAttributes.PolicyGroupName
+                    }else{
+                        $PrimaryVolName=$PrimaryVolWithQos.Name
+                        $PrimaryVolQosName=$PrimaryVolWithQos.qos.policy.name
+                        if(($null -eq $PrimaryVolWithQos.qos.policy.min_throughput_iops) -and `
+                        ($null -eq $PrimaryVolWithQos.qos.policy.max_throughput_iops) -and `
+                        ($null -eq $PrimaryVolWithQos.qos.policy.min_throughput_mbps) -and `
+                        ($null -eq $PrimaryVolWithQos.qos.policy.max_throughput_mbps)){
+                            $isAdaptative=$True
+                        }else{
+                            $isAdaptative=$False
+                        }
+                    }
                     Write-LogDebug "Get-NcVol -Name $PrimaryVolName -Vserver $mySecondaryVserver -controller $mySecondaryController"
                     $mySecondaryVol=Get-NcVol -Name $PrimaryVolName -Vserver $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
@@ -3889,10 +3984,18 @@ Function create_update_qospolicy_dr(
                         }
                         else
                         {
-                            if($PrimaryVolQosName -ne $mySecondaryVolQosName)
+                            if($Global:InsideMCC){
+                                $QosPolicyGroupName=$($PrimaryVolQosName+"_"+$mySecondaryVserver)
+                            }else{
+                                $QosPolicyGroupName=$PrimaryVolQosName
+                            }
+                            # if($isAdaptative){
+                            #     $PrimaryVolQosName=$QosPolicyGroupName
+                            # }
+                            if($QosPolicyGroupName -ne $mySecondaryVolQosName)
                             {
                                 Write-LogDebug "Work in normal mode"
-                                Write-log "[$workOn] Update Qos Policy Group name [$PrimaryVolQosName] for volume [$PrimaryVolName]"
+                                Write-log "[$workOn] Update Qos Policy Group name [$QosPolicyGroupName] for volume [$PrimaryVolName]"
                                 Write-LogDebug "Get-NcVol -Template -controller $mySecondaryController"
                                 $query=Get-NcVol -Template -controller $mySecondaryController  -ErrorVariable ErrorVar 
                                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
@@ -3902,7 +4005,7 @@ Function create_update_qospolicy_dr(
                                 $attributes=Get-NcVol -Template -controller $mySecondaryController  -ErrorVariable ErrorVar
                                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
                                 Initialize-NcObjectProperty $attributes VolumeQosAttributes
-                                $attributes.VolumeQosAttributes.PolicyGroupName=$PrimaryVolQosName
+                                $attributes.VolumeQosAttributes.PolicyGroupName=$QosPolicyGroupName
                                 Write-LogDebug "Update-NcVol -Query `$query -Attributes `$attributes -controller $mySecondaryController"
                                 $out=Update-NcVol -Query $query -Attributes $attributes -controller $mySecondaryController  -ErrorVariable ErrorVar
                                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol failed [$ErrorVar]" }
