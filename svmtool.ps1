@@ -565,6 +565,7 @@
                     Correct how to test if SVM source is alive to be compatible with and without Powershell Core
         - 0.5.3     Detect when service-policy should be used instead of firewall-policy if ONTAP 9.6 or greater
         - 0.6.0     Complete rewrite of migrate, activateDR and ReActivate
+        - 0.7.0     Rest Transition
 
 #>
 [CmdletBinding(HelpURI = "https://github.com/oliviermasson/svmtool", DefaultParameterSetName = "ListInstance")]
@@ -1122,7 +1123,7 @@ $Global:MIN_MINOR = 5
 $Global:MIN_BUILD = 0
 $Global:MIN_REVISION = 0
 #############################################################################################
-$Global:RELEASE = "0.6.0"
+$Global:RELEASE = "0.7.0"
 $Global:SCRIPT_RELEASE = "0.1.30"
 if($PSVersionTable.PSVersion.Major -lt 7){
     $Global:BASEDIR = 'C:\Scripts\SVMTOOL'      
@@ -1369,7 +1370,10 @@ if(($module.Version.Major -ge 9) -and ($module.Version.Minor -ge 11))
     # for this we will look in the logfile created by natoolkit
     $Global:PSTKCall="Rest"
 }
-Write-LogDebug "Running PSTK in $Global:PSTKCall mode"
+#Write-LogDebug "Running PSTK in $Global:PSTKCall mode"
+$PSTKVersion=Get-NaToolkitVersion
+$PSVersionDetail=$PSVersionTable.PSVersion
+#Write-LogDebug "Running PTSK version [$PSTKVersion]"
 
 #$PSTKVersion = Get-NaToolkitVersion
 <# if ($PSTKVersion.Major -lt $Global:MIN_MAJOR -and $PSTKVersion.Minor -lt $Global:MIN_MINOR -and $PSTKVersion.Minor -lt $Global:MIN_BUILD) {
@@ -1439,18 +1443,23 @@ if ( $Version ) {
     Clean_and_exit 0 
 }
 
-Write-LogDebug "BASEDIR           [$BASEDIR]"
-Write-LogDebug "CONFDIR           [$Global:CONFDIR]"
-Write-LogDebug "LOGDIR            [$LOGDIR]"
-Write-LogDebug "LOGFILE           [$LOGFILE]"
-Write-LogDebug "CRED_CONFDIR      [$CRED_CONFDIR]"
-Write-LogDebug "CONFFILE          [$Global:CONFFILE]"
-Write-LogDebug "VERSION           [$RELEASE]"
-Write-LogDebug "Vserver           [$Vserver]"
-Write-LogDebug "LogLevelConsole   [$LogLevelConsole]"
-Write-LogDebug "LogLevelLogFile   [$LogLevelLogFile]"
-Write-LogDebug "RW                [$RW]"
-Write-LogDebug "PSVersionTable    [$PSVersion]"
+$CLI=$Global:MyInvocation.MyCommand.ScriptBlock
+
+Write-LogDebug "BASEDIR             [$BASEDIR]"
+Write-LogDebug "CONFDIR             [$Global:CONFDIR]"
+Write-LogDebug "LOGDIR              [$LOGDIR]"
+Write-LogDebug "LOGFILE             [$LOGFILE]"
+Write-LogDebug "CRED_CONFDIR        [$CRED_CONFDIR]"
+Write-LogDebug "CONFFILE            [$Global:CONFFILE]"
+Write-LogDebug "VERSION             [$RELEASE]"
+Write-LogDebug "Vserver             [$Vserver]"
+Write-LogDebug "LogLevelConsole     [$LogLevelConsole]"
+Write-LogDebug "LogLevelLogFile     [$LogLevelLogFile]"
+Write-LogDebug "RW                  [$RW]"
+Write-LogDebug "PSVersionTable      [$PSVersionDetail]"
+Write-LogDebug "PSTK Version        [$PSTKVersion]"
+Write-LogDebug "PSTK Call           [$Global:PSTKCall]"   
+Write-LogDebug "CLI                 [$CLI]"           
 ####################################################################################################
 
 if ( $ListInstance ) {
@@ -1494,7 +1503,7 @@ if ( $Setup ) {
 
 if ( $Backup ) {
     $Global:Run_Mode = "Backup"
-    Write-Log "SVMTOOL Run Backup"
+    Write-Log "SVMTOOL running Backup"
     if ((Test-Path $Global:CONFFILE) -eq $True ) {
         Write-LogDebug "use Config File [$Global:CONFFILE]"
         $read_conf = read_config_file $Global:CONFFILE
@@ -1816,7 +1825,7 @@ if ( $Restore ) {
     else {
         $Global:RESTORE_ORIGINAL = $False	
     }
-    Write-LogOnly "SVMTOOL Run Restore"
+    Write-LogOnly "SVMTOOL running Restore"
     if ((Test-Path $Global:CONFFILE) -eq $True ) {
         $read_conf = read_config_file $Global:CONFFILE
         if ( $null -eq $read_conf ) {
@@ -2190,7 +2199,7 @@ if ( $Restore ) {
 
 if ( $RestoreObject ){
     $Global:Run_Mode = "RestoreObject"
-    Write-LogOnly "SVMTOOL Run RestoreObject"
+    Write-LogOnly "SVMTOOL running RestoreObject"
     $RESTORE_SRC_CLUSTER = $RestoreObject
     if( $DestinationCluster ){
         $RESTORE_DST_CLUSTER = $DestinationCluster
@@ -2381,7 +2390,7 @@ if ($PRIMARY_CLUSTER -eq $SECONDARY_CLUSTER) {
 $VCONFFILE = $Global:CONFDIR + $Vserver + '.conf'
 if ($RemoveDRconf) {
     $Global:Run_Mode = "RemoveDRconf"
-    Write-LogOnly "SVMTOOL RemoveDRconf"
+    Write-LogOnly "SVMTOOL running RemoveDRconf"
     if ((Test-Path $VCONFFILE ) -eq $True ) {
         Remove-Item $VCONFFILE
         Write-Log "$VCONFFILE removed successfully..." -color green
@@ -2496,7 +2505,7 @@ if ( ( $NcSecondaryCtrl = connect_cluster -myController $SECONDARY_CLUSTER -myCr
 
 if ( $ShowDR ) {
     $Global:Run_Mode = "ShowDR"
-    Write-LogOnly "SVMTOOL ShowDR"
+    Write-LogOnly "SVMTOOL running ShowDR"
     if($NoVolumeDetail.IsPresent -eq $False ){
         $Global:NoVolumeDetail=$False
     }else{
@@ -2526,7 +2535,7 @@ if ( $ShowDR ) {
 
 if ( $ConfigureDR ) {
     $Global:Run_Mode = "ConfigureDR"
-    Write-LogOnly "SVMTOOL ConfigureDR"
+    Write-LogOnly "SVMTOOL running ConfigureDR"
     # Connect to the Cluster
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
     $tmp_str = $MyCred.UserName
@@ -2654,7 +2663,7 @@ if ( $ConfigureDR ) {
 
 if ( $DeleteDR ) {
     $Global:Run_Mode = "DeleteDR"
-    Write-LogOnly "SVMTOOL DeleteDR"
+    Write-LogOnly "SVMTOOL running DeleteDR"
     # Connect to the Cluster
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
     $tmp_str = $MyCred.UserName
@@ -2686,7 +2695,7 @@ if ( $DeleteDR ) {
 
 if ($Migrate) {
     $Global:Run_Mode = "Migrate"
-    Write-LogOnly "SVMTOOL Migrate"
+    Write-LogOnly "SVMTOOL running Migrate"
     # Connect to the Cluster
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
     $tmp_str = $MyCred.UserName
@@ -2888,7 +2897,7 @@ if ($Migrate) {
 
 if ( $DeleteSource ) {
     $Global:Run_Mode = "DeleteSource"
-    Write-LogOnly "SVMTOOL DeleteSource"
+    Write-LogOnly "SVMTOOL running DeleteSource"
     # Connect to the Cluster
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
     $tmp_str = $MyCred.UserName
@@ -2974,7 +2983,7 @@ if ( $DeleteSource ) {
 
 if ( $UpdateDR ) {
     $Global:Run_Mode = "UpdateDR"
-    Write-LogOnly "SVMTOOL UpdateDR"
+    Write-LogOnly "SVMTOOL running UpdateDR"
     # Connect to the Cluster
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
     $tmp_str = $MyCred.UserName
@@ -3062,7 +3071,7 @@ if ( $UpdateDR ) {
 
 if ( $CloneDR ) {
     $Global:Run_Mode = "CloneDR"
-    Write-LogOnly "SVMTOOL CloneDR"
+    Write-LogOnly "SVMTOOL running CloneDR"
     $Global:PreserveIdentity=$False
 
     if( ( $Global:NonInteractive.IsPresent ) `
@@ -3131,14 +3140,14 @@ if ( $CloneDR ) {
 
 if ( $SplitCloneDR ) {
     $Global:Run_Mode = "SplitCloneDR"
-    Write-LogOnly "SVMTOOL SplitCloneDR"
+    Write-LogOnly "SVMTOOL running SplitCloneDR"
     # Connect to the Cluster
 }
 ####################################################################################################
 
 if ( $DeleteCloneDR ) {
     $Global:Run_Mode = "DeleteCloneDR"
-    Write-LogOnly "SVMTOOL DeleteCloneDR"
+    Write-LogOnly "SVMTOOL running DeleteCloneDR"
     $myCred = get_local_cDotcred ($SECONDARY_CLUSTER) 
     Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
     if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
@@ -3167,7 +3176,7 @@ if ( $DeleteCloneDR ) {
 
 if ( $ActivateDR ) {
     $Global:Run_Mode = "ActivateDR"
-    Write-LogOnly "SVMTOOL ActivateDR"
+    Write-LogOnly "SVMTOOL running ActivateDR"
     
     if ( test_primary_alive -PrimaryCluster $PRIMARY_CLUSTER -SecondaryCluster $SECONDARY_CLUSTER -PrimaryVserver $Vserver -SecondaryVserver $VserverDR ) {
         $ForceActivate = $False
@@ -3189,6 +3198,7 @@ if ( $ActivateDR ) {
 
 if ( $CreateQuotaDR ) {
     $Global:Run_Mode = "CreateQuotaDR"
+    Write-LogOnly "SVMTOOL running CreateQuotaDR"
     $myCred = get_local_cDotcred ($SECONDARY_CLUSTER) 
     Write-LogDebug "connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
     if ( ( $NcSecondaryCtrl = connect_cluster $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
@@ -3206,6 +3216,7 @@ if ( $CreateQuotaDR ) {
 
 if ( $ReCreateQuota ) {
     $Global:Run_Mode = "ReCreateQuota"
+    Write-LogOnly "SVMTOOL running ReCreateQuota"
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
     Write-LogDebug "connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
     if ( ( $NcPrimaryCtrl = connect_cluster $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
@@ -3223,7 +3234,7 @@ if ( $ReCreateQuota ) {
 
 if ( $ReActivate ) {
     $Global:Run_Mode = "ReActivate"
-    Write-LogOnly "SVMTOOL ReActivate"
+    Write-LogOnly "SVMTOOL running ReActivate"
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
     $tmp_str = $MyCred.UserName
     Write-LogDebug "Connect to cluster [$PRIMARY_CLUSTER] with login [$tmp_str]"
@@ -3371,7 +3382,7 @@ if ( $ReActivate ) {
 
 if ( $CleanReverse ) {
     $Global:Run_Mode = "CleanReverse"
-    Write-LogOnly "SVMTOOL CleanReverse"
+    Write-LogOnly "SVMTOOL running CleanReverse"
     # Connect to the Cluster
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
     $tmp_str = $MyCred.UserName
@@ -3403,7 +3414,7 @@ if ( $CleanReverse ) {
 
 if ( $Resync ) {
     $Global:Run_Mode = "Resync"
-    Write-LogOnly "SVMTOOL Resync"
+    Write-LogOnly "SVMTOOL running Resync"
     # Connect to the Cluster
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
     $tmp_str = $MyCred.UserName
@@ -3448,7 +3459,7 @@ if ( $Resync ) {
 
 if ( $ResyncReverse ) {
     $Global:Run_Mode = "ResyncReverse"
-    Write-LogOnly "SVMTOOL ResyncReverse"
+    Write-LogOnly "SVMTOOL running ResyncReverse"
     # Connect to the Cluster
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
     $tmp_str = $MyCred.UserName
@@ -3489,7 +3500,7 @@ if ( $ResyncReverse ) {
 if ( $UpdateReverse ) {
     $Global:NonInteractive = $true
     $Global:Run_Mode = "UpdateReverse"
-    Write-LogOnly "SVMTOOL UpdateReverse"
+    Write-LogOnly "SVMTOOL running UpdateReverse"
     # Connect to the Cluster
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
     $tmp_str = $MyCred.UserName
@@ -3570,7 +3581,7 @@ if ( $UpdateReverse ) {
 
 if ( $MirrorSchedule ) {
     $Global:Run_Mode = "MirrorSchedule"
-    Write-LogOnly "SVMTOOL MirrorSchedule"
+    Write-LogOnly "SVMTOOL running MirrorSchedule"
     # Connect to the Cluster
     $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
     $tmp_str = $MyCred.UserName
@@ -3606,7 +3617,7 @@ if ( $MirrorSchedule ) {
 
 if ( $MirrorScheduleReverse ) {
     $Global:Run_Mode = "MirrorScheduleReverse"
-    Write-LogOnly "SVMTOOL MirrorScheduleReverse"
+    Write-LogOnly "SVMTOOL running MirrorScheduleReverse"
     # Connect to the Cluster
     $myCred = get_local_cDotcred ($SECONDARY_CLUSTER) 
     $tmp_str = $MyCred.UserName

@@ -1475,7 +1475,7 @@ Function select_node_from_cli ([NetApp.Ontapi.Filer.C.NcController]$myController
 		}
 		$index=[int]$ans ; $index --
 		$NodeSelected=$NodeSelectedList[$index]
-		if ( $NodeSelected -ne $null ) { $ErrNode = $False }
+		if ( $null -ne $NodeSelected ) { $ErrNode = $False }
 	}
 	return $NodeSelected
 }
@@ -1490,6 +1490,7 @@ Function select_data_aggr_from_cli ([NetApp.Ontapi.Filer.C.NcController]$myContr
 	while ( $ans -ne 'y') {	
 
 		$AggrSelectedList = @()
+        Write-LogDebug "Get-NcAggr -Controller $myController"
  		$AggrList=Get-NcAggr -Controller $myController  -ErrorVariable ErrorVar
 		if ( $? -ne $True ) {throw "ERROR: Get-NcAggr failed [$ErrorVar]" }
 		if ( $null -eq $AggrList ) {
@@ -1497,37 +1498,41 @@ Function select_data_aggr_from_cli ([NetApp.Ontapi.Filer.C.NcController]$myContr
              
 			clean_and_exit 1
 		}
+        Write-LogDebug "AggrList [$AggrList]"
 
         # TODO When REST will be the only method available, Get-NcAggr will only return data aggr, so this test will need to be modified/deleted
         # try to check if call was performed with REST by looking at same attribute that are empty with REST and populated with ZAPI
         if($null -eq $AggrList[0].AggrRaidAttributes.HasLocalRoot)
         {
+            Write-LogDebug "Get-NcAggr -Controller $myController -ZapiCall"
             $AggrList=Get-NcAggr -Controller $myController  -ErrorVariable ErrorVar -ZapiCall
             if ( $? -ne $True ) {throw "ERROR: Get-NcAggr failed [$ErrorVar]" }
             if ( $null -eq $AggrList ) {
                 Write-LogError "ERROR: Unable list aggregates for Cluster $myController" 
                 
                 clean_and_exit 1
-            }    
+            } 
+            Write-LogDebug "New AggrList [$AggrList]"   
         }
 
         Write-Log $myQuestion
 		$i = 0 
 		foreach ( $Aggr in ( $AggrList | Skip-Null | Sort-Object -Property Available -Descending ) ) {
+            Write-LogDebug "Process [$Aggr] index [$i]"
 			if ( $Aggr.AggrRaidAttributes.HasLocalRoot -eq $False ) {
 				$i++ 
 				$tmpStr=$Aggr.Name
                 # if regex
-                #write-logDebug "[$i][$tmpStr][$default][$regExMatch][$bestMatch]"
+                write-logDebug "[$i][$tmpStr][$default][$regExMatch][$bestMatch]"
                 if(($bestMatch -lt 0) -and ($regExMatch) -and ($tmpStr -cmatch $regExMatch)){
                     $defaultReason = "Default found based on regex [$regExMatch]"
-                    #write-logDebug "found regex match"
+                    write-logDebug "found regex match"
                     $indexMatch=$i
                     $bestMatch=0
                 }
                 if(($bestMatch -lt -1) -and ($default -ceq $tmpStr)){
                     $defaultReason = "Default found [$default]"
-                    #write-logDebug "found default match"
+                    write-logDebug "found default match"
                     $indexMatch=$i
                     $bestMatch=-1
                 }
@@ -3683,8 +3688,10 @@ Function create_update_qospolicy_dr(
                     $PrimaryQosAdaptativeGroupBlockSize=$PrimaryQosAdaptativeGroup.BlockSize
                     if($Global:InsideMCC){
                         $QosPolicyGroupName=$($PrimaryQosGroupName+"_"+$mySecondaryVserver)
+                        Write-LogDebug "Working inside MCC so change destination policy name from [$PrimaryQosGroupName] to [$QosPolicyGroupName]"
                     }else{
                         $QosPolicyGroupName=$PrimaryQosGroupName
+                        Write-LogDebug "Working outside MCC so destination policy name is [$QosPolicyGroupName]"
                     }
 
                     $SecondaryQosAdaptativeGroup=Get-NcQosAdaptivePolicyGroup -PolicyGroup $QosPolicyGroupName -Controller $mySecondaryController -ErrorVariable ErrorVar
@@ -3709,25 +3716,35 @@ Function create_update_qospolicy_dr(
                         -ExpectedIops $PrimaryQosAdaptativeGroupExpectedIops -PeakIops $PrimaryQosAdaptativeGroupPeakIops -PeakIopsAllocation `
                         $PrimaryQosAdaptativeGroupPeakIopsAllocation -ExpectedIopsAllocation $PrimaryQosAdaptativeGroupExpectedIopsAllocation `
                         -BlockSize $PrimaryQosAdaptativeGroupBlockSize -Controller $mySecondaryController"
-                        New-NcQosAdaptivePolicyGroup -Vserver $mySecondaryVserver -PolicyGroup $QosPolicyGroupName -AbsoluteMinIops $PrimaryQosAdaptativeGroup.AbsoluteMinIops `
+                        $ret=New-NcQosAdaptivePolicyGroup -Vserver $mySecondaryVserver -PolicyGroup $QosPolicyGroupName -AbsoluteMinIops $PrimaryQosAdaptativeGroup.AbsoluteMinIops `
                         -ExpectedIops $PrimaryQosAdaptativeGroup.ExpectedIops -PeakIops $PrimaryQosAdaptativeGroup.PeakIops -PeakIopsAllocation `
                         $PrimaryQosAdaptativeGroup.PeakIopsAllocation -ExpectedIopsAllocation $PrimaryQosAdaptativeGroup.ExpectedIopsAllocation `
                         -BlockSize $PrimaryQosAdaptativeGroup.BlockSize -Controller $mySecondaryController -ErrorVariable ErrorVar
+                        if ( $? -ne $True ) { Write-Error "ERROR: New-NcQosAdaptivePolicyGroup failed [$ErrorVar]" }
                     }
                 }else{ 
                     # process Qos Policy Group
-                    Write-LogDebug "Get-NcQosPolicyGroup -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $PrimaryQosGroupName"
-                    $SecondaryQosGroup=Get-NcQosPolicyGroup -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $PrimaryQosGroupName -ErrorVariable ErrorVar    
+                    if($Global:InsideMCC){
+                        $QosPolicyGroupName=$($PrimaryQosGroupName+"_"+$mySecondaryVserver)
+                        Write-LogDebug "Working inside MCC so change destination policy name from [$PrimaryQosGroupName] to [$QosPolicyGroupName]"
+                    }else{
+                        $QosPolicyGroupName=$PrimaryQosGroupName
+                        Write-LogDebug "Working outside MCC so destination policy name is [$QosPolicyGroupName]"
+                    }
+                    Write-LogDebug "Get-NcQosPolicyGroup -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $QosPolicyGroupName"
+                    $SecondaryQosGroup=Get-NcQosPolicyGroup -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $QosPolicyGroupName -ErrorVariable ErrorVar    
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcQosPolicyGroup failed [$ErrorVar]" }
                     if($null -ne $SecondaryQosGroup)  # QOS Policy group exist, so modify if needed
                     {
+                        Write-LogDebug "QOS Policy already exists on secondary"
                         $SecondaryQosGroupMaxThroughput=$SecondaryQosGroup.MaxThroughput
                         $SecondaryQosGroupMinThroughput=$SecondaryQosGroup.MinThroughput
                         if( ($PrimaryQosGroupMaxThroughput -ne $SecondaryQosGroupMaxThroughput) -or ($PrimaryQosGroupMinThroughput -ne $SecondaryQosGroupMinThroughput) )
                         {
+                            Write-LogDebug "Need to update this fiexed policy on secondary"
                             if($ForClone.IsPresent -eq $True){
                                 Write-LogDebug "Work in ForClone mode"
-                                Write-LogDebug "QOS Policy Group old name [$PrimaryQosGroupName]"
+                                Write-LogDebug "QOS Policy Group old name [$QosPolicyGroupName]"
                                 $QosPolicyGroupName=$PrimaryQosGroupName+"___"+($mySecondaryVserver -replace "\.","_")
                                 <# if($PrimaryQosGroupName -notmatch ".+___.+$"){
                                     $QosPolicyGroupName=$PrimaryQosGroupName+"___"+($mySecondaryVserver -replace "\.","_")
@@ -3755,20 +3772,23 @@ Function create_update_qospolicy_dr(
                                 }
                                 else
                                 {
-                                    Write-LogDebug "Work in ForClone mode"
-                                    Write-Log "[$workOn] Update QOS Policy Group [$PrimaryQosGroupName]"
-                                    Write-LogDebug "Set-NcQosPolicyGroup -Name $PrimaryQosGroupName -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController"
-                                    $out=Set-NcQosPolicyGroup -Name $PrimaryQosGroupName -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController  -ErrorVariable ErrorVar
+                                    Write-LogDebug "Work in normal mode"
+                                    Write-Log "[$workOn] Update QOS Policy Group [$QosPolicyGroupName]"
+                                    Write-LogDebug "Set-NcQosPolicyGroup -Name $QosPolicyGroupName -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController"
+                                    $out=Set-NcQosPolicyGroup -Name $QosPolicyGroupName -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController  -ErrorVariable ErrorVar
                                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcQosPolicyGroup failed [$ErrorVar]" }
                                 }
                             }
+                        }else{
+                            Write-LogDebug "No need to update this Fixed QOS policy on secondary"
                         }
                     }
                     else 
                     {
                         # QOS Policy group does not exist, create it
+                        Write-LogDebug "QOS Policy does not exists on secondary"
                         if($ForClone.IsPresent -eq $True){
-                            Write-LogDebug "Work in ForClone mode"
+                            Write-LogDebug "Work in normal mode"
                             Write-LogDebug "QOS Policy Group old name [$PrimaryQosGroupName]"
                             $QosPolicyGroupName=$PrimaryQosGroupName+"___"+($mySecondaryVserver -replace "\.","_")
                             Write-LogDebug "QOS Policy Group new name [$QosPolicyGroupName]"
@@ -3787,11 +3807,7 @@ Function create_update_qospolicy_dr(
                             }
                             else
                             {
-                                if($Global:InsideMCC){
-                                    $QosPolicyGroupName=$($PrimaryQosGroupName+"_"+$mySecondaryVserver)
-                                }else{
-                                    $QosPolicyGroupName=$PrimaryQosGroupName
-                                }
+                                
                                 Write-LogDebug "Work in normal mode"
                                 Write-Log "[$workOn] Create QOS Policy Group [$QosPolicyGroupName]" 
                                 # Write-LogDebug "Check existance of QOS"
@@ -3858,8 +3874,10 @@ Function create_update_qospolicy_dr(
                     {
                         if($Global:InsideMCC){
                             $PrimaryQosPolicyGroupOnSVM=$($PrimaryQosPolicyGroupOnSVM+"_"+$mySecondaryVserver)
+                            Write-LogDebug "Working inside MCC so change destination policy for SVM name from [$PrimaryQosPolicyGroupOnSVM] to [$PrimaryQosPolicyGroupOnSVM]"
                         }else{
                             $PrimaryQosPolicyGroupOnSVM=$PrimaryQosPolicyGroupOnSVM
+                            Write-LogDebug "Working outside MCC so destination policy for SVM name is [$PrimaryQosPolicyGroupOnSVM]"
                         }
                         if($PrimaryQosPolicyGroupOnSVM -ne $SecondaryQosPolicyGroupOnSVM)
                         {
@@ -3908,7 +3926,7 @@ Function create_update_qospolicy_dr(
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
                 }else{
                     $PrimaryCredential = get_local_cDotcred($myPrimaryController)
-                    $url=$("https://"+$myPrimaryController.Name+"/api/storage/volumes?svm.name="+$myPrimaryVserver+"&qos.policy.name=!-&fields=qos.policy.name")
+                    $url=$("https://"+$myPrimaryController.Name+"/api/storage/volumes?svm.name="+$myPrimaryVserver+"&qos.policy.name=!-&fields=qos.policy.*")
                     Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck"
                     $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
@@ -3924,10 +3942,10 @@ Function create_update_qospolicy_dr(
                     }else{
                         $PrimaryVolName=$PrimaryVolWithQos.Name
                         $PrimaryVolQosName=$PrimaryVolWithQos.qos.policy.name
-                        if(($null -eq $PrimaryVolWithQos.qos.policy.min_throughput_iops) -and `
-                        ($null -eq $PrimaryVolWithQos.qos.policy.max_throughput_iops) -and `
-                        ($null -eq $PrimaryVolWithQos.qos.policy.min_throughput_mbps) -and `
-                        ($null -eq $PrimaryVolWithQos.qos.policy.max_throughput_mbps)){
+                        if((0 -eq $PrimaryVolWithQos.qos.policy.min_throughput_iops) -and `
+                        (0 -eq $PrimaryVolWithQos.qos.policy.max_throughput_iops) -and `
+                        (0 -eq $PrimaryVolWithQos.qos.policy.min_throughput_mbps) -and `
+                        (0 -eq $PrimaryVolWithQos.qos.policy.max_throughput_mbps)){
                             $isAdaptative=$True
                         }else{
                             $isAdaptative=$False
@@ -3986,8 +4004,10 @@ Function create_update_qospolicy_dr(
                         {
                             if($Global:InsideMCC){
                                 $QosPolicyGroupName=$($PrimaryVolQosName+"_"+$mySecondaryVserver)
+                                Write-LogDebug "Working inside MCC so change destination policy name from [$PrimaryVolQosName] to [$QosPolicyGroupName]"
                             }else{
                                 $QosPolicyGroupName=$PrimaryVolQosName
+                                Write-LogDebug "Working outside MCC so destination policy name is [$QosPolicyGroupName]"
                             }
                             # if($isAdaptative){
                             #     $PrimaryVolQosName=$QosPolicyGroupName
