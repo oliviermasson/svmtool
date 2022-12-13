@@ -2095,11 +2095,12 @@ Function get_vserver_clone(
         if($? -ne $True ) { Write-LogDebug "ERROR: Get-NcVserver failed [$ErrorVar]"; return $null }
         foreach($ClonedVserver in $ListClonedVserver){
             $VserverCloneName=$ClonedVserver.VserverName
-            $listVol=Get-NcVol -VserverContext $VserverCloneName -Query @{VolumeStateAttributes=@{IsVserverRoot=$False}} -controller $mySecondaryController
-            $listClonedVserver=Get-NcVol -VserverContext $VserverCloneName -Query @{VolumeStateAttributes=@{IsVserverRoot=$False}} -controller $mySecondaryController| where-object {$null -ne $_.VolumeCloneAttributes.VolumeCloneParentAttributes.Name}
+            # ! force zapicall because of burt in ONTAP 9.12.1RC1 with GetNcVol and type change in REST records
+            $listVol= Get-NcVol -zapicall -VserverContext $DestinationVserver -Query @{VolumeStateAttributes=@{IsVserverRoot=$False};Vserver=$DestinationVserver} -controller $mySecondaryController 
+            $listClonedVol= Get-NcVol -zapicall -VserverContext $VserverCloneName -Query @{VolumeStateAttributes=@{IsVserverRoot=$False};Vserver=$VserverCloneName} -controller $mySecondaryController | where-object {$null -ne $_.VolumeCloneAttributes.VolumeCloneParentAttributes.Name}
             $countVol=$listVol.count
-            $countClone=$listclonedVserver.count
-            if($DebugLevel){Write-LogDebug "countVol [$countVol] countClone [$countClone]"}
+            $countClone=$listclonedVol.count
+            Write-LogDebug "countVol [$countVol] countClone [$countClone]"
             if($countVol -eq $countClone){
                 Write-LogDebug "Vserver [$VserverCloneName] is a Vserver Clone"
                 $SelectedCloneList+=$VserverCloneName
@@ -3903,12 +3904,13 @@ Function create_update_qospolicy_dr(
                 }else{
                     $VolList=$Selected.volumes
                     Write-LogDebug "Get-NcVol -Name $VolList -Vserver $myPrimaryVserver -Controller $myPrimaryController"
-                    $PrimaryVolList=Get-NcVol -Name $VolList -Vserver $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
+                    $PrimaryVolList= Get-NcVol -Name $VolList -Vserver $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
                 }    
             }else{
                 if($Restore -eq $False){
-                    $PrimaryVolList = Get-NcVol -Controller $myPrimaryController -Vserver $myPrimaryVserver -ErrorVariable ErrorVar
+                    # ! force zapicall because of burt in ONTAP 9.12.1RC1 with GetNcVol and type change in REST records
+                    $PrimaryVolList = Get-NcVol -Zapicall -Query @{VolumeStateAttributes=@{IsVserverRoot=$False}} -Controller $myPrimaryController -Vserver $myPrimaryVserver -ErrorVariable ErrorVar
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
                 }else{
                     if(Test-Path $($Global:JsonPath+"Get-NcVol.json")){
@@ -3952,52 +3954,109 @@ Function create_update_qospolicy_dr(
                         }
                     }
                     Write-LogDebug "Get-NcVol -Name $PrimaryVolName -Vserver $mySecondaryVserver -controller $mySecondaryController"
-                    $mySecondaryVol=Get-NcVol -Name $PrimaryVolName -Vserver $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar
+                    $SecondaryVol= Get-NcVol -Name $PrimaryVolName -Vserver $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
-                    $mySecondaryVolQosName=$mySecondaryVol.VolumeQosAttributes.PolicyGroupName
+                    $SecondaryVolQosName=$SecondaryVol.VolumeQosAttributes.PolicyGroupName
+                    $SecondaryVolUuid=$SecondaryVol.VolumeIdAttributes.Uuid
+                    $CredSecondary=get_local_cDotcred($mySecondaryController)
+
                     if($ForClone.IsPresent -eq $True){
                         Write-LogDebug "QOS Policy Group old name [$PrimaryQosGroupName]"
                         $QosPolicyGroupName=$PrimaryVolQosName+"___"+($mySecondaryVserver -replace "\.","_")
                         Write-LogDebug "QOS Policy Group new name [$QosPolicyGroupName]"
-                        if($QosPolicyGroupName -ne $mySecondaryVolQosName)
+                        if($QosPolicyGroupName -ne $SecondaryVolQosName)
                         {
                             Write-LogDebug "Work in ForClone mode"
                             Write-log "[$workOn] Update Qos Policy Group name [$QosPolicyGroupName] for volume [$PrimaryVolName]"
-                            Write-LogDebug "Get-NcVol -Template -controller $mySecondaryController"
-                            $query=Get-NcVol -Template -controller $mySecondaryController  -ErrorVariable ErrorVar 
-                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
-                            $query.Name=$PrimaryVolName
-                            $query.Vserver=$mySecondaryVserver
-                            Write-LogDebug "Get-NcVol -Template -controller $mySecondaryController"
-                            $attributes=Get-NcVol -Template -controller $mySecondaryController  -ErrorVariable ErrorVar
-                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
-                            Initialize-NcObjectProperty $attributes VolumeQosAttributes
-                            $attributes.VolumeQosAttributes.PolicyGroupName=$QosPolicyGroupName
-                            Write-LogDebug "Update-NcVol -Query `$query -Attributes `$attributes -controller $mySecondaryController"
-                            $out=Update-NcVol -Query $query -Attributes $attributes -controller $mySecondaryController  -ErrorVariable ErrorVar
-                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol failed [$ErrorVar]" }
+                            if($Global:PSTKCall -ne "Rest"){
+                                $query= Get-NcVol -Template -Fill
+                                $query.Name=$PrimaryVolName
+                                $query.Vserver=$mySecondaryVserver
+                                $attributes= Get-NcVol -Template
+                                Initialize-NcObjectProperty $attributes VolumeQosAttributes
+                                $attributes.VolumeQosAttributes.PolicyGroupName=$QosPolicyGroupName
+                                Write-LogDebug "Update-NcVol -Query `$query -Attributes `$attributes -controller $mySecondaryController"
+                                $out=Update-NcVol -Query $query -Attributes $attributes -controller $mySecondaryController  -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol failed [$ErrorVar]" }
+                            }else{
+                                $body=@{
+                                    qos=@{policy=@{name=$QosPolicyGroupName}}
+                                } | ConvertTo-Json
+                                $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$SecondaryVolUuid)
+                                $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                if($? -ne $True){
+                                    Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
+                                }
+                                $JobUuid=$ret.job.uuid
+                                $StartTime=Get-date
+                                $Timeout=$False
+                                While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+                                    $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
+                                    if($JobDetail.JobCompletion -eq "success"){
+                                        $JobDone=$True
+                                    }else{
+                                        $JobStatus=$JobDetail.State
+                                        Write-LogDebug "[$workOn] Update Vol Qos Policy job status [$JobStatus]"
+                                    }
+                                    $CurrentTime=Get-date
+                                    $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+                                    if($TimeSpend -gt 10){
+                                        Write-LogWarn "[$workOn] Update Vol Qos Policy job take too much time. Check in Ontap its status"
+                                        $Timeout=$True
+                                    }
+                                }
+                            }
                         }   
                     }else{
                         if($Global:SINGLE_CLUSTER -eq $True)
                         {
-                            $mySecondaryVolQosName=$mySecondaryVolQosName -replace "$mySecondaryVserver",""
-                            if($PrimaryVolQosName -ne $mySecondaryVolQosName)
+                            $SecondaryVolQosName=$SecondaryVolQosName -replace "$mySecondaryVserver",""
+                            if($PrimaryVolQosName -ne $SecondaryVolQosName)
                             {
                                 Write-LogDebug "Work in SINGLE_CLUSTER mode"
                                 Write-log "[$workOn] Update Qos Policy Group name [$PrimaryVolQosName`_$workOn] for volume [$PrimaryVolName]"
-                                Write-LogDebug "Get-NcVol -Template -controller $mySecondaryController"
-                                $query=Get-NcVol -Template -controller $mySecondaryController  -ErrorVariable ErrorVar 
-                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
-                                $query.Name=$PrimaryVolName
-                                $query.Vserver=$mySecondaryVserver
-                                Write-LogDebug "Get-NcVol -Template -controller $mySecondaryController"
-                                $attributes=Get-NcVol -Template -controller $mySecondaryController  -ErrorVariable ErrorVar
-                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
-                                Initialize-NcObjectProperty $attributes VolumeQosAttributes
-                                $attributes.VolumeQosAttributes.PolicyGroupName=$($PrimaryVolQosName+"_"+$mySecondaryVserver)
-                                Write-LogDebug "Update-NcVol -Query `$query -Attributes `$attributes -controller $mySecondaryController"
-                                $out=Update-NcVol -Query $query -Attributes $attributes -controller $mySecondaryController  -ErrorVariable ErrorVar
-                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol failed [$ErrorVar]" }
+                                if($Global:PSTKCall -ne "Rest"){
+                                    Write-LogDebug "Get-NcVol -Template -controller $mySecondaryController"
+                                    $query= Get-NcVol -Template -Fill 
+                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+                                    $query.Name=$PrimaryVolName
+                                    $query.Vserver=$mySecondaryVserver
+                                    Write-LogDebug "Get-NcVol -Template -controller $mySecondaryController"
+                                    $attributes= Get-NcVol -Template
+                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+                                    Initialize-NcObjectProperty $attributes VolumeQosAttributes
+                                    $attributes.VolumeQosAttributes.PolicyGroupName=$($PrimaryVolQosName+"_"+$mySecondaryVserver)
+                                    Write-LogDebug "Update-NcVol -Query `$query -Attributes `$attributes -controller $mySecondaryController"
+                                    $out=Update-NcVol -Query $query -Attributes $attributes -controller $mySecondaryController  -ErrorVariable ErrorVar
+                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol failed [$ErrorVar]" }
+                                }else{
+                                    $body=@{
+                                        qos=@{policy=@{name=$($PrimaryVolQosName+"_"+$mySecondaryVserver)}}
+                                    } | ConvertTo-Json
+                                    $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$SecondaryVolUuid)
+                                    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                    if($? -ne $True){
+                                        Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
+                                    }
+                                    $JobUuid=$ret.job.uuid
+                                    $StartTime=Get-date
+                                    $Timeout=$False
+                                    While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+                                        $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
+                                        if($JobDetail.JobCompletion -eq "success"){
+                                            $JobDone=$True
+                                        }else{
+                                            $JobStatus=$JobDetail.State
+                                            Write-LogDebug "[$workOn] Update Vol Qos Policy job status [$JobStatus]"
+                                        }
+                                        $CurrentTime=Get-date
+                                        $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+                                        if($TimeSpend -gt 10){
+                                            Write-LogWarn "[$workOn] Update Vol Qos Policy job take too much time. Check in Ontap its status"
+                                            $Timeout=$True
+                                        }
+                                    }
+                                }
                             }    
                         }
                         else
@@ -4012,23 +4071,52 @@ Function create_update_qospolicy_dr(
                             # if($isAdaptative){
                             #     $PrimaryVolQosName=$QosPolicyGroupName
                             # }
-                            if($QosPolicyGroupName -ne $mySecondaryVolQosName)
+                            if($QosPolicyGroupName -ne $SecondaryVolQosName)
                             {
                                 Write-LogDebug "Work in normal mode"
                                 Write-log "[$workOn] Update Qos Policy Group name [$QosPolicyGroupName] for volume [$PrimaryVolName]"
-                                Write-LogDebug "Get-NcVol -Template -controller $mySecondaryController"
-                                $query=Get-NcVol -Template -controller $mySecondaryController  -ErrorVariable ErrorVar 
-                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
-                                $query.Name=$PrimaryVolName
-                                $query.Vserver=$mySecondaryVserver
-                                Write-LogDebug "Get-NcVol -Template -controller $mySecondaryController"
-                                $attributes=Get-NcVol -Template -controller $mySecondaryController  -ErrorVariable ErrorVar
-                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
-                                Initialize-NcObjectProperty $attributes VolumeQosAttributes
-                                $attributes.VolumeQosAttributes.PolicyGroupName=$QosPolicyGroupName
-                                Write-LogDebug "Update-NcVol -Query `$query -Attributes `$attributes -controller $mySecondaryController"
-                                $out=Update-NcVol -Query $query -Attributes $attributes -controller $mySecondaryController  -ErrorVariable ErrorVar
-                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol failed [$ErrorVar]" }
+                                if($Global:PSTKCall -ne "Rest"){
+                                    Write-LogDebug "Get-NcVol -Template -controller $mySecondaryController"
+                                    $query= Get-NcVol -Template -Fill 
+                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+                                    $query.Name=$PrimaryVolName
+                                    $query.Vserver=$mySecondaryVserver
+                                    Write-LogDebug "Get-NcVol -Template -controller $mySecondaryController"
+                                    $attributes= Get-NcVol -Template
+                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+                                    Initialize-NcObjectProperty $attributes VolumeQosAttributes
+                                    $attributes.VolumeQosAttributes.PolicyGroupName=$QosPolicyGroupName
+                                    Write-LogDebug "Update-NcVol -Query `$query -Attributes `$attributes -controller $mySecondaryController"
+                                    $out=Update-NcVol -Query $query -Attributes $attributes -controller $mySecondaryController  -ErrorVariable ErrorVar
+                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol failed [$ErrorVar]" }
+                                }else{
+                                    $body=@{
+                                        qos=@{policy=@{name=$QosPolicyGroupName}}
+                                    } | ConvertTo-Json
+                                    $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$SecondaryVolUuid)
+                                    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                    if($? -ne $True){
+                                        Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
+                                    }
+                                    $JobUuid=$ret.job.uuid
+                                    $StartTime=Get-date
+                                    $Timeout=$False
+                                    While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+                                        $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
+                                        if($JobDetail.JobCompletion -eq "success"){
+                                            $JobDone=$True
+                                        }else{
+                                            $JobStatus=$JobDetail.State
+                                            Write-LogDebug "[$workOn] Update Vol Qos Policy job status [$JobStatus]"
+                                        }
+                                        $CurrentTime=Get-date
+                                        $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+                                        if($TimeSpend -gt 10){
+                                            Write-LogWarn "[$workOn] Update Vol Qos Policy job take too much time. Check in Ontap its status"
+                                            $Timeout=$True
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -4232,13 +4320,14 @@ Try {
         }else{
             $SelectedVolumes=$Selected.volumes
             Write-LogDebug "Get-NcVol -Name $SelectedVolumes -Vserver $myPrimaryVserver -Controller $myPrimaryController"
-            $ListVolumes=Get-NcVol -Name $SelectedVolumes -Vserver $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
+            $ListVolumes= Get-NcVol -Name $SelectedVolumes -Vserver $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
         }    
     }else{
         if($Restore -eq $False){
             Write-LogDebug "Get-NcVol -Vserver $myPrimaryVserver -Controller $myPrimaryController"
-            $ListVolumes = Get-NcVol -Controller $myPrimaryController -Vserver $myPrimaryVserver -ErrorVariable ErrorVar
+            # ! force zapicall because of burt in ONTAP 9.12.1RC1 with GetNcVol and type change in REST records
+            $ListVolumes = Get-NcVol -ZapiCall  -Controller $myPrimaryController -Vserver $myPrimaryVserver -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }  
         }else{
             if(Test-Path $($Global:JsonPath+"Get-NcVol.json")){
@@ -4915,7 +5004,7 @@ Try {
                         $Query.Path = $PrimaryLunPath
                         $SecondaryLunMap = Get-NcLunMap -Query $Query -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcLunMap failed [$ErrorVar]" } 
-                        if ( $SecondaryLunMap -eq $null ) {
+                        if ( $null -eq $SecondaryLunMap ) {
                             Write-Log "[$workOn] Map Lun [$PrimaryLunPath] [$workOn] [$mySecondaryController] on [$PrimaryInitiatorGroup]"
                             Write-LogDebug "Add-NcLunMap -Path $PrimaryLunPath -InitiatorGroup $PrimaryInitiatorGroup -Id $PrimaryLunId -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
                             $out = Add-NcLunMap -Path $PrimaryLunPath -InitiatorGroup $PrimaryInitiatorGroup -Id $PrimaryLunId -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
@@ -4953,7 +5042,7 @@ Try {
                         $PrimaryLunMap = $PrimaryLunMapList | where-object {$_.InitiatorGroup -eq $SecondaryLunMap.InitiatorGroup -and $_.Path -eq $SecondaryLunPath}
                         #$PrimaryLunMap = Get-NcLunMap -Query $Query -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
                         #if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcLunMap failed [$ErrorVar]" } 
-                        if ( $PrimaryLunMap -eq $null ) {
+                        if ( $null -eq $PrimaryLunMap ) {
                             # Unmap the Lun from this igroup
                             Write-LogDebug "Remove-NcLunMap -Path $SecondaryLunPath -InitiatorGroup $SecondaryInitiatorGroup  -VserverContext $mySecondaryVserver -Controller $mySecondaryController -confirm:$False"
                             $out = Remove-NcLunMap -Path $SecondaryLunPath -InitiatorGroup $SecondaryInitiatorGroup  -VserverContext $mySecondaryVserver -Controller $mySecondaryController -confirm:$False 
@@ -5525,20 +5614,52 @@ Try {
     if($Backup -eq $False){
         $PrimaryRootVolExportPolicy=$PrimaryRootVolume.VolumeExportAttributes.Policy
         $SecondaryRootVolExportPolicy=$SecondaryRootVolume.VolumeExportAttributes.Policy
+        $SecondaryVolUuid=$SecondaryRootVolume.VolumeIdAttributes.Uuid
+        $CredSecondary=get_local_cDotcred($mySecondaryController)
+
         Write-LogDebug "PrimaryRootVolumeName [$PrimaryRootVolumeName] SecondaryRootVolumeName [$SecondaryRootVolumeName] PrimaryRootVolExportPolicy [$PrimaryRootVolExportPolicy] SecondaryRootVolExportPolicy [$SecondaryRootVolExportPolicy]" 
         if ( $PrimaryRootVolExportPolicy -ne $SecondaryRootVolExportPolicy ) {
-            Write-Log "[$workOn] Secondary Root Volume [$SecondaryRootVolumeName] use a different export: modify Policy"
-            $attributes = Get-NcVol -Template -Controller $mySecondaryController
-            $attributes.VolumeExportAttributes=$PrimaryRootVolume.VolumeExportAttributes
-            $query=Get-NcVol -Template -Controller $mySecondaryController
-            $query.name=$SecondaryRootVolumeName
-            $query.vserver=$mySecondaryVserver
-            $query.NcController=$mySecondaryController
-            $query_string=$query | Out-String
-            $attributes_string=$attributes | Out-String
-            Write-LogDebug "Update-NcVol -Query $query_string -Attributes $attributes_string -Controller $mySecondaryController"
-            $out=Update-NcVol -Query $query -Attributes $attributes -Controller $mySecondaryController -ErrorVariable ErrorVar 
-            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol Failed: Failed to update root volume $PrimaryVolName [$ErrorVar]" }
+            if($Global:PSTKCall -ne "Rest"){
+                Write-Log "[$workOn] Secondary Root Volume [$SecondaryRootVolumeName] use a different export Policy, need to modify it"
+                $attributes = Get-NcVol -Template 
+                $attributes.VolumeExportAttributes=$PrimaryRootVolume.VolumeExportAttributes
+                $query= Get-NcVol -Template -Fill
+                $query.name=$SecondaryRootVolumeName
+                $query.vserver=$mySecondaryVserver
+                $query.NcController=$mySecondaryController
+                $query_string=$query | Out-String
+                $attributes_string=$attributes | Out-String
+                Write-LogDebug "Update-NcVol -Query $query_string -Attributes $attributes_string -Controller $mySecondaryController"
+                $out=Update-NcVol -Query $query -Attributes $attributes -Controller $mySecondaryController -ErrorVariable ErrorVar 
+                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol Failed: Failed to update root volume $PrimaryVolName [$ErrorVar]" }
+            }else{
+                $body=@{
+                    nas=@{export_policy=@{name=$PrimaryRootVolExportPolicy}}
+                } | ConvertTo-Json
+                $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$SecondaryVolUuid)
+                $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                if($? -ne $True){
+                    Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
+                }
+                $JobUuid=$ret.job.uuid
+                $StartTime=Get-date
+                $Timeout=$False
+                While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+                    $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
+                    if($JobDetail.JobCompletion -eq "success"){
+                        $JobDone=$True
+                    }else{
+                        $JobStatus=$JobDetail.State
+                        Write-LogDebug "[$workOn] Update Vol job status [$JobStatus]"
+                    }
+                    $CurrentTime=Get-date
+                    $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+                    if($TimeSpend -gt 10){
+                        Write-LogWarn "[$workOn] Update Vol job take too much time. Check in Ontap its status"
+                        $Timeout=$True
+                    }
+                }
+            }
         }
     }
     
@@ -5562,18 +5683,32 @@ Try {
             Write-LogDebug "end with error"
             return $False  
         }else{
-            Write-LogDebug "Get-NcVol -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Query `@`{Name=`($Selected.volumes -join `",`"`)`;VolumeIdAttributes=`@`{StyleExtended=`"flexvol|flexgroup`"}}"
-            $PrimaryVolList=Get-NcVol -Query @{Name=$($Selected.volumes -join ",");Vserver=$myPrimaryVserver;VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
-            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+            if($Global:PSTKCall -ne "Rest"){
+                Write-LogDebug "Get-NcVol -Controller $myPrimaryController -Query `@`{Name=`($Selected.volumes -join `",`"`)`;VolumeIdAttributes=`@`{StyleExtended=`"flexvol|flexgroup`"}}"
+                $PrimaryVolList= Get-NcVol -Query @{Name=$($Selected.volumes -join ",");Vserver=$myPrimaryVserver;VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
+                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+            }else{
+                $Cred=get_local_cDotcred($myPrimaryController)
+
+            }
         }    
     }else{
         if($Restore -eq $False){
-            $template=Get-NcVol -Template -Controller $myPrimaryController -Fill
-            $template.VolumeIdAttributes.StyleExtended="flexgroup|flexvol"
-            $template.Vserver=$myPrimaryVserver
-            Write-LogDebug "Get-NcVol -Controller $myPrimaryController -Query $template"
-            $PrimaryVolList = Get-NcVol -Query $template -Controller $myPrimaryController -ErrorVariable ErrorVar
-            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
+            # $query= Get-NcVol -Template -Fill
+            # $query.VolumeIdAttributes.StyleExtended="flexgroup|flexvol"
+            # $query.Vserver=$myPrimaryVserver
+            # Write-LogDebug "Get-NcVol -Controller $myPrimaryController -Query $query"
+            # $PrimaryVolList = Get-NcVol -ZapiCall  -Query $query -Controller $myPrimaryController -ErrorVariable ErrorVar
+            if($Global:PSTKCall -ne "Rest"){
+                Write-LogDebug "Get-NcVol -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Query `@`{VolumeStateAttributes=`@`{IsVserverRoot=$False`}`;VolumeIdAttributes=`@`{StyleExtended=`"flexvol|flexgroup`"}}"
+                $PrimaryVolList =Get-NcVol -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -ErrorVariable ErrorVar
+                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
+            }else{
+                Write-LogDebug "Get-NcVol -ZapiCall -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Query `@`{VolumeStateAttributes=`@`{IsVserverRoot=$False`}`;VolumeIdAttributes=`@`{StyleExtended=`"flexvol|flexgroup`"}}"
+                $PrimaryVolList =Get-NcVol -ZapiCall -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -ErrorVariable ErrorVar
+                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
+            }
+            
         }else{
             if(Test-Path $($Global:JsonPath+"Get-NcVol.json")){
                 $PrimaryVolList=Get-Content $($Global:JsonPath+"Get-NcVol.json") -Raw | ConvertFrom-Json
@@ -5620,7 +5755,7 @@ Try {
                     if($Restore -eq $False){
                         # $PrimaryFlexgroupUuid=$PrimaryVol.VolumeIdAttributes.FlexgroupUuid
                         # Write-LogDebug "Get-NcVol -VserverContext $PrimaryVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended=`"flexgroup`"`}`} -Controller $myPrimaryController"
-                        # $PrimaryFlexgroupMaster=Get-NcVol -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
+                        # $PrimaryFlexgroupMaster= Get-NcVol -ZapiCall  -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
                         $PrimaryFlexgroupMaster=$PrimaryVol
                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup master informations [$PrimaryVolName] [$ErrorVar]" }
                         if($InReverse -eq $False){
@@ -5697,18 +5832,49 @@ Try {
                     }
                     if ( $PrimaryVolExportPolicy -ne $SecondaryVolExportPolicy ) 
                     {
-                        Write-Log "[$workOn] Secondary Volume [$SecondaryVolName] use a different export: modify Policy"
-                        $attributes = Get-NcVol -Template -Controller $mySecondaryController
-                        $attributes.VolumeExportAttributes=$PrimaryVol.VolumeExportAttributes
-                        $query=Get-NcVol -Template -Controller $mySecondaryController
-                        $query.name=$SecondaryVolName
-                        $query.vserver=$mySecondaryVserver
-                        $query.NcController=$mySecondaryController
-                        $query_string=$query | Out-String
-                        $attributes_string=$attributes | Out-String
-                        Write-LogDebug "Update-NcVol -Query $query_string -Attributes $attributes_string -Controller $mySecondaryController"
-                        $out=Update-NcVol -Query $query -Attributes $attributes -Controller $mySecondaryController -ErrorVariable ErrorVar 
-                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol Failed: Failed to update volume $SecondaryVolName [$ErrorVar]" }
+                        if($Global:PSTKCall -ne "Rest"){
+                            Write-Log "[$workOn] Secondary Volume [$SecondaryVolName] use a different export: modify Policy"
+                            $attributes = Get-NcVol -Template
+                            $attributes.VolumeExportAttributes=$PrimaryVol.VolumeExportAttributes
+                            $query= Get-NcVol -Template -Fill
+                            $query.name=$SecondaryVolName
+                            $query.vserver=$mySecondaryVserver
+                            $query.NcController=$mySecondaryController
+                            $query_string=$query | Out-String
+                            $attributes_string=$attributes | Out-String
+                            Write-LogDebug "Update-NcVol -Query $query_string -Attributes $attributes_string -Controller $mySecondaryController"
+                            $out=Update-NcVol -Query $query -Attributes $attributes -Controller $mySecondaryController -ErrorVariable ErrorVar 
+                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol Failed: Failed to update volume $SecondaryVolName [$ErrorVar]" }
+                        }else{
+                            $SecondaryVolUuid=$SecondaryVol.VolumeIdAttributes.Uuid
+                            $CredSecondary=get_local_cDotcred($mySecondaryController)
+                            $body=@{
+                                nas=@{export_policy=@{name=$PrimaryVolExportPolicy}}
+                            } | ConvertTo-Json
+                            $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$SecondaryVolUuid)
+                            $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                            if($? -ne $True){
+                                Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
+                            }
+                            $JobUuid=$ret.job.uuid
+                            $StartTime=Get-date
+                            $Timeout=$False
+                            While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+                                $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
+                                if($JobDetail.JobCompletion -eq "success"){
+                                    $JobDone=$True
+                                }else{
+                                    $JobStatus=$JobDetail.State
+                                    Write-LogDebug "[$workOn] Update Vol job status [$JobStatus]"
+                                }
+                                $CurrentTime=Get-date
+                                $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+                                if($TimeSpend -gt 10){
+                                    Write-LogWarn "[$workOn] Update Vol job take too much time. Check in Ontap its status"
+                                    $Timeout=$True
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -5732,18 +5898,49 @@ Try {
                 
                 if ( $PrimaryVolPercentSnapReserved -ne $SecondaryVolPercentSnapReserved  )
                 {
-                    Write-Log "[$workOn] Secondary Volume [$PrimaryVolName] have a different Percentage for Snapshot Reserved Space. Modify PercentSnapshotReserve" 
-                    $attributes = Get-NcVol -Template -Controller $mySecondaryController
-                    $attributes.VolumeSpaceAttributes=$PrimaryVol.VolumeSpaceAttributes
-                    $query=Get-NcVol -Template -Controller $mySecondaryController
-                    $query.name=$PrimaryVolName
-                    $query.vserver=$mySecondaryVserver
-                    $query.NcController=$mySecondaryController
-                    $query_string=$query | Out-String
-                    $attributes_string=$attributes | Out-String
-                    Write-LogDebug "Update-NcVol -Query $query_string -Attributes $attributes_string -Controller $mySecondaryController"
-                    $out=Update-NcVol -Query $query -Attributes $attributes -Controller $mySecondaryController -ErrorVariable ErrorVar 
-                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol Failed: Failed to update volume $PrimaryVolName [$ErrorVar]" }   
+                    if($Global:PSTKCall -ne "Rest"){
+                        Write-Log "[$workOn] Secondary Volume [$PrimaryVolName] have a different Percentage for Snapshot Reserved Space. Modify PercentSnapshotReserve" 
+                        $attributes = Get-NcVol -Template
+                        $attributes.VolumeSpaceAttributes=$PrimaryVol.VolumeSpaceAttributes
+                        $query= Get-NcVol -Template -Fill
+                        $query.name=$PrimaryVolName
+                        $query.vserver=$mySecondaryVserver
+                        $query.NcController=$mySecondaryController
+                        $query_string=$query | Out-String
+                        $attributes_string=$attributes | Out-String
+                        Write-LogDebug "Update-NcVol -Query $query_string -Attributes $attributes_string -Controller $mySecondaryController"
+                        $out=Update-NcVol -Query $query -Attributes $attributes -Controller $mySecondaryController -ErrorVariable ErrorVar 
+                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol Failed: Failed to update volume $PrimaryVolName [$ErrorVar]" } 
+                    }else{
+                        $SecondaryVolUuid=$SecondaryVol.VolumeIdAttributes.Uuid
+                        $CredSecondary=get_local_cDotcred($mySecondaryController)
+                        $body=@{
+                            space=@{snapshot=@{reserve_percent=$PrimaryVolExportPolicy}}
+                        } | ConvertTo-Json
+                        $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$SecondaryVolUuid)
+                        $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                        if($? -ne $True){
+                            Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
+                        }
+                        $JobUuid=$ret.job.uuid
+                        $StartTime=Get-date
+                        $Timeout=$False
+                        While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+                            $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
+                            if($JobDetail.JobCompletion -eq "success"){
+                                $JobDone=$True
+                            }else{
+                                $JobStatus=$JobDetail.State
+                                Write-LogDebug "[$workOn] Update Vol job status [$JobStatus]"
+                            }
+                            $CurrentTime=Get-date
+                            $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+                            if($TimeSpend -gt 10){
+                                Write-LogWarn "[$workOn] Update Vol job take too much time. Check in Ontap its status"
+                                $Timeout=$True
+                            }
+                        }
+                    }  
                 }
             }
             else 
@@ -5788,8 +5985,8 @@ Try {
     $mySecondaryCluster = (Get-NcCluster -Controller $mySecondaryController  -ErrorVariable ErrorVar ).ClusterName	
     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCluster failed [$ErrorVar]" }
     $DestinationVserverDR=($mySecondaryVserver -Split ("_clone."))[0]
-    Write-LogDebug "Get-NcVol -VserverContext $DestinationVserverDR -Controller $mySecondaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$false};VolumeIdAttributes=@{Type=`"dp`"}}"
-    $DestVolList = Get-NcVol -VserverContext $DestinationVserverDR -Controller $mySecondaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$false};VolumeIdAttributes=@{Type="dp";StyleExtended="flexvol|flexgroup"}} -ErrorVariable ErrorVar  
+    Write-LogDebug "Get-NcVol -Controller $mySecondaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$false};VolumeIdAttributes=@{Type=`"dp`"};Vserver=$DestinationVserverDR}"
+    $DestVolList = Get-NcVol -Controller $mySecondaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$false};VolumeIdAttributes=@{Type="dp";StyleExtended="flexvol|flexgroup"};Vserver=$DestinationVserverDR} -ErrorVariable ErrorVar  
     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
     foreach ( $DestVol in ( $DestVolList | Skip-Null ) ) {
         $DestVolName=$DestVol.Name
@@ -5896,12 +6093,15 @@ Try {
 
      # Get Primary Volumes list
      if($Restore -eq $False){
-        $template=Get-NcVol -Template -Controller $myPrimaryController
-        $template.Vserver=$myPrimaryVserver
-        $template.VolumeIdAttributes.StyleExtended="flexvol|flexgroup"
-        $PrimaryVolList = Get-NcVol -Controller $myPrimaryController -Query $template -ErrorVariable ErrorVar
-        # $PrimaryVolList = Get-NcVol -Controller $myPrimaryController -VserverContext $myPrimaryVserver -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -ErrorVariable ErrorVar  
-        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+        if($Global:PSTKCall -ne "Rest"){
+            Write-LogDebug "Get-NcVol -Controller $myPrimaryController -Query `@`{VolumeStateAttributes=`@`{IsVserverRoot=$False`}`;VolumeIdAttributes=`@`{StyleExtended=`"flexvol|flexgroup`";Type=`"rw`"`}`;Vserver=$myPrimaryVserver`}"
+            $PrimaryVolList = Get-NcVol -Controller $myPrimaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup";Type="rw"};Vserver=$myPrimaryVserver} -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+        }else{
+            Write-LogDebug "Get-NcVol -ZapiCall -Controller $myPrimaryController -Query `@`{VolumeStateAttributes=`@`{IsVserverRoot=$False`}`;VolumeIdAttributes=`@`{StyleExtended=`"flexvol|flexgroup`";Type=`"rw`"`}`;Vserver=$myPrimaryVserver`}"
+            $PrimaryVolList = Get-NcVol -ZapiCall -Controller $myPrimaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup";Type="rw"};Vserver=$myPrimaryVserver} -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+        }
      }else{
         if(Test-Path $($Global:JsonPath+"Get-NcVol.json")){
             $PrimaryVolList=Get-Content $($Global:JsonPath+"Get-NcVol.json") -Raw | ConvertFrom-Json
@@ -6044,6 +6244,7 @@ Try {
                         }
                     }
                     # check this volume Name on secondary SVM
+                    Write-LogDebug "Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $PrimaryVolName "
                     $SecondaryVol = Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $PrimaryVolName  -ErrorVariable ErrorVar 
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
                     if ( $null -eq $SecondaryVol )  {
@@ -6401,7 +6602,7 @@ Try {
                         # If possible, convert destination volumes into encrypted volumes
                         if($Global:AllowEncryption -eq "True"){
                             if($ConversionSupported -eq $True){
-                                $VolDetail=Get-NcVol -Name $PrimaryVolName -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                $VolDetail= Get-NcVol -Name $PrimaryVolName -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
                                 if($? -ne $True){$Return=$False; Write-Error "Failed to get volume detail"}
                                 $IsEncrypted=$VolDetail.Encrypt
                                 if($null -eq $IsEncrypted){$IsEncrypted=$False}
@@ -6446,22 +6647,22 @@ Try {
 
                 if($Restore -eq $False){
                     Write-Log "[$workon] Process a Flexgroup volume [$PrimaryVolName]"
-                    # get all flexgroup constituent informations
-                    $PrimaryFlexgroupUuid=$PrimaryVol.VolumeIdAttributes.FlexgroupUuid
-                    if($Global:PSTKCall -ne "Rest"){
-                        Write-LogDebug "Get-NcVol -VserverContext $PrimaryVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended=`"flexgroup_constituent`"`}`} -Controller $myPrimaryController"
-                        $PrimaryFlexgroupConstituent=Get-NcVol -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup_constituent"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
-                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup constituent informations [$PrimaryVolName] [$ErrorVar]" }
-                        $ConstituentSizeByte=$PrimaryFlexgroupConstituent[0].TotalSize
-                    }else{
-                        $PrimaryFlexgroupConstituent=$PrimaryVol.Constituents
-                        $ConstituentSizeByte=$PrimaryVol.Constituents[0].Space.Size
-                    }
-                    $NumberFlexgroupConstituent=($PrimaryFlexgroupConstituent | Measure-Object).Count
+                    # # get all flexgroup constituent informations
+                    # $PrimaryFlexgroupUuid=$PrimaryVol.VolumeIdAttributes.FlexgroupUuid
+                    # if($Global:PSTKCall -ne "Rest"){
+                    #     Write-LogDebug "Get-NcVol -VserverContext $PrimaryVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended=`"flexgroup_constituent`"`}`} -Controller $myPrimaryController"
+                    #     $PrimaryFlexgroupConstituent= Get-NcVol -ZapiCall  -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup_constituent"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
+                    #     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup constituent informations [$PrimaryVolName] [$ErrorVar]" }
+                    #     $ConstituentSizeByte=$PrimaryFlexgroupConstituent[0].TotalSize
+                    # }else{
+                    #     $PrimaryFlexgroupConstituent=$PrimaryVol.Constituents
+                    #     $ConstituentSizeByte=$PrimaryVol.Constituents[0].Space.Size
+                    # }
+                    # $NumberFlexgroupConstituent=($PrimaryFlexgroupConstituent | Measure-Object).Count
                     
-                    # Write-LogDebug "Get-NcVol -VserverContext $PrimaryVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended=`"flexgroup`"`}`} -Controller $myPrimaryController"
-                    # $PrimaryFlexgroupMaster=Get-NcVol -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
-                    # if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup master informations [$PrimaryVolName] [$ErrorVar]" }
+                    # # Write-LogDebug "Get-NcVol -VserverContext $PrimaryVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended=`"flexgroup`"`}`} -Controller $myPrimaryController"
+                    # # $PrimaryFlexgroupMaster= Get-NcVol -ZapiCall  -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
+                    # # if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup master informations [$PrimaryVolName] [$ErrorVar]" }
                     $SecondaryFlexgroupMasterName=$($PrimaryVolName+'_dst')
                     $PrimaryFlexgroupMasterName=$PrimaryVolName
                     $PrimaryFlexgroupMasterState=$PrimaryVolState
@@ -6619,8 +6820,13 @@ Try {
 	$Return = $True
 	Write-LogDebug "[$mySecondaryVserver]: start"
     if($Source -eq $False){
-        $SecondaryVolList = Get-NcVol -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"};Vserver=$mySecondaryVserver;VolumeStateAttributes=@{IsVserverRoot=$false}} -ErrorVariable ErrorVar  
-	    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
+        if($Global:PSTKCall -eq "Rest"){
+            $SecondaryVolList = Get-NcVol -ZapiCall  -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"};Vserver=$mySecondaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False}} -ErrorVariable ErrorVar  
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
+        }else{
+            $SecondaryVolList = Get-NcVol -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"};Vserver=$mySecondaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False}} -ErrorVariable ErrorVar  
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+        }
 	    foreach ( $SecondaryVol in ( $SecondaryVolList | Skip-Null ) ) {
 		    $SecondaryVolIsVserverRoot=$SecondaryVol.VolumeStateAttributes.IsVserverRoot
             $SecondaryVolState=$SecondaryVol.State 
@@ -6639,8 +6845,15 @@ Try {
             }
 	    }
 	
-	    $SecondaryVolList = Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver  -ErrorVariable ErrorVar
-	    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
+        if($Global:PSTKCall -eq "Rest"){
+            Write-LogDebug "Get-NcVol -ZapiCall -Query `@`{VolumeStateAttributes=`@`{IsVserverRoot=$False`}`;VolumeIdAttributes=`@`{StyleExtended=`"flexvol|flexgroup`";Type=`"dp`"`}`;Vserver=$mySecondaryController`} -Controller $mySecondaryController"
+            $SecondaryVolList = Get-NcVol -ZapiCall -Query @{VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup";Type="dp"};Vserver=$mySecondaryVserver} -Controller $mySecondaryController  -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
+        }else{
+            Write-LogDebug "Get-NcVol -Controller $mySecondaryController -Query `@`{VolumeStateAttributes=`@`{IsVserverRoot=$False`}`;VolumeIdAttributes=`@`{StyleExtended=`"flexvol|flexgroup`";Type=`"dp`"`}`;Vserver=$mySecondaryController`}"
+            $SecondaryVolList = Get-NcVol -Controller $mySecondaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup";Type="dp"};Vserver=$mySecondaryVserver} -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
+        }
 	    foreach ( $SecondaryVol in ( $SecondaryVolList | Skip-Null ) ) {
 		    $SecondaryVolIsVserverRoot=$SecondaryVol.VolumeStateAttributes.IsVserverRoot
 		    if ( $SecondaryVolIsVserverRoot -eq $True ) {
@@ -6658,8 +6871,13 @@ Try {
 		    }
 	    }
     }else{
-        $PrimaryVolList = Get-NcVol -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"};Vserver=$myPrimaryVserver;VolumeStateAttributes=@{IsVserverRoot=$false}} -ErrorVariable ErrorVar  
-	    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
+        if($Global:PSTKCall -eq "Rest"){
+            $PrimaryVolList = Get-NcVol -ZapiCall  -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"};Vserver=$myPrimaryVserver;VolumeStateAttributes=@{IsVserverRoot=$false}} -ErrorVariable ErrorVar  
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
+        }else{
+            $PrimaryVolList = Get-NcVol -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"};Vserver=$myPrimaryVserver;VolumeStateAttributes=@{IsVserverRoot=$false}} -ErrorVariable ErrorVar  
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
+        }
 	    foreach ( $PrimaryVol in ( $PrimaryVolList | Skip-Null ) ) {
 		    $PrimaryVolIsVserverRoot=$PrimaryVol.VolumeStateAttributes.IsVserverRoot
             $PrimaryVolState=$PrimaryVol.State
@@ -6678,9 +6896,13 @@ Try {
                 return $False	
             }
 	    }
-	
-	    $PrimaryVolList = Get-NcVol -Controller $myPrimaryController -Vserver $myPrimaryVserver  -ErrorVariable ErrorVar
-	    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
+        if($Global:PSTKCall -eq "Rest"){
+            $PrimaryVolList = Get-NcVol -ZapiCall  -Controller $myPrimaryController -Vserver $myPrimaryVserver  -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
+        }else{
+            $PrimaryVolList = Get-NcVol -Controller $myPrimaryController -Vserver $myPrimaryVserver  -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
+        }
 	    foreach ( $PrimaryVol in ( $PrimaryVolList | Skip-Null ) ) {
 		    $PrimaryVolIsVserverRoot=$PrimaryVol.VolumeStateAttributes.IsVserverRoot
 		    if ( $PrimaryVolIsVserverRoot -eq $True ) {
@@ -6734,8 +6956,8 @@ Try {
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCluster failed [$ErrorVar]" }
     # Get volumes mounted under the root (/) of the vserver namespace. So volume with JunctionParentName = RootVolumeName
     if($Global:PSTKCall -ne "Rest"){
-        Write-LogDebug "Get-NcVol -VserverContext $myVserver -Query @{VolumeIdAttributes=@{JunctionParentName=""$RootVolumeName""};Vserver=""$myVserver"";VolumeStateAttributes=@{State=online;IsVserverRoot=false}} -Controller $myController"
-        $VolListNotNested=Get-NcVol -VserverContext $myVserver -Query @{VolumeIdAttributes=@{JunctionParentName="$RootVolumeName"};Vserver=$myVserver;VolumeStateAttributes=@{State="online";IsVserverRoot=$false}} -Controller $myController -ErrorVariable ErrorVar
+        Write-LogDebug "Get-NcVol -VserverContext $myVserver -Query @{VolumeIdAttributes=@{JunctionParentName=""$RootVolumeName"";StyleExtended=""flexvol|flexgroup""};Vserver=""$myVserver"";VolumeStateAttributes=@{State=online;IsVserverRoot=false}} -Controller $myController"
+        $VolListNotNested= Get-NcVol -VserverContext $myVserver -Query @{VolumeIdAttributes=@{JunctionParentName="$RootVolumeName";StyleExtended="flexvol|flexgroup"};Vserver=$myVserver;VolumeStateAttributes=@{State="online";IsVserverRoot=$false}} -Controller $myController -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get NotNested Volumes failed [$ErrorVar]" }
     }else{
         $url=$("https://"+$myController.Name+"/api/storage/volumes?svm.name="+$myVserver+"&nas.junction_parent.name="+$RootVolumeName+"&fields=name,nas.path,nas.junction_parent.name,style,nas.unix_permissions")
@@ -6763,16 +6985,15 @@ Try {
         $vol_detail.IsNested=$False
         $vol_detail.ParentPath= ""
         if($volExtendStyle -match "flexgroup"){
-            if($Global:PSTKCall -ne "Rest"){
-                $volFlexgroupUuid=$vol.VolumeIdAttributes.FlexgroupUuid
-                Write-LogDebug "Get-NcVol -VserverContext $myVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$volFlexgroupUuid;StyleExtended=`"flexgroup`"`}`} -Controller $myController"
-                $PrimaryFlexgroupMaster=Get-NcVol -VserverContext $myVserver -Query @{Vserver=$myVserver;VolumeIdAttributes=@{FlexgroupUuid=$volFlexgroupUuid;StyleExtended="flexgroup"}} -Controller $myController -ErrorVariable ErrorVar
-                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup master informations [$($vol_detail.Name)] [$ErrorVar]" }
-            }else{
-                $PrimaryFlexgroupMaster=$vol_detail
-            }
-            $SecondaryName=$($PrimaryFlexgroupMaster.Name+'_dst')
-            $vol_detail.Name=$PrimaryFlexgroupMaster.Name
+            # if($Global:PSTKCall -ne "Rest"){
+            #     $volFlexgroupUuid=$vol.VolumeIdAttributes.FlexgroupUuid
+            #     Write-LogDebug "Get-NcVol -VserverContext $myVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$volFlexgroupUuid;StyleExtended=`"flexgroup`"`}`} -Controller $myController"
+            #     $PrimaryFlexgroupMaster= Get-NcVol -ZapiCall  -VserverContext $myVserver -Query @{Vserver=$myVserver;VolumeIdAttributes=@{FlexgroupUuid=$volFlexgroupUuid;StyleExtended="flexgroup"}} -Controller $myController -ErrorVariable ErrorVar
+            #     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup master informations [$($vol_detail.Name)] [$ErrorVar]" }
+            # }else{
+            #     $PrimaryFlexgroupMaster=$vol_detail
+            # }
+            $SecondaryName=$(vol_detail.Name+'_dst')
             $vol_detail.IsFlexgroup=$True
         }else{
             $vol_detail.IsFlexgroup=$False
@@ -6815,9 +7036,9 @@ Try {
     }
     # Get volume mounted but not under the SVM rootvolume, under / : the root of vserver namespace
     if($Global:PSTKCall -ne "Rest"){
-    Write-LogDebug "Get-NcVol -VserverContext $myVserver -Query @{VolumeStateAttributes=@{IsVserverRoot=$false;State=""online""};VolumeIdAttributes=@{JunctionParentName=""!$RootVolumeName"";JunctionPath=""!-,!/""}} -Controller $myController"
-    $VolListNested=Get-NcVol -VserverContext $myVserver -Query @{VolumeIdAttributes=@{JunctionParentName="!$RootVolumeName";JunctionPath="!-,!/"};Vserver=$myVserver;VolumeStateAttributes=@{IsVserverRoot=$false;State="online"}} -Controller $myController -ErrorVariable ErrorVar
-    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get Nested Volumes failed [$ErrorVar]" }
+        Write-LogDebug "Get-NcVol -VserverContext $myVserver -Query @{VolumeStateAttributes=@{IsVserverRoot=$false;State=""online""};VolumeIdAttributes=@{JunctionParentName=""!$RootVolumeName"";JunctionPath=""!-,!/""};StyleExtended=""flexvol|flexgroup""} -Controller $myController"
+        $VolListNested= Get-NcVol VserverContext $myVserver -Query @{VolumeIdAttributes=@{JunctionParentName="!$RootVolumeName";JunctionPath="!-,!/";StyleExtended="flexvol|flexgroup"};Vserver=$myVserver;VolumeStateAttributes=@{IsVserverRoot=$false;State="online"}} -Controller $myController -ErrorVariable ErrorVar
+        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get Nested Volumes failed [$ErrorVar]" }
     }else{
         $url=$("https://"+$myController.Name+"/api/storage/volumes?svm.name="+$myVserver+"&nas.path=!-,!/&nas.junction_parent.name=!"+$RootVolumeName+"&fields=name,nas.path,nas.junction_parent.name,style,nas.unix_permissions")
         Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck"
@@ -6844,16 +7065,15 @@ Try {
             $vol_detail.JunctionParent=$vol.nas.junction_parent.name
         }
         if($volExtendStyle -match "flexgroup"){
-            if($Global:PSTKCall -ne "Rest"){
-                $volFlexgroupUuid=$vol.VolumeIdAttributes.FlexgroupUuid
-                Write-LogDebug "Get-NcVol -VserverContext $myVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$volFlexgroupUuid;StyleExtended=`"flexgroup`"`}`} -Controller $myController"
-                $PrimaryFlexgroupMaster=Get-NcVol -VserverContext $myVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$volFlexgroupUuid;StyleExtended="flexgroup"};Vserver=$myVserver} -Controller $myController -ErrorVariable ErrorVar
-                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup master informations [$($vol_detail.Name)] [$ErrorVar]" }
-            }else{
-                $PrimaryFlexgroupMaster=$vol_detail
-            }
-            $SecondaryName=$($PrimaryFlexgroupMaster.Name+'_dst')
-            $vol_detail.Name=PrimaryFlexgroupMaster.Name
+            # if($Global:PSTKCall -ne "Rest"){
+            #     $volFlexgroupUuid=$vol.VolumeIdAttributes.FlexgroupUuid
+            #     Write-LogDebug "Get-NcVol -VserverContext $myVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$volFlexgroupUuid;StyleExtended=`"flexgroup`"`}`} -Controller $myController"
+            #     $PrimaryFlexgroupMaster= Get-NcVol -VserverContext $myVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$volFlexgroupUuid;StyleExtended="flexgroup"};Vserver=$myVserver} -Controller $myController -ErrorVariable ErrorVar
+            #     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup master informations [$($vol_detail.Name)] [$ErrorVar]" }
+            # }else{
+            #     $PrimaryFlexgroupMaster=$vol_detail
+            # }
+            $SecondaryName=$($vol_detail.Name+'_dst')
             $vol_detail.IsFlexgroup=$True
         }else{
             $vol_detail.IsFlexgroup=$False
@@ -7263,7 +7483,7 @@ Try {
     	    Write-LogError "ERROR: analyse_junction_path" 
 		    #clean_and_exit 1
 	    }
-        #$SecondaryVolList = Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver  -ErrorVariable ErrorVar 
+        #$SecondaryVolList = Get-NcVol -ZapiCall  -Controller $mySecondaryController -Vserver $mySecondaryVserver  -ErrorVariable ErrorVar 
 	    #if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
 	    #foreach ( $SecondaryVol in ( $SecondaryVolList | Skip-Null ) ) {
         foreach ( $SecondaryVol in ( ($Script:vol_junction_dest | Sort-Object -Descending -Property Level).Name ) ) {
@@ -7281,7 +7501,7 @@ Try {
     	    Write-LogError "ERROR: analyse_junction_path" 
 		    #clean_and_exit 1
 	    }
-        #$PrimaryVolList = Get-NcVol -Controller $myPrimaryController -Vserver $myPrimaryVserver  -ErrorVariable ErrorVar 
+        #$PrimaryVolList = Get-NcVol -ZapiCall  -Controller $myPrimaryController -Vserver $myPrimaryVserver  -ErrorVariable ErrorVar 
 	    #if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
 	    #foreach ( $PrimaryVol in ( $PrimaryVolList | Skip-Null ) ) {
         foreach ( $PrimaryVol in ( ($Script:vol_junction | Sort-Object -Descending -Property Level).Name ) ) {
@@ -7910,13 +8130,19 @@ Try {
         }else{
             $VolList=$Selected.volumes
             Write-LogDebug "Get-NcVol -Name $VolList -Vserver $myPrimaryVserver -Controller $myPrimaryController"
-            $PrimaryVolList=Get-NcVol -Name $VolList -Vserver $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
+            $PrimaryVolList= Get-NcVol -Name $VolList -Vserver $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
         }    
     }else{
-        Write-LogDebug "Get-NcVol -Vserver $myPrimaryVserver -Controller $myPrimaryController"
-        $PrimaryVolList = Get-NcVol -Controller $myPrimaryController -VserverContext $myPrimaryVserver -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -ErrorVariable ErrorVar
-        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }  
+        if($Global:PSTKCall -eq "Rest"){
+            Write-LogDebug "Get-NcVol -ZapiCall -Vserver $myPrimaryVserver -Controller $myPrimaryController"
+            $PrimaryVolList = Get-NcVol -ZapiCall  -Controller $myPrimaryController -VserverContext $myPrimaryVserver -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
+        }else{
+            Write-LogDebug "Get-NcVol -Vserver $myPrimaryVserver -Controller $myPrimaryController"
+            $PrimaryVolList = Get-NcVol -Controller $myPrimaryController -VserverContext $myPrimaryVserver -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
+        } 
     }
 
     # iterates on the list of primary volumes available or selected
@@ -8213,20 +8439,20 @@ Try {
             }
         }else{
             Write-LogDebug "[$workon] Process a Flexgroup volume and all its constituent [$PrimaryVolName]"
-            # get all constituent informations
-            $PrimaryFlexgroupUuid=$PrimaryVol.VolumeIdAttributes.FlexgroupUuid
-            Write-LogDebug "Get-NcVol -VserverContext $PrimaryVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended=`"flexgroup_constituent`"`}`} -Controller $myPrimaryController"
-            $PrimaryFlexgroupConstituent=Get-NcVol -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup_constituent"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
-            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup constituent informations [$PrimaryVolName] [$ErrorVar]" }
-            $NumberFlexgroupConstituent=($PrimaryFlexgroupConstituent | Measure-Object).Count
-            $ConstituentSizeByte=$PrimaryFlexgroupConstituent[0].TotalSize
-            Write-LogDebug "Get-NcVol -VserverContext $PrimaryVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended=`"flexgroup`"`}`} -Controller $myPrimaryController"
-            $PrimaryFlexgroupMaster=Get-NcVol -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
-            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup master informations [$PrimaryVolName] [$ErrorVar]" }
-            $SecondaryFlexgroupMasterName=$($PrimaryFlexgroupMaster.Name+'_dst')
-            $PrimaryFlexgroupMasterName=$PrimaryFlexgroupMaster.Name
+            # # get all constituent informations
+            # $PrimaryFlexgroupUuid=$PrimaryVol.VolumeIdAttributes.FlexgroupUuid
+            # Write-LogDebug "Get-NcVol -VserverContext $PrimaryVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended=`"flexgroup_constituent`"`}`} -Controller $myPrimaryController"
+            # $PrimaryFlexgroupConstituent= Get-NcVol -ZapiCall  -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup_constituent"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
+            # if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup constituent informations [$PrimaryVolName] [$ErrorVar]" }
+            # $NumberFlexgroupConstituent=($PrimaryFlexgroupConstituent | Measure-Object).Count
+            # $ConstituentSizeByte=$PrimaryFlexgroupConstituent[0].TotalSize
+            # Write-LogDebug "Get-NcVol -VserverContext $PrimaryVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended=`"flexgroup`"`}`} -Controller $myPrimaryController"
+            # $PrimaryFlexgroupMaster= Get-NcVol -ZapiCall  -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
+            # if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup master informations [$PrimaryVolName] [$ErrorVar]" }
+            $SecondaryFlexgroupMasterName=$($PrimaryVolName+'_dst')
+            $PrimaryFlexgroupMasterName=$PrimaryVolName
             Write-LogDebug "Get-NcVol -Name $PrimaryFlexgroupMasterName -Vserver $myPrimaryVserver -Controller $myPrimaryController"
-            $PrimaryFlexgroup=Get-NcVol -Name $PrimaryFlexgroupMasterName -Vserver $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
+            $PrimaryFlexgroup= Get-NcVol -Name $PrimaryFlexgroupMasterName -Vserver $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
             $PrimaryFlexgroupState=$PrimaryFlexgroup.State
             $PrimaryFlexgroupType=$PrimaryFlexgroup.VolumeIdAttributes.Type
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
@@ -9817,7 +10043,7 @@ Try {
     }
     if($Backup -eq $True){
         $PrimaryQtrees | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcQtree.json") -Encoding ASCII -Width 65535
-        if( ($ret=get-item $($Global:JsonPath+"Get-NcQtree.json") -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcQtree.json") -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$($Global:JsonPath+"Get-NcQtree.json") saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcQtree.json")"
@@ -9836,7 +10062,7 @@ Try {
             $Volume=$qtree.Volume
             
             if($Restore -eq $False){
-                $VolumeDetails=Get-NcVol -Name $Volume -Vserver $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
+                $VolumeDetails= Get-NcVol -Name $Volume -Vserver $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
                 if($VolumeDetails.VolumeIdAttributes.StyleExtended -eq "flexgroup"){
                     $Volume=$($Volume+"_dst")
                     Write-LogDebug "Flexgroup on source so volume name on secondary is [$Volume] "
@@ -9861,7 +10087,7 @@ Try {
             Write-LogDebug "Get-NcQtree -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Volume $Volume -Qtree $QName"
             $SecQtree=Get-NcQtree -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Volume $Volume -Qtree $QName -ErrorVariable ErrorVar
             if($? -ne $True){$Return=$False;Throw "ERROR: Failed to get Qtree [$QName] on [$mySecondaryVserver] reason [$ErrorVar]"}
-            if($SecQtree -eq $null){
+            if($null -eq $SecQtree){
                 Write-Log "[$workOn] Create Qtree [$QName] on Volume [$Volume]"
                 Write-LogDebug "New-NcQtree -Volume /vol/$Volume/$QName -Mode $Mode -SecurityStyle $SecStyle -Oplocks $Oplocks -ExportPolicy $ExportPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
                 $ret=New-NcQtree -Volume $("/vol/"+$Volume+"/"+$QName) -Mode $Mode -SecurityStyle $SecStyle -Oplocks $Oplocks -ExportPolicy $ExportPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar 
@@ -9922,7 +10148,7 @@ Try {
     }
     if($Backup -eq $True){
         $PrimaryQtrees | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcQtree.json") -Encoding ASCII -Width 65535
-        if( ($ret=get-item $($Global:JsonPath+"Get-NcQtree.json") -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcQtree.json") -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$($Global:JsonPath+"Get-NcQtree.json") saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcQtree.json")"
@@ -9934,7 +10160,7 @@ Try {
             $QName=$qtree.Qtree
             $ExportPolicy=$qtree.ExportPolicy
             $Volume=$qtree.Volume
-            $PrimaryVolumeType=(Get-NcVol -Name $Volume -Vserver $myPrimaryVserver -Controller $myPrimaryController).VolumeIdAttributes.StyleExtended
+            $PrimaryVolumeType= (Get-NcVol -ZapiCall  -Name $Volume -Vserver $myPrimaryVserver -Controller $myPrimaryController).VolumeIdAttributes.StyleExtended
             if($PrimaryVolumeType -eq "flexgroup"){
                 $SecondaryVolumeName=$($Volume+"_dst")
                 Write-LogDebug "Working on flexgroup volume on destination [$SecondaryVolumeName]"
@@ -10567,7 +10793,7 @@ Try {
                 Write-Log "[$workOn] LDAP Client created successfully"
             }
 
-            # ! only with ZAPICALL because with REST call create a new LDAP client configuration also create and attach an LDAP config service automatically
+            # ! only with ZapiCall because with REST call create a new LDAP client configuration also create and attach an LDAP config service automatically
             if($Global:PSTKCall -ne "Rest"){
                 Write-LogDebug "Get-NcLdapConfig -vserver $mySecondaryVserver -controller $mySecondaryController"
                 $SecondaryLdapConfig=Get-NcLdapConfig -vserver $mySecondaryVserver -controller $mySecondaryController -ErrorVariable ErrorVar
@@ -12338,13 +12564,19 @@ Function show_vserver_dr (
                 }else{
                     $VolList=$Selected.volumes
                     Write-LogDebug "Get-NcVol -Name $VolList -Vserver $myPrimaryVserver -Controller $myPrimaryController"
-                    $PrimaryVolList=Get-NcVol -Name $VolList -Vserver $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
+                    $PrimaryVolList= Get-NcVol -Name $VolList -Vserver $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
                 }    
             }else{
-                Write-LogDebug "Get-NcVol -Vserver $myPrimaryVserver -Controller $myPrimaryController"
-                $PrimaryVolList = Get-NcVol -Controller $myPrimaryController -Query @{Vserver=$myPrimaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False}} -ErrorVariable ErrorVar
-                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }  
+                if($Global:PSTKCall -eq "Rest"){
+                    Write-LogDebug "Get-NcVol -ZapiCall -Vserver $myPrimaryVserver -Controller $myPrimaryController -Query @{Vserver=$myPrimaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended=""flexvol|flexgroup""}}"
+                    $PrimaryVolList = Get-NcVol -ZapiCall  -Controller $myPrimaryController -Query @{Vserver=$myPrimaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }  
+                }else{
+                    Write-LogDebug "Get-NcVol -Vserver $myPrimaryVserver -Controller $myPrimaryController -Query @{Vserver=$myPrimaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended=""flexvol|flexgroup""}}"
+                    $PrimaryVolList = Get-NcVol  -Controller $myPrimaryController -Query @{Vserver=$myPrimaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
+                }
             }
             $NumberOfVolumes=$PrimaryVolList.count
             Format-ColorBrackets "VOLUME LIST [$NumberOfVolumes] : "
@@ -12422,8 +12654,13 @@ Function show_vserver_dr (
         } 
         elseif ( $null -ne $SecondaryVserver ) 
         {
-            Write-LogDebug "Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver"
-            $SecondaryVolList = Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver  -ErrorVariable ErrorVar 
+            if($Global:PSTKCall -eq "Rest"){
+                Write-LogDebug "Get-NcVol -ZapiCall -Controller $mySecondaryController -Vserver $mySecondaryVserver -Query @{VolumeIdAttributes=@{StyleExtended=""flexvol|flexgroup""};Vserver=$mySecondaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False}}"
+                $SecondaryVolList = Get-NcVol -ZapiCall  -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"};Vserver=$mySecondaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False}} -ErrorVariable ErrorVar  
+            }else{
+                Write-LogDebug "Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Query @{VolumeIdAttributes=@{StyleExtended=""flexvol|flexgroup""};Vserver=$mySecondaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False}}"
+                $SecondaryVolList = Get-NcVol -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"};Vserver=$mySecondaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False}} -ErrorVariable ErrorVar   
+            }
             foreach ($SecondaryVol in ( $SecondaryVolList | Skip-Null | ? { $_.VolumeStateAttributes.IsVserverRoot -ne $True  } ) ) {
                 Write-LogDebug "SecondaryVol [$SecondaryVol]"
                 $SecondaryVolName=$SecondaryVol.Name
@@ -13169,13 +13406,19 @@ Try {
         $vfrEnable=$False
     }
 
-    Write-LogDebug "Get-NcVol -VserverContext $mySecondaryVserver -Query @{VolumeStateAttributes=@{IsVserverRoot=$false;State="online"}} -Controller $mySecondaryController"
-    $VolList=Get-NcVol -VserverContext $mySecondaryVserver -Query @{VolumeStateAttributes=@{IsVserverRoot=$false;State="online"}} -Controller $mySecondaryController -ErrorVariable ErrorVar
-    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+    if($Global:PSTKCall -eq "Rest"){
+        Write-LogDebug "Get-NcVol -zapicall -VserverContext $mySecondaryVserver -Query @{VolumeStateAttributes=@{IsVserverRoot=$false;State="online"};VolumeIdAttributes=@{StyleExtended=""flexvol|flexgroup""}} -Controller $mySecondaryController"
+        $VolList= Get-NcVol -ZapiCall  -VserverContext $mySecondaryVserver -Query @{VolumeStateAttributes=@{IsVserverRoot=$false;State="online"};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -Controller $mySecondaryController -ErrorVariable ErrorVar
+        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+    }else{
+        Write-LogDebug "Get-NcVol -VserverContext $mySecondaryVserver -Query @{VolumeStateAttributes=@{IsVserverRoot=$false;State="online"};VolumeIdAttributes=@{StyleExtended=""flexvol|flexgroup""}} -Controller $mySecondaryController"
+        $VolList= Get-NcVol  -VserverContext $mySecondaryVserver -Query @{VolumeStateAttributes=@{IsVserverRoot=$false;State="online"};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -Controller $mySecondaryController -ErrorVariable ErrorVar
+        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+    }
     foreach ( $vol in ( $VolList  | Skip-Null ) ) {
         $VolName=$vol.Name
         $DestMSID=$vol.VolumeIdAttributes.Msid
-        $SourceVol=Get-NcVol -Name $VolName -Vserver $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
+        $SourceVol= Get-NcVol -Name $VolName -Vserver $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
         $SourceMSID=$SourceVol.VolumeIdAttributes.Msid
         if($DestMSID -ne $SourceMSID){
@@ -13251,9 +13494,15 @@ Try {
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Unlock-NcVserver failed [$ErrorVar]" }
     }
     if($volume.Count -eq 0){
-        Write-LogDebug "Get-NcVol -VserverContext $mySecondaryVserver -Query @{VolumeStateAttributes=@{IsVserverRoot=$false;State="online"}} -Controller $mySecondaryController"
-        $VolList=Get-NcVol -VserverContext $mySecondaryVserver -Query @{VolumeStateAttributes=@{IsVserverRoot=$false;State="online"}} -Controller $mySecondaryController -ErrorVariable ErrorVar
-        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+        if($Global:PSTKCall -eq "Rest"){
+            Write-LogDebug "Get-NcVol -ZapiCall -VserverContext $mySecondaryVserver -Query @{VolumeStateAttributes=@{IsVserverRoot=$false;State="online"};VolumeIdAttributes=@{StyleExtended=""flexvol|flexgroup""}} -Controller $mySecondaryController"
+            $VolList= Get-NcVol -ZapiCall  -VserverContext $mySecondaryVserver -Query @{VolumeStateAttributes=@{IsVserverRoot=$false;State="online"};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -Controller $mySecondaryController -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+        }else{
+            Write-LogDebug "Get-NcVol -VserverContext $mySecondaryVserver -Query @{VolumeStateAttributes=@{IsVserverRoot=$false;State="online"};VolumeIdAttributes=@{StyleExtended=""flexvol|flexgroup""}} -Controller $mySecondaryController"
+            $VolList= Get-NcVol  -VserverContext $mySecondaryVserver -Query @{VolumeStateAttributes=@{IsVserverRoot=$false;State="online"};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -Controller $mySecondaryController -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+        }
     }else{
         $VolList=$volume
     }
@@ -13262,7 +13511,7 @@ Try {
         $JunctionPath=$vol.VolumeIdAttributes.JunctionPath
         $destMSID=$vol.VolumeIdAttributes.Msid
         Write-LogDebug "Get-NcVol -Vserver $myPrimaryVserver -Name $VolName -Controller $myPrimaryController"
-        $sourceVol=Get-NcVol -Vserver $myPrimaryVserver -Name $VolName -Controller $myPrimaryController -ErrorVariable ErrorVar
+        $sourceVol= Get-NcVol -Vserver $myPrimaryVserver -Name $VolName -Controller $myPrimaryController -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
         $sourceMSID=$sourceVol.VolumeIdAttributes.Msid
 		
@@ -13277,10 +13526,10 @@ Try {
             $QOSPolModified=$False
             $QOSPolicyGroup=$vol.VolumeQosAttributes.PolicyGroupName
             if($QOSPolicyGroup.Length -gt 0){
-                $template=Get-NcVol -Template -Controller $mySecondaryController -ErrorVariable ErrorVar
+                $template= Get-NcVol -Template -Fill
                 $template.Name=$VolName
                 $templace.Vserver=$mySecondaryVserver
-                $attrib=Get-NcVol -Template -Controller $mySecondaryController -ErrorVariable ErrorVar
+                $attrib= Get-NcVol -Template 
                 Initialize-NcObjectProperty $attrib VolumeQosAttributes
                 $attrib.VolumeQosAttributes.PolicyGroupName="-"
                 Write-LogDebug "Remove QOS Policy Group [$QOSPolicyGroup] for volume [$VolName]"
@@ -16531,7 +16780,7 @@ Function mount_volume (
     Write-LogDebug "start $myVolumeName"
     $RootVolume = (Get-NcVserver -Controller $myController -Vserver $myVserver  -ErrorVariable ErrorVar).RootVolume
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed to get RootVolume [$ErrorVar]" } 
-    if ($RootVolume -eq $null ) { Write-LogDebug "mount_volume()|root volume not found for [$myVserver]" }
+    if ($null -eq $RootVolume ) { Write-LogDebug "mount_volume()|root volume not found for [$myVserver]" }
     if($IsFlexgroup -eq $False){
         $FindVolume=$script:vol_junction | Where-Object {$_.Name -eq $myVolumeName}
     }else{
@@ -16546,8 +16795,8 @@ Function mount_volume (
     $IsNested=$FindVolume.IsNested
     $PathLevel=$FindVolume.Level
     Write-LogDebug "volume [$myVolumeName] Parent [$Parent] JunctionPath [$JunctionPath] Perm [$Permission] RootVol [$RootVolume] Level [$PathLevel] ParentPath [$ParentPath]"
-    $mountpath=(Get-NcVol -Name $myVolumeName -Vserver $myVserver -Controller $myController).VolumeIdAttributes.JunctionPath
-    if($mountpath -ne $null){
+    $mountpath= (Get-NcVol -ZapiCall  -Name $myVolumeName -Vserver $myVserver -Controller $myController).VolumeIdAttributes.JunctionPath
+    if($null -ne $mountpath){
         Write-LogDebug "Volume [$myVolumeName] is mounted under [$mountpath]"
         if($mountpath -eq $JunctionPath){
             Write-LogDebug "Volume [$myVolumeName] is correctly mounted"
@@ -16563,7 +16812,7 @@ Function mount_volume (
         Write-LogDebug "Now will mount volume [$myVolumeName]"
         $voltype="rw"
         if($Parent -ne $RootVolume){
-            $volType=(Get-NcVol -Controller $myController -Vserver $myVserver -Volume $myVolumeName).VolumeIdAttributes.Type
+            $volType= (Get-NcVol -ZapiCall  -Controller $myController -Vserver $myVserver -Volume $myVolumeName).VolumeIdAttributes.Type
             if($volType -eq "dp" -and $Restore -eq $False){
                 Write-LogDebug "Need to break all associated SM relationship with [$myVolumeName] before beeing able to create a directory inside this volume"
                 Write-LogDebug "Invoke-NcSnapmirrorQuiesce -DestinationVserver $myVserver -DestinationVolume $myVolumeName -Controller $mySecondaryController"
@@ -16717,9 +16966,9 @@ Try {
         Write-LogDebug "start"
         Write-Log "[$myVserver] Remove volume [$myVolumeName]"
         Write-LogDebug "Get-NcVol -Controller $myController -Vserver $myVserver -Name $myVolumeName"
-        $SecondaryVol=Get-NcVol -Controller $myController -Vserver $myVserver -Name $myVolumeName -ErrorVariable ErrorVar 
+        $SecondaryVol= Get-NcVol -Controller $myController -Vserver $myVserver -Name $myVolumeName -ErrorVariable ErrorVar 
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
-        if($SecondaryVol -ne $null){  
+        if($null -ne $SecondaryVol){  
             $SecondaryVolState=$SecondaryVol.State
             if ( $SecondaryVolState -ne 'offline' ) {
                 Write-LogDebug "Set-NcVol -Name $SecondaryVol -Offline -VserverContext $myVserver -Controller $myController -Confirm:$False"
@@ -17216,16 +17465,22 @@ Function Purge_SelectVolumedb (
         Write-LogDebug "Get-NcSnapmirror -DestinationVserver $DestinationVserver -SourceVserver $SourceVserver -Controller $mySecondaryController"
 	    $PreviousRelationship=Get-NcSnapmirror -DestinationVserver $DestinationVserver -SourceVserver $SourceVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
 	    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
-        Write-LogDebug "Get-NcVol -Vserver $DestinationVserver -Controller $mySecondaryController"
-        $out=Get-NcVol -VserverContext $DestinationVserver -Controller $mySecondaryController -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -ErrorVariable ErrorVar
-        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
-        if($out -ne $null){
+        if($Global:PSTKCall -eq "Rest"){
+            Write-LogDebug "Get-NcVol -ZapiCall -Vserver $DestinationVserver -Controller $mySecondaryController -Query @{VolumeIdAttributes=@{StyleExtended=""flexvol|flexgroup""};VolumeStateAttributes=@{IsVserverRoot=$False}}"
+            $out= Get-NcVol -ZapiCall  -VserverContext $DestinationVserver -Controller $mySecondaryController -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"};VolumeStateAttributes=@{IsVserverRoot=$False}} -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+        }else{
+            Write-LogDebug "Get-NcVol -Vserver $DestinationVserver -Controller $mySecondaryController -Query @{VolumeIdAttributes=@{StyleExtended=""flexvol|flexgroup""};VolumeStateAttributes=@{IsVserverRoot=$False}}"
+            $out= Get-NcVol  -VserverContext $DestinationVserver -Controller $mySecondaryController -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"};VolumeStateAttributes=@{IsVserverRoot=$False}} -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+        }
+        if($null -ne $out){
             $ExistingVolumesOnDest=($out).Name
         }else{
             $ExistingVolumesOnDest=$null
         }
-        if($ExistingVolumesOnDest -eq $null){
-            if($PreviousRelationship -ne $null){
+        if($null -eq $ExistingVolumesOnDest){
+            if($null -ne $PreviousRelationship){
                 $PreviousRelationship=$PreviousRelationship.SourceVolume
                 Write-LogDebug "PreviousRelationship [$PreviousRelationship]"
                 Write-LogDebug "end"
@@ -18457,13 +18712,13 @@ Function set_vol_options_from_voldb (
                     if ( ($VolSnapshotPolicy -ne $myVolSnapshotPolicy) -and ($Global:ForceUpdateSnapPolicy -eq $True) ) 
                     {
                         Write-LogDebug "Current SnapshotPolicy for [$VolName] is [$myVolSnapshotPolicy], need this one [$VolSnapshotPolicy]"
-                        $attributes = Get-NcVol -Template -controller $myController
+                        $attributes = Get-NcVol -Template
                         $mySnapshotAttributes= New-Object "DataONTAP.C.Types.Volume.VolumeSnapshotAttributes"
                         $mySnapshotAttributes.SnapshotPolicy= $VolSnapshotPolicy
                         $attributes.VolumeSnapshotAttributes=$mySnapshotAttributes
                         $tmpStr=$attributes.VolumeSnapshotAttributes.SnapshotPolicy
                         Write-LogDebug "attributes[$tmpStr]"
-                        $query=Get-NcVol -Template -controller $myController
+                        $query= Get-NcVol -Template -Fill
                         $query.name=$VolName
                         $query.vserver=$myVserver
                         $query.NcController=$myController
@@ -18486,7 +18741,7 @@ Function set_vol_options_from_voldb (
                         Write-LogDebug "Get-NcSis -Name $VolName -Vserver $myVserver -Controller $myController  -ErrorVariable ErrorVar"
                         $SisInfo=Get-NcSis -Name $VolName -Vserver $myVserver -Controller $myController  -ErrorVariable ErrorVar
                         if ( $? -ne $True ) { Write-LogError "ERROR: Get-NcSis Failed for volume  $VolName [$ErrorVar]" }
-                        if($SisInfo -eq $null){$myVolSisPolicy=""}else{
+                        if($null -eq $SisInfo){$myVolSisPolicy=""}else{
                             $myVolSisPolicy=$SisInfo.Policy
                         }
                         if ($myVolSisPolicy -ne $VolSisPolicy)
@@ -18629,19 +18884,19 @@ Function set_vol_options_from_voldb (
                                 }
                                 $myVol = Get-NcVol -Controller $myController -Vserver $CloneDR -Volume $VolName  -ErrorVariable ErrorVar
                                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
-                                if ( $myVol -ne $null ) 
+                                if ( $null -ne $myVol ) 
                                 {
                                     $myVolSnapshotPolicy=$myVol.VolumeSnapshotAttributes.SnapshotPolicy
                                     Write-LogDebug "Current SnapshotPolicy for [$VolName] is [$myVolSnapshotPolicy], need this one [$VolSnapshotPolicy]"
                                     if ( ($VolSnapshotPolicy -ne $myVolSnapshotPolicy) -and $Global:ForceUpdateSnapPolicy.IsPresent) 
                                     {
-                                        $attributes = Get-NcVol -Template -Controller $myController
+                                        $attributes = Get-NcVol -Template
                                         $mySnapshotAttributes= New-Object "DataONTAP.C.Types.Volume.VolumeSnapshotAttributes"
                                         $mySnapshotAttributes.SnapshotPolicy= $VolSnapshotPolicy
                                         $attributes.VolumeSnapshotAttributes=$mySnapshotAttributes
                                         $tmpStr=$attributes.VolumeSnapshotAttributes.SnapshotPolicy
                                         Write-LogDebug "attributes[$tmpStr]"
-                                        $query=Get-NcVol -Template -Controller $myController
+                                        $query= Get-NcVol -Template -Fill
                                         $query.name=$VolName
                                         $query.vserver=$CloneDR
                                         $query.NcController=$myController
@@ -18816,19 +19071,19 @@ Function set_vol_options_from_voldb (
                                 }
                                 $myVol = Get-NcVol -Controller $myController -Vserver $myVserver -Volume $VolName  -ErrorVariable ErrorVar
                                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
-                                if ( $myVol -ne $null ) 
+                                if ( $null -ne $myVol ) 
                                 {
                                     $myVolSnapshotPolicy=$myVol.VolumeSnapshotAttributes.SnapshotPolicy
                                     Write-LogDebug "Current SnapshotPolicy for [$VolName] is [$myVolSnapshotPolicy], need this one [$VolSnapshotPolicy]"
                                     if ( ($VolSnapshotPolicy -ne $myVolSnapshotPolicy) -and $Global:ForceUpdateSnapPolicy.IsPresent) 
                                     {
-                                        $attributes = Get-NcVol -Template -Controller $myController
+                                        $attributes = Get-NcVol -Template
                                         $mySnapshotAttributes= New-Object "DataONTAP.C.Types.Volume.VolumeSnapshotAttributes"
                                         $mySnapshotAttributes.SnapshotPolicy= $VolSnapshotPolicy
                                         $attributes.VolumeSnapshotAttributes=$mySnapshotAttributes
                                         $tmpStr=$attributes.VolumeSnapshotAttributes.SnapshotPolicy
                                         Write-LogDebug "attributes[$tmpStr]"
-                                        $query=Get-NcVol -Template -Controller $myController
+                                        $query= Get-NcVol -Template -Fill
                                         $query.name=$VolName
                                         $query.vserver=$myVserver
                                         $query.NcController=$myController
@@ -19615,7 +19870,7 @@ Function create_quota_rules_from_quotadb (
                             $Threshold=$_.split(':')[10]
                             Write-LogDebug "${ClusterName}:${SVM}:${Volume}:${Qtree}:${QuotaType}:${QuotaTarget}:${DiskLimit}:${FileLimit}:${SoftDiskLimit}:${SoftFileLimit}:${Threshold}"
                             Write-LogDebug "volume informations [${ClusterName}] [${SVM}] [${Volume}]"
-                            $VOL=Get-NcVol -Controller $myController -Vserver $SVM -Name $Volume
+                            $VOL= Get-NcVol -Controller $myController -Vserver $SVM -Name $Volume
                             if($null -eq $VOL){
                                 Write-LogWarn "Volume [$SVM] [$Volume] does not exist on ctrl [$myController], skipping Quota rules for it"
                                 Continue
