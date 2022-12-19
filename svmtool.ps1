@@ -2463,24 +2463,6 @@ $Global:IgnoreQtreeExportPolicy = $IgnoreQtreeExportPolicy
 $Global:AllowQuotaDr = $AllowQuotaDr
 $Global:IgnoreQuotaOff = $IgnoreQuotaOff
 
-Write-LogDebug "PRIMARY_CLUSTER:            		 [$PRIMARY_CLUSTER]" 
-Write-LogDebug "SECONDARY_CLUSTER:          		 [$SECONDARY_CLUSTER]" 
-Write-LogDebug "VSERVER                     		 [$Vserver]" 
-Write-LogDebug "VSERVER DR                  		 [$VserverDR]" 
-Write-LogDebug "QUOTA DR                    		 [$Global:AllowQuotaDr]" 
-Write-LogDebug "SVMTOOL DB                           [$Global:SVMTOOL_DB]"
-Write-LogDebug "OPTION IgnoreQuotaOff       		 [$Global:IgnoreQuotaOff]"
-Write-LogDebug "OPTION CorrectQuotaError    		 [$Global:CorrectQuotaError]"
-Write-LogDebug "OPTION ForceDelete          		 [$Global:ForceDeleteQuota]"
-Write-LogDebug "OPTION ForceActivate        		 [$Global:ForceActivate]"
-Write-LogDebug "OPTION ForceRecreate        		 [$Global:ForceRecreate]"
-Write-LogDebug "OPTION ForceRestart        		     [$Global:ForceRestart]"
-Write-LogDebug "OPTION ForceUpdateSnapPolicy         [$Global:ForceUpdateSnapPolicy]"
-Write-LogDebug "OPTION AlwaysChooseDataAggr 		 [$Global:AlwaysChooseDataAggr]"
-Write-LogDebug "OPTION SelectVolume         		 [$Global:SelectVolume]"
-Write-LogDebug "OPTION IgnoreQtreeExportPolicy       [$Global:IgnoreQtreeExportPolicy]"
-####################################################################################################
-
 # * Set version tuple (Generation and Major only) into a double to easily check if version is greater than X.Y
 
 $myCred = get_local_cDotcred ($PRIMARY_CLUSTER) 
@@ -2491,6 +2473,7 @@ if ( ( $NcPrimaryCtrl = connect_cluster -myController $PRIMARY_CLUSTER -myCred $
     Write-LogError "ERROR: Unable to Connect to NcController [$PRIMARY_CLUSTER]" 
 }else{
     $Global:OntapPrimaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $myPrimaryCtrl)[0].VersionTuple.Generation)+','+[string]((Get-NcSystemVersionInfo -Controller $myPrimaryCtrl)[0].VersionTuple.Major)))
+    $PrimaryVersion=(Get-NcSystemVersionInfo -Controller $myPrimaryCtrl)[0].VersionTuple | Join-String
 }
 
 $myCred = get_local_cDotcred ($SECONDARY_CLUSTER) 
@@ -2501,7 +2484,29 @@ if ( ( $NcSecondaryCtrl = connect_cluster -myController $SECONDARY_CLUSTER -myCr
     Write-LogError "ERROR: Unable to Connect to NcController [$SECONDARY_CLUSTER]"
 }else{
     $Global:OntapSecondaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Generation)+','+[string]((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Major)))
+    $SecondaryVersion=(Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple | Join-String
 }
+
+
+Write-LogDebug "PRIMARY_CLUSTER:                    [$PRIMARY_CLUSTER]" 
+Write-LogDebug "PRIMARY_VERSION:                    [$PrimaryVersion]"
+Write-LogDebug "SECONDARY_CLUSTER:                  [$SECONDARY_CLUSTER]" 
+Write-LogDebug "SECONDARY_VERSION:                  [$SecondaryVersion]"
+Write-LogDebug "VSERVER                             [$Vserver]" 
+Write-LogDebug "VSERVER DR                          [$VserverDR]" 
+Write-LogDebug "QUOTA DR                            [$Global:AllowQuotaDr]" 
+Write-LogDebug "SVMTOOL DB                          [$Global:SVMTOOL_DB]"
+Write-LogDebug "OPTION IgnoreQuotaOff               [$Global:IgnoreQuotaOff]"
+Write-LogDebug "OPTION CorrectQuotaError            [$Global:CorrectQuotaError]"
+Write-LogDebug "OPTION ForceDelete                  [$Global:ForceDeleteQuota]"
+Write-LogDebug "OPTION ForceActivate                [$Global:ForceActivate]"
+Write-LogDebug "OPTION ForceRecreate                [$Global:ForceRecreate]"
+Write-LogDebug "OPTION ForceRestart                 [$Global:ForceRestart]"
+Write-LogDebug "OPTION ForceUpdateSnapPolicy        [$Global:ForceUpdateSnapPolicy]"
+Write-LogDebug "OPTION AlwaysChooseDataAggr         [$Global:AlwaysChooseDataAggr]"
+Write-LogDebug "OPTION SelectVolume                 [$Global:SelectVolume]"
+Write-LogDebug "OPTION IgnoreQtreeExportPolicy      [$Global:IgnoreQtreeExportPolicy]"
+####################################################################################################
 
 if ( $ShowDR ) {
     $Global:Run_Mode = "ShowDR"

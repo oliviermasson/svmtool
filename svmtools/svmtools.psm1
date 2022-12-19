@@ -3305,11 +3305,11 @@ Function create_update_fpolicy_dr(
                                         Write-LogDebug "New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
                                         -EngineName $PrimaryFpolicyEngineName -Scope $PrimaryFpolPolScope `
                                         -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ZapiCall"
                                         $out=New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
                                         -EngineName $PrimaryFpolicyEngineName -Scope $PrimaryFpolPolScope `
                                         -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ZapiCall
                                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" }
                                     }
                                 }
@@ -3342,11 +3342,11 @@ Function create_update_fpolicy_dr(
                                         Write-LogDebug "New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
                                         -EngineName $PrimaryFpolicyEngineName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
                                         -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -Scope $PrimaryFpolPolScope  `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ZapiCall"
                                         $out=New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
                                         -EngineName $PrimaryFpolicyEngineName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
                                         -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -Scope $PrimaryFpolPolScope `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ZapiCall
                                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" }
                                     }
                                 }
@@ -3382,11 +3382,11 @@ Function create_update_fpolicy_dr(
                                         Write-LogDebug "New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -NonMandatory `
                                         -EngineName $PrimaryFpolicyEngineName -Scope $PrimaryFpolPolScope `
                                         -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ZapiCall"
                                         $out=New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -NonMandatory `
                                         -EngineName $PrimaryFpolicyEngineName -Scope $PrimaryFpolPolScope `
                                         -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ZapiCall
                                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" } 
                                     }
                                 }
@@ -3419,11 +3419,11 @@ Function create_update_fpolicy_dr(
                                         Write-LogDebug "New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -NonMandatory `
                                         -EngineName $PrimaryFpolicyEngineName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
                                         -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                        -Scope $PrimaryFpolPolScope -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
+                                        -Scope $PrimaryFpolPolScope -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ZapiCall"
                                         $out=New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -NonMandatory `
                                         -EngineName $PrimaryFpolicyEngineName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
                                         -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -Scope $PrimaryFpolPolScope `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ZapiCall
                                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" }
                                     }
                                 }
@@ -6098,8 +6098,8 @@ Try {
             $PrimaryVolList = Get-NcVol -Controller $myPrimaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup";Type="rw"};Vserver=$myPrimaryVserver} -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
         }else{
-            Write-LogDebug "Get-NcVol -ZapiCall -Controller $myPrimaryController -Query `@`{VolumeStateAttributes=`@`{IsVserverRoot=$False`}`;VolumeIdAttributes=`@`{StyleExtended=`"flexvol|flexgroup`";Type=`"rw`"`}`;Vserver=$myPrimaryVserver`}"
-            $PrimaryVolList = Get-NcVol -ZapiCall -Controller $myPrimaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup";Type="rw"};Vserver=$myPrimaryVserver} -ErrorVariable ErrorVar
+            Write-LogDebug "Get-NcVol -ZapiCall -Controller $myPrimaryController -Query `@`{VolumeStateAttributes=`@`{IsVserverRoot=$False`}`;VolumeIdAttributes=`@`{StyleExtended=`"flexvol|flexgroup`";Type=`"rw`"`}`;Vserver=$myPrimaryVserver`} -VserverContext $myPrimaryVserver"
+            $PrimaryVolList = Get-NcVol -ZapiCall -Controller $myPrimaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup";Type="rw"};Vserver=$myPrimaryVserver} -VserverContext $myPrimaryVserver -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
         }
      }else{
@@ -6165,8 +6165,9 @@ Try {
     # check if conversion to encrypted volume is possible on destination cluster
     $ConversionSupported=$False
     if($Global:AllowEncryption -eq "True"){
-        $SecondaryVersionTuple=(Get-NcSystemVersionInfo -Controller $mySecondaryController | Select-Object VersionTuple).VersionTuple
-        if($SecondaryVersionTuple.Generation -ge 9 -and $SecondaryVersionTuple.Major -ge 3){
+        # $SecondaryVersionTuple=(Get-NcSystemVersionInfo -Controller $mySecondaryController | Select-Object VersionTuple).VersionTuple
+        # if($SecondaryVersionTuple.Generation -ge 9 -and $SecondaryVersionTuple.Major -ge 3){
+        if($Global:OntapSecondaryVersion -gt "9.03"){
             Write-Log "[$mySecondaryController] Destination Cluster runs ONTAP 9.3 or greater"
             Write-Log "[$mySecondaryController] Volume conversion into Encrypted Volume is supported"
             $ConversionSupported=$True
@@ -6182,37 +6183,70 @@ Try {
         if($Backup -eq $False){
             Write-LogDebug "PrimaryVol [$PrimaryVol]"
             $PrimaryVolName=$PrimaryVol.Name
-            $PrimaryVolAggr=$PrimaryVol.Aggregate
-            $PrimaryVolStyle=$PrimaryVol.VolumeSecurityAttributes.Style
-            $PrimaryVolExportPolicy=$PrimaryVol.VolumeExportAttributes.Policy
-            $PrimaryVolType=$PrimaryVol.VolumeIdAttributes.Type
-            $PrimaryVolLang=$PrimaryVol.VolumeLanguageAttributes.LanguageCode
-            $PrimaryVolSize=$PrimaryVol.VolumeSpaceAttributes.Size
-            $PrimaryVolIsSis=$PrimaryVol.VolumeSisAttributes.IsSisVolume
-            $PrimaryVolSpaceGuarantee=$PrimaryVol.VolumeSpaceAttributes.SpaceGuarantee
-            $PrimaryVolSnapshotReserve=$PrimaryVol.VolumeSpaceAttributes.PercentageSnapshotReserve
-            $PrimaryVolState=$PrimaryVol.State
-            $PrimaryVolJunctionPath=$PrimaryVol.VolumeIdAttributes.JunctionPath
-            $PrimaryVolIsInfiniteVolume=$PrimaryVol.IsInfiniteVolume
-            $PrimaryVolIsVserverRoot=$PrimaryVol.VolumeStateAttributes.IsVserverRoot
-            $PrimaryVolComment=$PrimaryVol.VolumeIdAttributes.Comment
-            $PrimaryVolExtendStyle=$PrimaryVol.VolumeIdAttributes.StyleExtended
-            if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapPrimaryVersion -ge "9.10")){
-                # ONTAP >= 9.10
-                $PrimaryVolAntiRansomware=$PrimaryVol.AntiRansomware.state
-                $PrimaryVolSnaplockType=$PrimaryVol.Snaplock.Type 
-                $PrimaryVolActivityTrackState=$PrimaryVol.ActivityTracking.State
+            $PrimaryVolUuid=$PrimaryVol.VolumeIdAttributes.Uuid
+            if($Global:PSTKCall -eq "Rest"){
+                $Credential = get_local_cDotcred($myPrimaryController)
+                $url=$("https://"+$myPrimaryController.Name+"/api/storage/volumes/"+$PrimaryVolUuid+"?fields=**,!metric,!statistics")
+                Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+                $PrimaryVol=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                if($? -ne $True){
+                    Write-LogError "ERROR: Unable to get volume [$PrimaryVolName] details Reason [$ErrorVar]" 
+                }else{
+                    $PrimaryVolAggr=$PrimaryVol.aggregates.name
+                    $PrimaryVolStyle=$PrimaryVol.style
+                    $PrimaryVolExportPolicy=$PrimaryVol.nas.export_policy.name
+                    $PrimaryVolType=$PrimaryVol.type
+                    $PrimaryVolLang=$PrimaryVol.language
+                    $PrimaryVolSize=$PrimaryVol.size
+                    # $PrimaryVolIsSis=$PrimaryVol.VolumeSisAttributes.IsSisVolume
+                    $PrimaryVolSpaceGuarantee=$PrimaryVol.guarantee.type
+                    $PrimaryVolSnapshotReserve=$PrimaryVol.space.snapshot.reserve_percent
+                    $PrimaryVolState=$PrimaryVol.state
+                    $PrimaryVolJunctionPath=$PrimaryVol.nas.path
+                    # $PrimaryVolIsInfiniteVolume=$PrimaryVol.IsInfiniteVolume
+                    $PrimaryVolIsVserverRoot=$PrimaryVol.is_svm_root
+                    $PrimaryVolComment=$PrimaryVol.comment
+                    $PrimaryVolExtendStyle=$PrimaryVol.style
+                    $PrimaryVolTieringPolicy=$PrimaryVol.tiering.policy
+                }
+
+                if(($Global:OntapPrimaryVersion -ge "9.10")){
+                    # ONTAP >= 9.10
+                    $PrimaryVolAntiRansomware=$PrimaryVol.anti_ransomware.state
+                    $PrimaryVolSnaplockType=$PrimaryVol.snaplock.type 
+                    $PrimaryVolActivityTrackState=$PrimaryVol.activity_tracking.state
+                }
+                if(($Global:OntapPrimaryVersion -ge "9.08")){
+                    # ONTAP >= 9.8
+                    # support of Filesystem Analytics per volume
+                    $PrimaryVolAnalyticsState=$PrimaryVol.analytics.state
+                    $PrimaryVolTieringMinCoolDays=$PrimaryVol.tiering.min_cooling_days
+                    $PrimaryVolTieringObjectTags=$PrimaryVol.tiering.object_tags
+                }
+                if(($Global:OntapPrimaryVersion -ge "9.11")){
+                    # ONTAP >= 9.11
+                    $PrimaryVolAsyncDeleteClientState=$PrimaryVol.asynchronous_directory_delete.enabled
+                    $PrimaryVolAsyncDeleteClientTrashDirectory=$PrimaryVol.asynchronous_directory_delete.trash_bin
+                }
+            }else{
+                $PrimaryVolAggr=$PrimaryVol.Aggregate
+                $PrimaryVolStyle=$PrimaryVol.VolumeSecurityAttributes.Style
+                $PrimaryVolExportPolicy=$PrimaryVol.VolumeExportAttributes.Policy
+                $PrimaryVolType=$PrimaryVol.VolumeIdAttributes.Type
+                $PrimaryVolLang=$PrimaryVol.VolumeLanguageAttributes.LanguageCode
+                $PrimaryVolSize=$PrimaryVol.VolumeSpaceAttributes.Size
+                $PrimaryVolIsSis=$PrimaryVol.VolumeSisAttributes.IsSisVolume
+                $PrimaryVolSpaceGuarantee=$PrimaryVol.VolumeSpaceAttributes.SpaceGuarantee
+                $PrimaryVolSnapshotReserve=$PrimaryVol.VolumeSpaceAttributes.PercentageSnapshotReserve
+                $PrimaryVolState=$PrimaryVol.State
+                $PrimaryVolJunctionPath=$PrimaryVol.VolumeIdAttributes.JunctionPath
+                $PrimaryVolIsInfiniteVolume=$PrimaryVol.IsInfiniteVolume
+                $PrimaryVolIsVserverRoot=$PrimaryVol.VolumeStateAttributes.IsVserverRoot
+                $PrimaryVolComment=$PrimaryVol.VolumeIdAttributes.Comment
+                $PrimaryVolExtendStyle=$PrimaryVol.VolumeIdAttributes.StyleExtended
+                $PrimaryVolTieringPolicy=$PrimaryVol.VolumeCompAggrAttributes.TieringPolicy
             }
-            if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapPrimaryVersion -ge "9.08")){
-                # ONTAP >= 9.8
-                # support of Filesystem Analytics per volume
-                $PrimaryVolAnalyticsState=$PrimaryVol.Analytics.State
-            }
-            if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapPrimaryVersion -ge "9.11")){
-                # ONTAP >= 9.11
-                $PrimaryVolAsyncDeleteClientState=$PrimaryVol.AsynchronousDirectoryDelete.Enabled
-                $PrimaryVolAsyncDeleteClientTrashDirectory=$PrimaryVol.AsynchronousDirectoryDelete.TrashBin
-            }
+            
             if($PrimaryVolExtendStyle -eq "flexvol"){
                 # Create a flexvol
                 if ( ( $PrimaryVolState -eq "online" ) -and ($PrimaryVolType -eq "rw" ) -and ($PrimaryVolIsVserverRoot -eq $False ) -and ( $PrimaryVolIsInfiniteVolume -eq $False ) ) {
@@ -6244,16 +6278,31 @@ Try {
                         }
                     }
                     # check this volume Name on secondary SVM
-                    Write-LogDebug "Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $PrimaryVolName "
-                    $SecondaryVol = Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $PrimaryVolName  -ErrorVariable ErrorVar 
-                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+                    if($Global:PSTKCall -ne "Rest"){
+                        Write-LogDebug "Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $PrimaryVolName "
+                        $SecondaryVol = Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $PrimaryVolName  -ErrorVariable ErrorVar 
+                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+                    }else{
+                        Write-LogDebug "Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $PrimaryVolName -ZapiCall"
+                        $SecondaryVol = Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $PrimaryVolName  -ErrorVariable ErrorVar -ZapiCall
+                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+                        $SecondaryVolName=$SecondaryVol.Name
+                        $SecondaryVolUuid=$SecondaryVol.VolumeIdAttributes.Uuid
+                        $Credential = get_local_cDotcred($mySecondaryController)
+                        $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$SecondaryVolUuid+"?fields=**,!metric,!statistics")
+                        Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+                        $SecondaryVol=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                        if($? -ne $True){
+                            Throw "ERROR: Unable to get volume [$SecondaryVolName] details Reason [$ErrorVar]" 
+                        }
+                    }
                     if ( $null -eq $SecondaryVol )  {
                         # Create this volume if it does not exist on secondary
                         #  THIS NOW WORKS DIFFERENTLY
                         #  WE ALWAYS TRY TO FIND A MATCH IN NON INTERACTIVE MODE
                         Write-Log "[$workon] Process volume [$PrimaryVolName]"
-                        $PrimaryVersion=(Get-NcSystemVersionInfo -Controller $myPrimaryController)[0].VersionTuple
-                        $SecondaryVersion=(Get-NcSystemVersionInfo -Controller $mySecondaryController)[0].VersionTuple
+                        # $PrimaryVersion=(Get-NcSystemVersionInfo -Controller $myPrimaryController)[0].VersionTuple
+                        # $SecondaryVersion=(Get-NcSystemVersionInfo -Controller $mySecondaryController)[0].VersionTuple
         
                         if($Global:NonInteractive){
                             Write-LogDebug "with `$Global:NonInteractive enabled, auto selecting aggregate for volume [$PrimaryVolName]"
@@ -6386,7 +6435,7 @@ Try {
                                 $NewNcVolParameters.anti_ransomware=@{"state"="enabled"}
                                 $ForceRest=$True
                             }
-                            if($PrimaryVolSnaplockType -ne "non_snaplock"){
+                            if(($null -ne $PrimaryVolSnaplockType) -and ($PrimaryVolSnaplockType -ne "non_snaplock")){
                                 $NewNcVolParameters.snaplock=@{"type"=$PrimaryVolSnaplockType}
                                 $ForceRest=$True
                             }
@@ -6406,7 +6455,7 @@ Try {
                                 $NewNcVolParameters.asynchronous_directory_delete=@{"enabled"=$True}
                                 $ForceRest=$True
                             }
-                            if($PrimaryVolAsyncDeleteClientTrashDirectory -ne "-"){
+                            if(($null -ne $PrimaryVolAsyncDeleteClientTrashDirectory) -and ($PrimaryVolAsyncDeleteClientTrashDirectory -ne "-")){
                                 $NewNcVolParameters.asynchronous_directory_delete=@{"trash_bin"=$PrimaryVolAsyncDeleteClientTrashDirectory}
                                 $ForceRest=$True
                             }
@@ -6428,6 +6477,7 @@ Try {
                                     "language"=$PrimaryVolLang;
                                     "svm"=@{"name"=$mySecondaryVserver};
                                     "size"=$PrimaryVolSize;
+                                    "tiering"=@{"policy"=$PrimaryVolTieringPolicy;"min_cooling_days"=$PrimaryVolTieringMinCoolDays};
                                 }
                                 $NewNcVolParameters+=$option
                                 $CredSecondary=get_local_cDotcred($mySecondaryController)
@@ -6472,7 +6522,7 @@ Try {
                                 }
                             }else{
                                 # $NewNcVolParameters_string=$NewNcVolParameters | Out-String
-                                $option_string=$option | Out-String
+                                # $option_string=$option | Out-String
                                 # Write-LogDebug "New-NcVol $NewNcVolParameters_string -Encrypt:$Encrypt $option_string -Controller $mySecondaryController"
                                 # $SecondaryVol = New-NcVol @NewNcVolParameters -Encrypt:$Encrypt @option -Controller $mySecondaryController -ErrorVariable ErrorVar
                                 Write-LogDebug "New-NcVol -Name $PrimaryVolName -Comment $SecondaryVolComment -Aggregate $myDataAggr -JunctionPath $null -ExportPolicy $PrimaryVolExportPolicy -SecurityStyle $PrimaryVolStyle -Encrypt:$Encrypt -SpaceReserve $SpaceReserve -SnapshotReserve $PrimaryVolSnapshotReserve -Type DP -Language $PrimaryVolLang -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Size $PrimaryVolSize $option"
@@ -6524,7 +6574,7 @@ Try {
                                     }
                                 }else{
                                     # $NewNcVolParameters_string=$NewNcVolParameters | Out-String
-                                    $option_string=$option | Out-String
+                                    # $option_string=$option | Out-String
                                     Write-LogDebug "New-NcVol -Name $PrimaryVolName -Comment $SecondaryVolComment -Aggregate $myDataAggr -JunctionPath $null -ExportPolicy $PrimaryVolExportPolicy -SecurityStyle $PrimaryVolStyle -Encrypt:$Encrypt -SpaceReserve $SpaceReserve -SnapshotReserve $PrimaryVolSnapshotReserve -Type RW -Language $PrimaryVolLang -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Size $PrimaryVolSize $option"
                                     $SecondaryVol = New-NcVol -Name $PrimaryVolName -Comment $SecondaryVolComment -Aggregate $myDataAggr -JunctionPath $null -ExportPolicy $PrimaryVolExportPolicy -SecurityStyle $PrimaryVolStyle -Encrypt:$Encrypt -SpaceReserve $SpaceReserve -SnapshotReserve $PrimaryVolSnapshotReserve -Type RW -Language $PrimaryVolLang -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Size $PrimaryVolSize @option -ErrorVariable ErrorVar 
                                     # Write-LogDebug "New-NcVol $NewNcVolParameters_string -Encrypt:$Encrypt $option_string -Controller $mySecondaryController"
@@ -6573,7 +6623,7 @@ Try {
                                     }
                                 }else{
                                     # $NewNcVolParameters_string=$NewNcVolParameters | Out-String
-                                    $option_string=$option | Out-String
+                                    # $option_string=$option | Out-String
                                     Write-LogDebug "New-NcVol -Name $PrimaryVolName -Comment $SecondaryVolComment -Aggregate $myDataAggr -JunctionPath $null -ExportPolicy $PrimaryVolExportPolicy -SecurityStyle $PrimaryVolStyle -Encrypt:$Encrypt -SpaceReserve $SpaceReserve -SnapshotReserve $PrimaryVolSnapshotReserve -Type DP  -Language $PrimaryVolLang -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Size $PrimaryVolSize $option"
                                     $SecondaryVol = New-NcVol -Name $PrimaryVolName -Comment $SecondaryVolComment -Aggregate $myDataAggr -JunctionPath $null -ExportPolicy $PrimaryVolExportPolicy -SecurityStyle $PrimaryVolStyle -Encrypt:$Encrypt -SpaceReserve $SpaceReserve -SnapshotReserve $PrimaryVolSnapshotReserve -Type DP -Language $PrimaryVolLang -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Size $PrimaryVolSize @option -ErrorVariable ErrorVar 
                                     # Write-LogDebug "New-NcVol $NewNcVolParameters_string -Encrypt:$Encrypt -Type dp $option_string -Controller $mySecondaryController"
@@ -6938,22 +6988,26 @@ Try {
 	$Return = $True 
     Write-LogDebug "[$myVserver]: start"
 	
-    if($Global:PSTKCall -ne "Rest"){
-	    $RootVolumeName = (Get-NcVserver -Controller $myController -Vserver $myVserver  -ErrorVariable ErrorVar).RootVolume
-	    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed to get RootVolume [$ErrorVar]" } 
-    }else{
-        $PrimaryCredential = get_local_cDotcred($myController)
-        $url=$("https://"+$myController.Name+"/api/private/cli/vserver?vserver="+$myVserver+"&fields=rootvolume")
-        Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck"
-        $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
-        if($? -ne $True){
-            Write-LogError "ERROR: Unable to get svm rootvolume name. Reason [$ErrorVar]" 
-        }else{
-            $RootVolumeName=$ret.records[0].rootvolume
-        }
-    }
+    $RootVolume = Get-NcVol -VserverContext $myVserver -Controller $myController -Query @{VolumeStateAttributes=@{IsVserverRoot=$True};Vserver=$myVserver} -ErrorVariable ErrorVar
+    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get SVM root volume failed [$ErrorVar]" } 
+    $RootVolumeName=$RootVolume.Name
+
+    # if($Global:PSTKCall -ne "Rest"){
+	#     $RootVolumeName = (Get-NcVserver -Controller $myController -Vserver $myVserver  -ErrorVariable ErrorVar).RootVolume
+	#     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed to get RootVolume [$ErrorVar]" } 
+    # }else{
+    #     $PrimaryCredential = get_local_cDotcred($myController)
+    #     $url=$("https://"+$myController.Name+"/api/private/cli/vserver?vserver="+$myVserver+"&fields=rootvolume")
+    #     Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck"
+    #     $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+    #     if($? -ne $True){
+    #         Write-LogError "ERROR: Unable to get svm rootvolume name. Reason [$ErrorVar]" 
+    #     }else{
+    #         $RootVolumeName=$ret.records[0].rootvolume
+    #     }
+    # }
 	if ($null -eq $RootVolumeName ) { Write-LogDebug "analyse_junction_path()|root volume not found for $myVserver" }			
-	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCluster failed [$ErrorVar]" }
+
     # Get volumes mounted under the root (/) of the vserver namespace. So volume with JunctionParentName = RootVolumeName
     if($Global:PSTKCall -ne "Rest"){
         Write-LogDebug "Get-NcVol -VserverContext $myVserver -Query @{VolumeIdAttributes=@{JunctionParentName=""$RootVolumeName"";StyleExtended=""flexvol|flexgroup""};Vserver=""$myVserver"";VolumeStateAttributes=@{State=online;IsVserverRoot=false}} -Controller $myController"
