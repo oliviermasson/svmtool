@@ -1519,6 +1519,7 @@ Function select_data_aggr_from_cli ([NetApp.Ontapi.Filer.C.NcController]$myContr
 		$i = 0 
 		foreach ( $Aggr in ( $AggrList | Skip-Null | Sort-Object -Property Available -Descending ) ) {
             Write-LogDebug "Process [$Aggr] index [$i]"
+            # TODO When REST will be the only method available, Get-NcAggr will only return data aggr, so this test will need to be modified/deleted
 			if ( $Aggr.AggrRaidAttributes.HasLocalRoot -eq $False ) {
 				$i++ 
 				$tmpStr=$Aggr.Name
@@ -3994,14 +3995,20 @@ Function create_update_qospolicy_dr(
                                     $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
                                     if($JobDetail.JobCompletion -eq "success"){
                                         $JobDone=$True
+                                        break
                                     }else{
-                                        $JobStatus=$JobDetail.State
-                                        Write-LogDebug "[$workOn] Update Vol Qos Policy job status [$JobStatus]"
+                                        $JobStatus=$JobDetail.JobState
+                                        Write-LogDebug "[$workOn] Update Vol job status [$JobStatus]"
+                                        if($JobStatus -eq "failure"){
+                                            $JobCompletion=$JobDetail.JobCompletion
+                                            Write-LogError "[$workOn] Vol creation failed [$JobCompletion]"
+                                            break
+                                        }
                                     }
                                     $CurrentTime=Get-date
                                     $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
                                     if($TimeSpend -gt 10){
-                                        Write-LogWarn "[$workOn] Update Vol Qos Policy job take too much time. Check in Ontap its status"
+                                        Write-LogWarn "[$workOn] Update Vol job take too much time. Check in Ontap its status"
                                         $Timeout=$True
                                     }
                                 }
@@ -4046,13 +4053,19 @@ Function create_update_qospolicy_dr(
                                         if($JobDetail.JobCompletion -eq "success"){
                                             $JobDone=$True
                                         }else{
-                                            $JobStatus=$JobDetail.State
-                                            Write-LogDebug "[$workOn] Update Vol Qos Policy job status [$JobStatus]"
+                                            $JobStatus=$JobDetail.JobState
+                                            Write-LogDebug "[$workOn] Update Vol job status [$JobStatus]"
+                                            break
+                                            if($JobStatus -eq "failure"){
+                                                $JobCompletion=$JobDetail.JobCompletion
+                                                Write-LogError "[$workOn] Vol creation failed [$JobCompletion]"
+                                                break
+                                            }
                                         }
                                         $CurrentTime=Get-date
                                         $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
                                         if($TimeSpend -gt 10){
-                                            Write-LogWarn "[$workOn] Update Vol Qos Policy job take too much time. Check in Ontap its status"
+                                            Write-LogWarn "[$workOn] Update Vol job take too much time. Check in Ontap its status"
                                             $Timeout=$True
                                         }
                                     }
@@ -4105,14 +4118,20 @@ Function create_update_qospolicy_dr(
                                         $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
                                         if($JobDetail.JobCompletion -eq "success"){
                                             $JobDone=$True
+                                            break
                                         }else{
-                                            $JobStatus=$JobDetail.State
-                                            Write-LogDebug "[$workOn] Update Vol Qos Policy job status [$JobStatus]"
+                                            $JobStatus=$JobDetail.JobState
+                                            Write-LogDebug "[$workOn] update vol job status [$JobStatus]"
+                                            if($JobStatus -eq "failure"){
+                                                $JobCompletion=$JobDetail.JobCompletion
+                                                Write-LogError "[$workOn] Vol update failed [$JobCompletion]"
+                                                break
+                                            }
                                         }
                                         $CurrentTime=Get-date
                                         $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
                                         if($TimeSpend -gt 10){
-                                            Write-LogWarn "[$workOn] Update Vol Qos Policy job take too much time. Check in Ontap its status"
+                                            Write-LogWarn "[$workOn] Update Vol job take too much time. Check in Ontap its status"
                                             $Timeout=$True
                                         }
                                     }
@@ -5648,9 +5667,15 @@ Try {
                     $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
                     if($JobDetail.JobCompletion -eq "success"){
                         $JobDone=$True
+                        break
                     }else{
-                        $JobStatus=$JobDetail.State
+                        $JobStatus=$JobDetail.JobState
                         Write-LogDebug "[$workOn] Update Vol job status [$JobStatus]"
+                        if($JobStatus -eq "failure"){
+                            $JobCompletion=$JobDetail.JobCompletion
+                            Write-LogError "[$workOn] Vol creation failed [$JobCompletion]"
+                            break
+                        }
                     }
                     $CurrentTime=Get-date
                     $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
@@ -5863,9 +5888,15 @@ Try {
                                 $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
                                 if($JobDetail.JobCompletion -eq "success"){
                                     $JobDone=$True
+                                    break
                                 }else{
-                                    $JobStatus=$JobDetail.State
+                                    $JobStatus=$JobDetail.JobState
                                     Write-LogDebug "[$workOn] Update Vol job status [$JobStatus]"
+                                    if($JobStatus -eq "failure"){
+                                        $JobCompletion=$JobDetail.JobCompletion
+                                        Write-LogError "[$workOn] Vol creation failed [$JobCompletion]"
+                                        break
+                                    }
                                 }
                                 $CurrentTime=Get-date
                                 $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
@@ -5929,9 +5960,15 @@ Try {
                             $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
                             if($JobDetail.JobCompletion -eq "success"){
                                 $JobDone=$True
+                                break
                             }else{
-                                $JobStatus=$JobDetail.State
+                                $JobStatus=$JobDetail.JobState
                                 Write-LogDebug "[$workOn] Update Vol job status [$JobStatus]"
+                                if($JobStatus -eq "failure"){
+                                    $JobCompletion=$JobDetail.JobCompletion
+                                    Write-LogError "[$workOn] Vol creation failed [$JobCompletion]"
+                                    break
+                                }
                             }
                             $CurrentTime=Get-date
                             $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
@@ -6098,9 +6135,18 @@ Try {
             $PrimaryVolList = Get-NcVol -Controller $myPrimaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup";Type="rw"};Vserver=$myPrimaryVserver} -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
         }else{
-            Write-LogDebug "Get-NcVol -ZapiCall -Controller $myPrimaryController -Query `@`{VolumeStateAttributes=`@`{IsVserverRoot=$False`}`;VolumeIdAttributes=`@`{StyleExtended=`"flexvol|flexgroup`";Type=`"rw`"`}`;Vserver=$myPrimaryVserver`} -VserverContext $myPrimaryVserver"
-            $PrimaryVolList = Get-NcVol -ZapiCall -Controller $myPrimaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup";Type="rw"};Vserver=$myPrimaryVserver} -VserverContext $myPrimaryVserver -ErrorVariable ErrorVar
-            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+            # Write-LogDebug "Get-NcVol -ZapiCall -Controller $myPrimaryController -Query `@`{VolumeStateAttributes=`@`{IsVserverRoot=$False`}`;VolumeIdAttributes=`@`{StyleExtended=`"flexvol|flexgroup`";Type=`"rw`"`}`;Vserver=$myPrimaryVserver`} -VserverContext $myPrimaryVserver"
+            # $PrimaryVolList = Get-NcVol -ZapiCall -Controller $myPrimaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup";Type="rw"};Vserver=$myPrimaryVserver} -VserverContext $myPrimaryVserver -ErrorVariable ErrorVar
+            # if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+            $PrimaryCredential = get_local_cDotcred($myPrimaryController)
+            $url=$("https://"+$myPrimaryController.Name+"/api/storage/volumes?svm.name="+$myPrimaryVserver+"&fields=**,!metric,!statistics&is_svm_root=false")
+            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck"
+            $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+            if($? -ne $True){
+                Throw "ERROR: Unable to get volume list. Reason [$ErrorVar]" 
+            }else{
+                $PrimaryVolList=$ret.records
+            }
         }
      }else{
         if(Test-Path $($Global:JsonPath+"Get-NcVol.json")){
@@ -6182,33 +6228,34 @@ Try {
     foreach ( $PrimaryVol in ( $PrimaryVolList | Skip-Null ) ) {
         if($Backup -eq $False){
             Write-LogDebug "PrimaryVol [$PrimaryVol]"
-            $PrimaryVolName=$PrimaryVol.Name
-            $PrimaryVolUuid=$PrimaryVol.VolumeIdAttributes.Uuid
+            
+            # $PrimaryVolUuid=$PrimaryVol.VolumeIdAttributes.Uuid
             if($Global:PSTKCall -eq "Rest"){
-                $Credential = get_local_cDotcred($myPrimaryController)
-                $url=$("https://"+$myPrimaryController.Name+"/api/storage/volumes/"+$PrimaryVolUuid+"?fields=**,!metric,!statistics")
-                Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-                $PrimaryVol=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
-                if($? -ne $True){
-                    Write-LogError "ERROR: Unable to get volume [$PrimaryVolName] details Reason [$ErrorVar]" 
-                }else{
-                    $PrimaryVolAggr=$PrimaryVol.aggregates.name
-                    $PrimaryVolStyle=$PrimaryVol.style
-                    $PrimaryVolExportPolicy=$PrimaryVol.nas.export_policy.name
-                    $PrimaryVolType=$PrimaryVol.type
-                    $PrimaryVolLang=$PrimaryVol.language
-                    $PrimaryVolSize=$PrimaryVol.size
-                    # $PrimaryVolIsSis=$PrimaryVol.VolumeSisAttributes.IsSisVolume
-                    $PrimaryVolSpaceGuarantee=$PrimaryVol.guarantee.type
-                    $PrimaryVolSnapshotReserve=$PrimaryVol.space.snapshot.reserve_percent
-                    $PrimaryVolState=$PrimaryVol.state
-                    $PrimaryVolJunctionPath=$PrimaryVol.nas.path
-                    # $PrimaryVolIsInfiniteVolume=$PrimaryVol.IsInfiniteVolume
-                    $PrimaryVolIsVserverRoot=$PrimaryVol.is_svm_root
-                    $PrimaryVolComment=$PrimaryVol.comment
-                    $PrimaryVolExtendStyle=$PrimaryVol.style
-                    $PrimaryVolTieringPolicy=$PrimaryVol.tiering.policy
-                }
+                # $Credential = get_local_cDotcred($myPrimaryController)
+                # $url=$("https://"+$myPrimaryController.Name+"/api/storage/volumes/"+$PrimaryVolUuid+"?fields=**,!metric,!statistics")
+                # Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+                # $PrimaryVol=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                # if($? -ne $True){
+                #     Write-LogError "ERROR: Unable to get volume [$PrimaryVolName] details Reason [$ErrorVar]" 
+                # }else{
+                $PrimaryVolName=$PrimaryVol.name
+                $PrimaryVolAggr=$PrimaryVol.aggregates.name
+                $PrimaryVolStyle=$PrimaryVol.nas.security_style
+                $PrimaryVolExportPolicy=$PrimaryVol.nas.export_policy.name
+                $PrimaryVolType=$PrimaryVol.type
+                $PrimaryVolLang=$PrimaryVol.language
+                $PrimaryVolSize=$PrimaryVol.size
+                # $PrimaryVolIsSis=$PrimaryVol.VolumeSisAttributes.IsSisVolume
+                $PrimaryVolSpaceGuarantee=$PrimaryVol.guarantee.type
+                $PrimaryVolSnapshotReserve=$PrimaryVol.space.snapshot.reserve_percent
+                $PrimaryVolState=$PrimaryVol.state
+                $PrimaryVolJunctionPath=$PrimaryVol.nas.path
+                # $PrimaryVolIsInfiniteVolume=$PrimaryVol.IsInfiniteVolume
+                $PrimaryVolIsVserverRoot=$PrimaryVol.is_svm_root
+                $PrimaryVolComment=$PrimaryVol.comment
+                $PrimaryVolExtendStyle=$PrimaryVol.style
+                $PrimaryVolTieringPolicy=$PrimaryVol.tiering.policy
+                # }
 
                 if(($Global:OntapPrimaryVersion -ge "9.10")){
                     # ONTAP >= 9.10
@@ -6220,8 +6267,12 @@ Try {
                     # ONTAP >= 9.8
                     # support of Filesystem Analytics per volume
                     $PrimaryVolAnalyticsState=$PrimaryVol.analytics.state
-                    $PrimaryVolTieringMinCoolDays=$PrimaryVol.tiering.min_cooling_days
-                    $PrimaryVolTieringObjectTags=$PrimaryVol.tiering.object_tags
+                    if($null -ne $PrimaryVol.tiering.min_cooling_days){
+                        $PrimaryVolTieringMinCoolDays=$PrimaryVol.tiering.min_cooling_days
+                    }
+                    if($null -ne $PrimaryVol.tiering.object_tags){
+                        $PrimaryVolTieringObjectTags=$PrimaryVol.tiering.object_tags
+                    }
                 }
                 if(($Global:OntapPrimaryVersion -ge "9.11")){
                     # ONTAP >= 9.11
@@ -6229,6 +6280,7 @@ Try {
                     $PrimaryVolAsyncDeleteClientTrashDirectory=$PrimaryVol.asynchronous_directory_delete.trash_bin
                 }
             }else{
+                $PrimaryVolName=$PrimaryVol.Name
                 $PrimaryVolAggr=$PrimaryVol.Aggregate
                 $PrimaryVolStyle=$PrimaryVol.VolumeSecurityAttributes.Style
                 $PrimaryVolExportPolicy=$PrimaryVol.VolumeExportAttributes.Policy
@@ -6249,7 +6301,7 @@ Try {
             
             if($PrimaryVolExtendStyle -eq "flexvol"){
                 # Create a flexvol
-                if ( ( $PrimaryVolState -eq "online" ) -and ($PrimaryVolType -eq "rw" ) -and ($PrimaryVolIsVserverRoot -eq $False ) -and ( $PrimaryVolIsInfiniteVolume -eq $False ) ) {
+                if ( ( $PrimaryVolState -eq "online" ) -and ($PrimaryVolType -eq "rw" ) -and ($PrimaryVolIsVserverRoot -eq $False ) ) {
                     # Process only online, RW, data, non-vserver-root and non-inifinite volumes
                     if($Restore -eq $False -and $Backup -eq $False){
                         if( $Global:SelectVolume -eq $True -and $Global:NonInteractive -eq $False )
@@ -6283,20 +6335,15 @@ Try {
                         $SecondaryVol = Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $PrimaryVolName  -ErrorVariable ErrorVar 
                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
                     }else{
-                        Write-LogDebug "Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $PrimaryVolName -ZapiCall"
-                        $SecondaryVol = Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $PrimaryVolName  -ErrorVariable ErrorVar -ZapiCall
-                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
-                        $SecondaryVolName=$SecondaryVol.Name
-                        $SecondaryVolUuid=$SecondaryVol.VolumeIdAttributes.Uuid
                         $Credential = get_local_cDotcred($mySecondaryController)
-                        $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$SecondaryVolUuid+"?fields=**,!metric,!statistics")
+                        $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes?svm.name="+$mySecondaryVserver+"&fields=**,!metric,!statistics&name="+$PrimaryVolName)
                         Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
                         $SecondaryVol=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                         if($? -ne $True){
-                            Throw "ERROR: Unable to get volume [$SecondaryVolName] details Reason [$ErrorVar]" 
+                            Throw "ERROR: Unable to get secondary volume [$PrimaryVolName] details Reason [$ErrorVar]" 
                         }
                     }
-                    if ( $null -eq $SecondaryVol )  {
+                    if ( ($null -eq $SecondaryVol) -or ($SecondaryVol.num_records -eq 0) )  {
                         # Create this volume if it does not exist on secondary
                         #  THIS NOW WORKS DIFFERENTLY
                         #  WE ALWAYS TRY TO FIND A MATCH IN NON INTERACTIVE MODE
@@ -6431,7 +6478,8 @@ Try {
                         $NewNcVolParameters=@{}
                         
                         if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapSecondaryVersion -ge "9.10")){
-                            if($PrimaryVolAntiRansomware -eq "enabled"){
+                            # * Rest POST method does not support to set anti-ransomware state on DP volume
+                            if(($PrimaryVolAntiRansomware -eq "enabled") -and ($Global:VOLUME_TYPE -eq "RW")){
                                 $NewNcVolParameters.anti_ransomware=@{"state"="enabled"}
                                 $ForceRest=$True
                             }
@@ -6439,24 +6487,27 @@ Try {
                                 $NewNcVolParameters.snaplock=@{"type"=$PrimaryVolSnaplockType}
                                 $ForceRest=$True
                             }
-                            if($PrimaryVolActivityTrackState -eq "on"){
-                                $NewNcVolParameters.activity_tracking=@{"state"="on"}
-                                $ForceRest=$True
-                            }
+                            # ! Disable because of a burt in REST. This parameter is currently only available during patch and not post, so during update and not create
+                            # if($PrimaryVolActivityTrackState -eq "on"){
+                            #     $NewNcVolParameters.activity_tracking=@{"state"="on"}
+                            #     $ForceRest=$True
+                            # }
                         }
-                        if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapSecondaryVersion -ge "9.08")){
+                        # * Rest POST method does not support to set analytics state on DP volume
+                        if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapSecondaryVersion -ge "9.08") -and ($Global:VOLUME_TYPE -eq "RW")){
                             if($PrimaryVolAnalyticsState -eq "on"){
                                 $NewNcVolParameters.analytics=@{"state"="on"}
                                 $ForceRest=$True
                             }
                         }
-                        if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapPrimaryVersion -ge "9.11")){
+                        # * Rest POST method does not support to set analytics state on DP volume
+                        if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapPrimaryVersion -ge "9.11") -and ($Global:VOLUME_TYPE -eq "RW")){
                             if($PrimaryVolAsyncDeleteClientState -eq $True){
                                 $NewNcVolParameters.asynchronous_directory_delete=@{"enabled"=$True}
                                 $ForceRest=$True
                             }
                             if(($null -ne $PrimaryVolAsyncDeleteClientTrashDirectory) -and ($PrimaryVolAsyncDeleteClientTrashDirectory -ne "-")){
-                                $NewNcVolParameters.asynchronous_directory_delete=@{"trash_bin"=$PrimaryVolAsyncDeleteClientTrashDirectory}
+                                $NewNcVolParameters.asynchronous_directory_delete+=@{"trash_bin"=$PrimaryVolAsyncDeleteClientTrashDirectory}
                                 $ForceRest=$True
                             }
                         }
@@ -6477,7 +6528,13 @@ Try {
                                     "language"=$PrimaryVolLang;
                                     "svm"=@{"name"=$mySecondaryVserver};
                                     "size"=$PrimaryVolSize;
-                                    "tiering"=@{"policy"=$PrimaryVolTieringPolicy;"min_cooling_days"=$PrimaryVolTieringMinCoolDays};
+                                    "tiering"=@{"policy"=$PrimaryVolTieringPolicy};
+                                }
+                                if($null -ne $PrimaryVolTieringMinCoolDays){
+                                    $NewNcVolParameters.tiering+=@{"min_cooling_days"=$PrimaryVolTieringMinCoolDays}
+                                }
+                                if($null -ne $PrimaryVolTieringObjectTags){
+                                    $NewNcVolParameters.tiering+=@{"object_tags"=$PrimaryVolTieringObjectTags}
                                 }
                                 $NewNcVolParameters+=$option
                                 $CredSecondary=get_local_cDotcred($mySecondaryController)
@@ -6509,9 +6566,15 @@ Try {
                                     $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
                                     if($JobDetail.JobCompletion -eq "success"){
                                         $JobDone=$True
+                                        break
                                     }else{
-                                        $JobStatus=$JobDetail.State
+                                        $JobStatus=$JobDetail.JobState
                                         Write-LogDebug "[$workOn] Vol create job status [$JobStatus]"
+                                        if($JobStatus -eq "failure"){
+                                            $JobCompletion=$JobDetail.JobCompletion
+                                            Write-LogError "[$workOn] Vol creation failed [$JobCompletion]"
+                                            # break
+                                        }
                                     }
                                     $CurrentTime=Get-date
                                     $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
@@ -6561,9 +6624,15 @@ Try {
                                         $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
                                         if($JobDetail.JobCompletion -eq "success"){
                                             $JobDone=$True
+                                            break
                                         }else{
-                                            $JobStatus=$JobDetail.State
+                                            $JobStatus=$JobDetail.JobState
                                             Write-LogDebug "[$workOn] Vol create job status [$JobStatus]"
+                                            if($JobStatus -eq "failure"){
+                                                $JobCompletion=$JobDetail.JobCompletion
+                                                Write-LogError "[$workOn] Vol creation failed [$JobCompletion]"
+                                                break
+                                            }
                                         }
                                         $CurrentTime=Get-date
                                         $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
@@ -6610,9 +6679,15 @@ Try {
                                         $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
                                         if($JobDetail.JobCompletion -eq "success"){
                                             $JobDone=$True
+                                            break
                                         }else{
-                                            $JobStatus=$JobDetail.State
+                                            $JobStatus=$JobDetail.JobState
                                             Write-LogDebug "[$workOn] Vol create job status [$JobStatus]"
+                                            if($JobStatus -eq "failure"){
+                                                $JobCompletion=$JobDetail.JobCompletion
+                                                Write-LogError "[$workOn] Vol creation failed [$JobCompletion]"
+                                                break
+                                            }
                                         }
                                         $CurrentTime=Get-date
                                         $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
@@ -6645,7 +6720,11 @@ Try {
                         # Proceed with an already existing volume on secondary
                         Write-Log "[$workOn] Volume [$PrimaryVolName] already exists"
                         # ADD Volume Type
-                        $SecondaryVolType=$SecondaryVol.VolumeIdAttributes.Type
+                        if($Global:PSTKCall -ne "Rest"){
+                            $SecondaryVolType=$SecondaryVol.VolumeIdAttributes.Type
+                        }else{
+                            $SecondaryVolType=$SecondaryVol.records.type
+                        }
                         if ( $SecondaryVolType -ne "DP" -and $Restore -eq $False -and $Backup -eq $False) {
                             Write-LogError "ERROR: volume $SecondaryVol is not a DP Volume"
                         }
@@ -6749,7 +6828,7 @@ Try {
                         Write-LogDebug "Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $SecondaryFlexgroupMasterName"
                         $SecondaryFlexgroup = Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $SecondaryFlexgroupMasterName  -ErrorVariable ErrorVar 
                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
-                        if ( $null -eq $SecondaryFlexgroup )  {
+                        if ( $null -eq $SecondaryFlexgroup ) {
                             # Create this Flexgroup if it does not exist on secondary
                             Write-Log "[$workOn] Create Flexgroup [$SecondaryFlexgroupMasterName] on [$mySecondaryVserver]"
                             if($Global:XDPPolicy -eq ""){$Policy="MirrorAllSnapshots"}
@@ -6833,7 +6912,7 @@ Try {
                                 }
                             }  
                         }elseif($PrimaryFlexgroupMasterName -notin $ListFlexgroup){
-                            Write-LogDebug "[$workOn] Volume [$PrimaryFlexgroupMasterName] already exists" 
+                            Write-Log "[$workOn] Volume [$SecondaryFlexgroupMasterName] already exists" 
                             $ListFlexgroup+=$PrimaryFlexgroupMasterName
                         }
                     }
