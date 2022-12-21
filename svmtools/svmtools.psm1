@@ -3910,9 +3910,16 @@ Function create_update_qospolicy_dr(
                 }    
             }else{
                 if($Restore -eq $False){
-                    # ! force zapicall because of burt in ONTAP 9.12.1RC1 with GetNcVol and type change in REST records
-                    $PrimaryVolList = Get-NcVol -Zapicall -Query @{VolumeStateAttributes=@{IsVserverRoot=$False}} -Controller $myPrimaryController -Vserver $myPrimaryVserver -ErrorVariable ErrorVar
-                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
+                    if($Global:PSTKCall -eq "Rest"){
+                        # ! force zapicall because of burt in ONTAP 9.12.1RC1 with GetNcVol and type change in REST records
+                        Write-LogDebug "Get-NcVol -Zapicall -Query @{VolumeIdAttributes=@{StyleExtended=`"flexvol|flexgroup`"};VolumeStateAttributes=@{IsVserverRoot=$False};Vserver=$myPrimaryVserver} -Controller $myPrimaryController -VserverContext $myPrimaryVserver"
+                        $PrimaryVolList = Get-NcVol -Zapicall -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"};VolumeStateAttributes=@{IsVserverRoot=$False};Vserver=$myPrimaryVserver} -Controller $myPrimaryController -VserverContext $myPrimaryVserver -ErrorVariable ErrorVar
+                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
+                    }else{
+                        Write-LogDebug "Get-NcVol -Query @{VolumeIdAttributes=@{StyleExtended=`"flexvol|flexgroup`"};VolumeStateAttributes=@{IsVserverRoot=$False};Vserver=$myPrimaryVserver} -Controller $myPrimaryController -VserverContext $myPrimaryVserver"
+                        $PrimaryVolList = Get-NcVol -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"};VolumeStateAttributes=@{IsVserverRoot=$False};Vserver=$myPrimaryVserver} -Controller $myPrimaryController -VserverContext $myPrimaryVserver -ErrorVariable ErrorVar
+                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+                    }
                 }else{
                     if(Test-Path $($Global:JsonPath+"Get-NcVol.json")){
                         $PrimaryVolList=Get-Content $($Global:JsonPath+"Get-NcVol.json") -Raw | ConvertFrom-Json
@@ -4107,6 +4114,7 @@ Function create_update_qospolicy_dr(
                                         qos=@{policy=@{name=$QosPolicyGroupName}}
                                     } | ConvertTo-Json
                                     $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$SecondaryVolUuid)
+                                    Write-Logdebug "Invoke-RestMethod -Method patch -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
                                     $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
                                     if($? -ne $True){
                                         Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
@@ -5725,12 +5733,12 @@ Try {
             # Write-LogDebug "Get-NcVol -Controller $myPrimaryController -Query $query"
             # $PrimaryVolList = Get-NcVol -ZapiCall  -Query $query -Controller $myPrimaryController -ErrorVariable ErrorVar
             if($Global:PSTKCall -ne "Rest"){
-                Write-LogDebug "Get-NcVol -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Query `@`{VolumeStateAttributes=`@`{IsVserverRoot=$False`}`;VolumeIdAttributes=`@`{StyleExtended=`"flexvol|flexgroup`"}}"
-                $PrimaryVolList =Get-NcVol -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -ErrorVariable ErrorVar
+                Write-LogDebug "Get-NcVol -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Query `@`{VolumeStateAttributes=`@`{IsVserverRoot=$False`}`;VolumeIdAttributes=`@`{StyleExtended=`"flexvol|flexgroup`"};Vserver=$myPrimaryVserver}"
+                $PrimaryVolList =Get-NcVol -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"};Vserver=$myPrimaryVserver} -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
             }else{
-                Write-LogDebug "Get-NcVol -ZapiCall -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Query `@`{VolumeStateAttributes=`@`{IsVserverRoot=$False`}`;VolumeIdAttributes=`@`{StyleExtended=`"flexvol|flexgroup`"}}"
-                $PrimaryVolList =Get-NcVol -ZapiCall -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -ErrorVariable ErrorVar
+                Write-LogDebug "Get-NcVol -ZapiCall -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Query `@`{VolumeStateAttributes=`@`{IsVserverRoot=$False`}`;VolumeIdAttributes=`@`{StyleExtended=`"flexvol|flexgroup`"};Vserver=$myPrimaryVserver}"
+                $PrimaryVolList =Get-NcVol -ZapiCall -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"};Vserver=$myPrimaryVserver} -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
             }
             
@@ -5766,13 +5774,13 @@ Try {
             if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapPrimaryVersion -ge "9.10")){
                 # ONTAP >= 9.10
                 # support of AntiRansomware state per volume
-                $PrimaryAntiRansomware=$PrimaryVol.AntiRansomware.state
+                $PrimaryVolAntiRansomware=$PrimaryVol.AntiRansomware.state
             }
             if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapPrimaryVersion -ge "9.08")){
                 # ONTAP >= 9.8
                 # support of Filesystem Analytics per volume
-                $PrimaryFSASupported=$PrimaryVol.Analytics.Supported
-                $PrimaryFSAState=$PrimaryVol.Analytics.State
+                $PrimaryVolFSASupported=$PrimaryVol.Analytics.Supported
+                $PrimaryVolFSAState=$PrimaryVol.Analytics.State
             }
             if ( ( $PrimaryVolState -eq "online" ) -and ($PrimaryVolType -eq "rw" ) -and ($PrimaryVolIsVserverRoot -eq $False ) -and ( $PrimaryVolIsInfiniteVolume -eq $False ) ) 
             {
@@ -5782,7 +5790,7 @@ Try {
                         # Write-LogDebug "Get-NcVol -VserverContext $PrimaryVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended=`"flexgroup`"`}`} -Controller $myPrimaryController"
                         # $PrimaryFlexgroupMaster= Get-NcVol -ZapiCall  -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
                         $PrimaryFlexgroupMaster=$PrimaryVol
-                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup master informations [$PrimaryVolName] [$ErrorVar]" }
+                        # if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup master informations [$PrimaryVolName] [$ErrorVar]" }
                         if($InReverse -eq $False){
                             Write-LogDebug "Work in normal mode with flexgroup, so add _dst ad the end of volume name"
                             $SecondaryName=$($PrimaryFlexgroupMaster.Name+'_dst')
@@ -5842,13 +5850,13 @@ Try {
                     if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapSecondaryVersion -ge "9.10")){
                         # ONTAP >= 9.10
                         # support of AntiRansomware state per volume
-                        $SecondaryAntiRansomware=$SecondaryVol.AntiRansomware.state 
+                        $SecondaryVolAntiRansomware=$SecondaryVol.AntiRansomware.state 
                     }
                     if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapSecondaryVersion -ge "9.08")){
                         # ONTAP >= 9.8
                         # support of Filesystem Analytics per volume
-                        $SecondaryFSASupported=$SecondaryVol.Analytics.Supported
-                        $SecondaryFSAState=$SecondaryVol.Analytics.State
+                        $SecondaryVolFSASupported=$SecondaryVol.Analytics.Supported
+                        $SecondaryVolFSAState=$SecondaryVol.Analytics.State
                     }
                     if ( $PrimaryVolLang -ne $SecondaryVolLang ) 
                     {
@@ -6256,7 +6264,15 @@ Try {
                 $PrimaryVolExtendStyle=$PrimaryVol.style
                 $PrimaryVolTieringPolicy=$PrimaryVol.tiering.policy
                 # }
-
+                $PrimaryVolAntiRansomware=$null
+                $PrimaryVolSnaplockType=$null
+                $PrimaryVolActivityTrackState=$null
+                $PrimaryVolAnalyticsState=$null
+                $PrimaryVolTieringMinCoolDays=$null
+                $PrimaryVolTieringObjectTags=$null
+                $PrimaryVolAsyncDeleteClientState=$null
+                $PrimaryVolAsyncDeleteClientTrashDirectory=$null
+                
                 if(($Global:OntapPrimaryVersion -ge "9.10")){
                     # ONTAP >= 9.10
                     $PrimaryVolAntiRansomware=$PrimaryVol.anti_ransomware.state
@@ -6343,7 +6359,7 @@ Try {
                             Throw "ERROR: Unable to get secondary volume [$PrimaryVolName] details Reason [$ErrorVar]" 
                         }
                     }
-                    if ( ($null -eq $SecondaryVol) -or ($SecondaryVol.num_records -eq 0) )  {
+                    if ( ($null -eq $SecondaryVol) -or ($SecondaryVol.num_records -eq 0) ) {
                         # Create this volume if it does not exist on secondary
                         #  THIS NOW WORKS DIFFERENTLY
                         #  WE ALWAYS TRY TO FIND A MATCH IN NON INTERACTIVE MODE
@@ -6395,6 +6411,7 @@ Try {
                                 Write-Log "[$Workon] Global TieringPolicy is set to [$Global:TieringPolicy]. So, volume [$PrimaryVolName] will get this policy"
                             }else{
                                 $PrimaryAggr=Get-NcAggr -Controller $myPrimaryController -Name $PrimaryVolAggr  -ErrorVariable ErrorVar
+                                # ! need to modify this test because IsComposite is currently no more filed with REST
                                 if($PrimaryAggr.AggrRaidAttributes.IsComposite -eq $True){
                                     $PrimaryVolumeTieringPolicy=$PrimaryVol.VolumeCompAggrAttributes.TieringPolicy
                                     Write-Log "[$Workon] volume [$PrimaryVolName] gets its TieringPolicy from primary volume [$PrimaryVolumeTieringPolicy]"
@@ -6530,7 +6547,7 @@ Try {
                                     "size"=$PrimaryVolSize;
                                     "tiering"=@{"policy"=$PrimaryVolTieringPolicy};
                                 }
-                                if($null -ne $PrimaryVolTieringMinCoolDays){
+                                if(($null -ne $PrimaryVolTieringMinCoolDays) -and ($PrimaryVolTieringPolicy -match "auto|snapshot-only")){
                                     $NewNcVolParameters.tiering+=@{"min_cooling_days"=$PrimaryVolTieringMinCoolDays}
                                 }
                                 if($null -ne $PrimaryVolTieringObjectTags){
@@ -6573,7 +6590,7 @@ Try {
                                         if($JobStatus -eq "failure"){
                                             $JobCompletion=$JobDetail.JobCompletion
                                             Write-LogError "[$workOn] Vol creation failed [$JobCompletion]"
-                                            # break
+                                            break
                                         }
                                     }
                                     $CurrentTime=Get-date
@@ -8269,7 +8286,7 @@ Try {
     }else{
         if($Global:PSTKCall -eq "Rest"){
             Write-LogDebug "Get-NcVol -ZapiCall -Vserver $myPrimaryVserver -Controller $myPrimaryController"
-            $PrimaryVolList = Get-NcVol -ZapiCall  -Controller $myPrimaryController -VserverContext $myPrimaryVserver -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -ErrorVariable ErrorVar
+            $PrimaryVolList = Get-NcVol -ZapiCall  -Controller $myPrimaryController -VserverContext $myPrimaryVserver -Query @{Vserver=$myPrimaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
         }else{
             Write-LogDebug "Get-NcVol -Vserver $myPrimaryVserver -Controller $myPrimaryController"
