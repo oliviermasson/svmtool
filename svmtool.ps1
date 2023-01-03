@@ -1372,6 +1372,7 @@ if(($module.Version.Major -ge 9) -and ($module.Version.Minor -ge 11))
 }
 #Write-LogDebug "Running PSTK in $Global:PSTKCall mode"
 $PSTKVersion=Get-NaToolkitVersion
+$Global:PSTKVersion=$PSTKVersion
 $PSVersionDetail=$PSVersionTable.PSVersion
 #Write-LogDebug "Running PTSK version [$PSTKVersion]"
 

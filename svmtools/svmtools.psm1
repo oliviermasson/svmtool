@@ -4332,7 +4332,7 @@ Try {
     
     if($Global:SINGLE_CLUSTER -eq $True){
         Write-LogDebug "SINGLE_CLUSTER detected, no need to check snapshotpolicy and rules"
-        Write-LogDebug "c[$myPrimaryVserver]: end"
+        Write-LogDebug "[$myPrimaryVserver]: end"
         return $Return
     }
 	
@@ -4353,9 +4353,14 @@ Try {
     }else{
         if($Restore -eq $False){
             Write-LogDebug "Get-NcVol -Vserver $myPrimaryVserver -Controller $myPrimaryController"
-            # ! force zapicall because of burt in ONTAP 9.12.1RC1 with GetNcVol and type change in REST records
-            $ListVolumes = Get-NcVol -ZapiCall  -Controller $myPrimaryController -Vserver $myPrimaryVserver -ErrorVariable ErrorVar
-            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }  
+            if($Global:PSTKCall -eq "Rest"){
+                # ! force zapicall because of burt in ONTAP 9.12.1RC1 with GetNcVol and type change in REST records
+                $ListVolumes = Get-NcVol -ZapiCall  -Controller $myPrimaryController -VserverContext $myPrimaryVserver -Query @{Vserver=$myPrimaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -ErrorVariable ErrorVar
+                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }  
+            }else{
+                $ListVolumes = Get-NcVol -Controller $myPrimaryController -VserverContext $myPrimaryVserver -Query @{Vserver=$myPrimaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -ErrorVariable ErrorVar
+                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+            }
         }else{
             if(Test-Path $($Global:JsonPath+"Get-NcVol.json")){
                 $ListVolumes=Get-Content $($Global:JsonPath+"Get-NcVol.json") -Raw | ConvertFrom-Json
@@ -4381,11 +4386,37 @@ Try {
         # TODO and if not found then check at cluster level...
         if($Restore -eq $False){
             Write-LogDebug "Get-NcSnapshotPolicy -Name $SnapShotPolicyName -Controller $myPrimaryController"
-            $snapShotPolicy=Get-NcSnapshotPolicy -Name $SnapShotPolicyName -Controller $myPrimaryController  -ErrorVariable ErrorVar
+            $SnapShotPolicy=Get-NcSnapshotPolicy -Name $SnapShotPolicyName -Controller $myPrimaryController  -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapshotPolicy failed [$ErrorVar]" }
+            if($Global:PSTKCall -eq "Rest"){
+                if($SnapShotPolicy.Scope -eq "Cluster"){
+                    $isClusterSnapshotPolicy=$True
+                }else{
+                    $isClusterSnapshotPolicy=$False
+                }
+            }else{
+                if($SnapShotPolicy.PolicyOwner -eq "cluster-admin"){
+                    $isClusterSnapshotPolicy=$True
+                }else{
+                    $isClusterSnapshotPolicy=$False
+                }
+            }
         }else{
             if(Test-Path $($Global:JsonPath+"Get-NcSnapshotPolicy.json")){
-                $snapShotPolicy=Get-Content $($Global:JsonPath+"Get-NcSnapshotPolicy.json") -Raw | ConvertFrom-Json
+                $SnapShotPolicy=Get-Content $($Global:JsonPath+"Get-NcSnapshotPolicy.json") -Raw | ConvertFrom-Json
+                if($Global:PSTKCall -eq "Rest"){
+                    if($SnapShotPolicy.Scope -eq "Cluster"){
+                        $isClusterSnapshotPolicy=$True
+                    }else{
+                        $isClusterSnapshotPolicy=$False
+                    }
+                }else{
+                    if($SnapShotPolicy.PolicyOwner -eq "cluster-admin"){
+                        $isClusterSnapshotPolicy=$True
+                    }else{
+                        $isClusterSnapshotPolicy=$False
+                    }
+                }
             }else{
                 $Return=$False
                 $filepath=$($Global:JsonPath+"Get-NcSnapshotPolicy.json")
@@ -4393,8 +4424,8 @@ Try {
             }
         }
         if($Backup -eq $True){
-            $snapShotPolicy | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcSnapshotPolicy.json") -Encoding ASCII -Width 65535
-            if( ($ret=get-item $($Global:JsonPath+"Get-NcSnapshotPolicy.json") -ErrorAction SilentlyContinue) -ne $null ){
+            $SnapShotPolicy | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcSnapshotPolicy.json") -Encoding ASCII -Width 65535
+            if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcSnapshotPolicy.json") -ErrorAction SilentlyContinue) ){
                 Write-LogDebug "$($Global:JsonPath+"Get-NcSnapshotPolicy.json") saved successfully"
             }else{
                 Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcSnapshotPolicy.json")"
@@ -4402,17 +4433,39 @@ Try {
             }
         }
         if($Backup -eq $False){
-            $snapShotPolicy_string=$snapShotPolicy | Out-String
-            Write-LogDebug "snapShotPolicy = $snapShotPolicy_string"
+            $SnapShotPolicy_string=$SnapShotPolicy | Out-String
+            Write-LogDebug "SnapShotPolicy = $SnapShotPolicy_string"
             $SnapshotPolicySchedules = $SnapShotPolicy.SnapshotPolicySchedules
             $PolicyName = $SnapShotPolicy.Policy
             $PolicyEnabled = $SnapShotPolicy.Enabled
-            Write-LogDebug "Analyze SnapshotPolicy [$PolicyName]"
-            Write-LogDebug "Get-NcSnapshotPolicy -Name $PolicyName -Controller $mySecondaryController"
-            $SecondarySnapshotPolicy = Get-NcSnapshotPolicy -Name $PolicyName -Controller $mySecondaryController -ErrorVariable ErrorVar    
-            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapshotPolicy failed [$ErrorVar]" }
-            if( $SecondarySnapshotPolicy -ne $null ) 
+            Write-Log "[$workOn] Proceed SnapshotPolicy [$PolicyName]"
+            if($isClusterSnapshotPolicy){
+                #! burt in filtering SVM scoped snapshot policy in REST call
+                $LevelName=(Get-NcCluster -controller $mySecondaryController).ClusterName
+                if($Global:PSTKCall -ne "Rest"){
+                    Write-LogDebug "Get-NcSnapshotPolicy -Controller $mySecondaryController -Query @{VserverName=$LevelName;Policy=$PolicyName}"
+                    $SecondarySnapshotPolicy = Get-NcSnapshotPolicy -Controller $mySecondaryController -Query @{VserverName=$LevelName;Policy=$PolicyName} -ErrorVariable ErrorVar    
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapshotPolicy failed [$ErrorVar]" }
+                }else{
+                    Write-LogDebug "Get-NcSnapshotPolicy -Controller $mySecondaryController -Query @{VserverName=$LevelName;Policy=$PolicyName} -ZapiCall"
+                    $SecondarySnapshotPolicy = Get-NcSnapshotPolicy -Controller $mySecondaryController -Query @{VserverName=$LevelName;Policy=$PolicyName} -ErrorVariable ErrorVar -ZapiCall  
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapshotPolicy failed [$ErrorVar]" }
+                }
+            }else{
+                $LevelName=$mySecondaryVserver
+                if($Global:PSTKCall -ne "Rest"){
+                    Write-LogDebug "Get-NcSnapshotPolicy -Controller $mySecondaryController -Query @{VserverName=$mySecondaryVserver;Policy=$PolicyName}"
+                    $SecondarySnapshotPolicy = Get-NcSnapshotPolicy -Controller $mySecondaryController -Query @{VserverName=$mySecondaryVserver;Policy=$PolicyName} -ErrorVariable ErrorVar    
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapshotPolicy failed [$ErrorVar]" }
+                }else{
+                    Write-LogDebug "Get-NcSnapshotPolicy -Controller $mySecondaryController -Query @{VserverName=$mySecondaryVserver;Policy=$PolicyName} -ZapiCall"
+                    $SecondarySnapshotPolicy = Get-NcSnapshotPolicy -Controller $mySecondaryController -Query @{VserverName=$mySecondaryVserver;Policy=$PolicyName} -ErrorVariable ErrorVar -ZapiCall   
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapshotPolicy failed [$ErrorVar]" }
+                }
+            }
+            if( $null -ne $SecondarySnapshotPolicy ) 
             {
+                Write-Log "[$workOn] Policy [$PolicyName] exists on level [$LevelName]"
                 $SecondaryPolicyEnabled=$SecondarySnapshotPolicy.Enabled
                 if($SecondaryPolicyEnabled -ne $PolicyEnabled){
                     Write-LogDebug "Set-NcSnapshotPolicy -Name $PolicyName -Controller $mySecondaryController -Enabled $PolicyEnabled"
@@ -4478,7 +4531,7 @@ Try {
             }
             else # add new policy
             {
-                Write-Log "[$workOn] Policy [$PolicyName] does not exist"
+                Write-Log "[$workOn] Policy [$PolicyName] does not exist on level [$LevelName]"
                 Write-Log "[$workOn] Create Policy and associated rules"
                 $firstSchedule=0
                 foreach($SnapshotPolicySchedule in $SnapshotPolicySchedules)
@@ -4487,27 +4540,77 @@ Try {
                     $Count=$SnapshotPolicySchedule.Count
                     $Prefix=$SnapshotPolicySchedule.Prefix
                     $SnapmirrorLabel=$SnapshotPolicySchedule.SnapmirrorLabel
-                    if($firstSchedule -eq 0){
-                        if($SnapmirrorLabel -ne "-"){
-                            Write-LogDebug "New-NcSnapshotPolicy -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -Enabled $PolicyEnabled -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController"
-                            $out=New-NcSnapshotPolicy -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -Enabled $PolicyEnabled -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcSnapshotPolicy failed [$ErrorVar]" }
-                        }else{
-                            Write-LogDebug "New-NcSnapshotPolicy -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -Enabled $PolicyEnabled -SnapmirrorLabel \`n -Controller $mySecondaryController"
-                            $out=New-NcSnapshotPolicy -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -Enabled $PolicyEnabled -SnapmirrorLabel `n -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcSnapshotPolicy failed [$ErrorVar]" }
-                        }
-                        $firstSchedule++
+                    #! Create SVM scoped snapshot policy is not available with PSTK < 9.11
+                    if((Get-NaToolkitVersion).Major -ge 9 -and (Get-NaToolkitVersion).Minor -lt 11){
+                        Write-LogDebug "SVM Scoped snapshotpolicy could not be created with PSTK lower than 9.10. Current PSTK Version is [${Global:PSTKVersion}]"
+                        $SVMScopeCompatible=$False
+                    }else{
+                        Write-LogDebug "SVM Scoped snapshotpolicy compatible. Current PSTK Version is [${Global:PSTKVersion}]"
+                        $SVMScopeCompatible=$True
                     }
-                    else{
-                        if($SnapmirrorLabel -ne "-"){
-                            Write-LogDebug "Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController"
-                            $out=Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcSnapshotPolicySchedule failed [$ErrorVar]" }
-                        }else{
-                            Write-LogDebug "Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel \`n -Controller $mySecondaryController"
-                            $out=Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel `n -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcSnapshotPolicySchedule failed [$ErrorVar]" }
+                    if($SVMScopeCompatible -eq $False){
+                        if($firstSchedule -eq 0){
+                            if($SnapmirrorLabel -ne "-"){
+                                Write-LogDebug "New-NcSnapshotPolicy -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -Enabled $PolicyEnabled -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController"
+                                $out=New-NcSnapshotPolicy -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -Enabled $PolicyEnabled -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcSnapshotPolicy failed [$ErrorVar]" }
+                            }else{
+                                Write-LogDebug "New-NcSnapshotPolicy -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -Enabled $PolicyEnabled -SnapmirrorLabel \`n -Controller $mySecondaryController"
+                                $out=New-NcSnapshotPolicy -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -Enabled $PolicyEnabled -SnapmirrorLabel `n -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcSnapshotPolicy failed [$ErrorVar]" }
+                            }
+                            $firstSchedule++
+                        }
+                        else{
+                            if($SnapmirrorLabel -ne "-"){
+                                Write-LogDebug "Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController"
+                                $out=Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcSnapshotPolicySchedule failed [$ErrorVar]" }
+                            }else{
+                                Write-LogDebug "Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel \`n -Controller $mySecondaryController"
+                                $out=Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel `n -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcSnapshotPolicySchedule failed [$ErrorVar]" }
+                            }
+                        }
+                    }else{
+                        if($firstSchedule -eq 0){
+                            $SvmResource=@()
+                            $SvmResource=New-Object "DataONTAP.C.Types.Snapshot.Svm"
+                            $SvmResource.Name=$mySecondaryVserver
+                            $SvmResource.Uuid=(Get-NcVserver -Name $mySecondaryVserver -Controller $mySecondaryController).Uuid
+                            if($SnapmirrorLabel -ne "-"){
+                                if($isClusterSnapshotPolicy){
+                                    Write-LogDebug "New-NcSnapshotPolicy -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -Enabled $PolicyEnabled -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController"
+                                    $out=New-NcSnapshotPolicy -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -Enabled $PolicyEnabled -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcSnapshotPolicy failed [$ErrorVar]" }
+                                }else{
+                                    Write-LogDebug "New-NcSnapshotPolicy -Svm $SvmResource -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -Enabled $PolicyEnabled -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController"
+                                    $out=New-NcSnapshotPolicy -Svm $SvmResource -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -Enabled $PolicyEnabled -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcSnapshotPolicy failed [$ErrorVar]" }
+                                }
+                            }else{
+                                if($isClusterSnapshotPolicy){
+                                    Write-LogDebug "New-NcSnapshotPolicy -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -Enabled $PolicyEnabled -SnapmirrorLabel \`n -Controller $mySecondaryController"
+                                    $out=New-NcSnapshotPolicy -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -Enabled $PolicyEnabled -SnapmirrorLabel `n -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcSnapshotPolicy failed [$ErrorVar]" }
+                                }else{
+                                    Write-LogDebug "New-NcSnapshotPolicy -Svm $SvmResource -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -Enabled $PolicyEnabled -SnapmirrorLabel \`n -Controller $mySecondaryController"
+                                    $out=New-NcSnapshotPolicy -Svm $SvmResource -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -Enabled $PolicyEnabled -SnapmirrorLabel `n -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcSnapshotPolicy failed [$ErrorVar]" }
+                                }
+                            }
+                            $firstSchedule++
+                        }
+                        else{
+                            if($SnapmirrorLabel -ne "-"){
+                                Write-LogDebug "Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController"
+                                $out=Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcSnapshotPolicySchedule failed [$ErrorVar]" }
+                            }else{
+                                Write-LogDebug "Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel \`n -Controller $mySecondaryController"
+                                $out=Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel `n -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcSnapshotPolicySchedule failed [$ErrorVar]" }
+                            }
                         }
                     }
                 }
@@ -8155,11 +8258,26 @@ Function wait_snapmirror_dr(
     		foreach ( $relation in ( $relationList | Skip-Null ) ) 
             {
     			$MirrorState=$relation.MirrorState
-    			$SourceVolume=$relation.SourceVolume
-    			$DestinationVolume=$relation.DestinationVolume
+    			# $SourceVolume=$relation.SourceVolume
+    			# $DestinationVolume=$relation.DestinationVolume
     			$SourceLocation=$relation.SourceLocation
     			$DestinationLocation=$relation.DestinationLocation
     			$RelationshipStatus=$relation.RelationshipStatus
+                if($Global:PSTKCall -eq "Rest"){
+                    # ! Private CLI REST request necessary to get correct relationship-status
+                    $SecondaryCredential = get_local_cDotcred($mySecondaryController)
+                    $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/snapmirror?source-path="+$SourceLocation+"&destination-path="+$DestinationLocation+"&fields=state,status")
+                    Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
+                    $SnapmirrorRelationshipStatus=Invoke-RestMethod -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+                    if($? -ne $True){
+                        Write-LogError "ERROR: Unable to get snapmirror relationship status. Reason [$ErrorVar]"
+                        Write-LogDebug "[$workOn]: end"
+                        return $False
+                    }elseif($SnapmirrorRelationshipStatus.num_records -gt 0){
+                        $relation.MirrorState=$SnapmirrorRelationshipStatus.records[0].state
+                        $relation.RelationshipStatus=$SnapmirrorRelationshipStatus.records[0].status
+                    }
+                }
     			Write-LogDebug "Relation [$SourceLocation] --> [$DestinationLocation] is in status [$MirrorState]:[$RelationshipStatus] "
                 if ( ( $MirrorState -eq "snapmirrored" ) -and ( $RelationshipStatus -in $("idle","insync") ) ){
                     $GoodStatus = $True
@@ -8171,7 +8289,7 @@ Function wait_snapmirror_dr(
             if($nbGood -eq $relationList.count){
                 Write-LogDebug "All relationship are in the good status, so exit with true"
                 Write-Log "[$mySecondaryVserver] All Snapmirror transfers terminated"
-                Write-LogDebug "[$mySecondaryVserver]: end"
+                Write-LogDebug "end"
                 return $True
             }else{
                 $missing=$relationList.count - $nbGood
@@ -8285,6 +8403,7 @@ Try {
         }    
     }else{
         if($Global:PSTKCall -eq "Rest"){
+            # ! force zapicall because of burt in ONTAP 9.12.1RC1 with GetNcVol and type change in REST records
             Write-LogDebug "Get-NcVol -ZapiCall -Vserver $myPrimaryVserver -Controller $myPrimaryController"
             $PrimaryVolList = Get-NcVol -ZapiCall  -Controller $myPrimaryController -VserverContext $myPrimaryVserver -Query @{Vserver=$myPrimaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
@@ -8310,9 +8429,30 @@ Try {
         if($PrimaryVolExtendStyle -eq "flexvol"){
             if ( ( $PrimaryVolState -eq "online" ) -and ( $PrimaryVolType -eq "rw" ) -and ( $PrimaryVolIsVserverRoot -eq $False ) -and ( $PrimaryVolIsInfiniteVolume -eq $False ) ) 
             {
-                Write-LogDebug "Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -DestinationVolume $PrimaryVolName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryVolName -Controller $mySecondaryController"
-                $relation=Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -DestinationVolume $PrimaryVolName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryVolName -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
+                if($Global:PSTKCall -ne "Rest"){
+                    Write-LogDebug "Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -DestinationVolume $PrimaryVolName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryVolName -Controller $mySecondaryController"
+                    $relation=Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -DestinationVolume $PrimaryVolName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryVolName -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
+                }else{
+                    Write-LogDebug "Get-NcSnapmirror -SourceLocation $($myPrimaryVserver+":"+$PrimaryVolName) -DestinationLocation $($mySecondaryVserver+":"+$PrimaryVolName) -Controller $mySecondaryController"
+                    $relation=Get-NcSnapmirror -SourceLocation $($myPrimaryVserver+":"+$PrimaryVolName) -DestinationLocation $($mySecondaryVserver+":"+$PrimaryVolName) -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
+                    if($null -ne $relation){
+                        # ! Private CLI REST request necessary to get correct relationship-status
+                        $SecondaryCredential = get_local_cDotcred($mySecondaryController)
+                        $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/snapmirror?source-path="+$($myPrimaryVserver+":"+$PrimaryVolName)+"&destination-path="+$($mySecondaryVserver+":"+$PrimaryVolName)+"&fields=state,status")
+                        Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
+                        $SnapmirrorRelationshipStatus=Invoke-RestMethod -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+                        if($? -ne $True){
+                            Write-LogError "ERROR: Unable to get snapmirror relationship status. Reason [$ErrorVar]"
+                            Write-LogDebug "[$workOn]: end"
+                            return $False
+                        }elseif($SnapmirrorRelationshipStatus.num_records -gt 0){
+                            $relation.MirrorState=$SnapmirrorRelationshipStatus.records[0].state
+                            $relation.RelationshipStatus=$SnapmirrorRelationshipStatus.records[0].status
+                        }
+                    }
+                }
                 if ( $null -eq $relation ) 
                 {
                     if( ($Force -eq $False) -and ($DDR -eq $False) )
@@ -8601,18 +8741,39 @@ Try {
             # if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup master informations [$PrimaryVolName] [$ErrorVar]" }
             $SecondaryFlexgroupMasterName=$($PrimaryVolName+'_dst')
             $PrimaryFlexgroupMasterName=$PrimaryVolName
-            Write-LogDebug "Get-NcVol -Name $PrimaryFlexgroupMasterName -Vserver $myPrimaryVserver -Controller $myPrimaryController"
-            $PrimaryFlexgroup= Get-NcVol -Name $PrimaryFlexgroupMasterName -Vserver $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
-            $PrimaryFlexgroupState=$PrimaryFlexgroup.State
-            $PrimaryFlexgroupType=$PrimaryFlexgroup.VolumeIdAttributes.Type
-            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+            # Write-LogDebug "Get-NcVol -Name $PrimaryFlexgroupMasterName -Vserver $myPrimaryVserver -Controller $myPrimaryController"
+            # $PrimaryFlexgroup= Get-NcVol -Name $PrimaryFlexgroupMasterName -Vserver $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
+            $PrimaryFlexgroupState=$PrimaryVolState
+            $PrimaryFlexgroupType=$PrimaryVolType
+            # if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
             if ( ( $PrimaryFlexgroupState -eq "online" ) -and ( $PrimaryFlexgroupType -eq "rw" ) ){
-                Write-LogDebug "Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Controller $mySecondaryController"
-                $relation=Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
+                if($Global:PSTKCall -ne "Rest"){
+                    Write-LogDebug "Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Controller $mySecondaryController"
+                    $relation=Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
+                }else{
+                    Write-LogDebug "Get-NcSnapmirror -SourceLocation $($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName) -DestinationLocation $($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName) -Controller $mySecondaryController"
+                    $relation=Get-NcSnapmirror -SourceLocation $($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName) -DestinationLocation $($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName) -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
+                    if($null -ne $relation){
+                        # ! Private CLI REST request necessary to get correct relationship-status
+                        $SecondaryCredential = get_local_cDotcred($mySecondaryController)
+                        $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/snapmirror?source-path="+$($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName)+"&destination-path="+$($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName)+"&fields=state,status")
+                        Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
+                        $SnapmirrorRelationshipStatus=Invoke-RestMethod -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+                        if($? -ne $True){
+                            Write-LogError "ERROR: Unable to get snapmirror relationship status. Reason [$ErrorVar]"
+                            Write-LogDebug "[$workOn]: end"
+                            return $False
+                        }elseif($SnapmirrorRelationshipStatus.num_records -gt 0){
+                            $relation.MirrorState=$SnapmirrorRelationshipStatus.records[0].state
+                            $relation.RelationshipStatus=$SnapmirrorRelationshipStatus.records[0].status
+                        }
+                    }
+                }
                 if ( $null -eq $relation ){
                     # Normally the relationship should exist in status not initialized
-                    # Because it is created previously (in ConfigureDR) during creation of remote volumes :
+                    # Because it is created previously (in ConfigureDR) during creation of DR flexgroup :
                     #   Protection of Flexgroup to create same constituent number and size for each existing Flexgroup through Enable-NcSnapmirrorProtect 
                     if( (($Force -eq $False) -and ($DDR -eq $False)) -and $Global:ForceRecreate -eq $False ){
                         # Not in Force mode
@@ -8625,18 +8786,37 @@ Try {
                             $Schedule=$Global:MirrorSchedule
                         }
                         Write-Log "[$workOn] Recreate Flexgroup relationship [$myPrimaryVserver`:$PrimaryFlexgroupMasterName] --> [$mySecondaryVserver`:$SecondaryFlexgroupMasterName] schedule [$Schedule]"
-                        Write-LogDebug "Get-NcSnapmirrorDestination -SourceVserver $myPrimaryVserver -DestinationVserver $mySecondaryVserver -VserverContext $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -DestinationVolume $SecondaryFlexgroupMasterName `
-                        -Controller $myPrimaryController | Invoke-NcSnapmirrorRelease -RelationshipInfoOnly"
-                        $ret=Get-NcSnapmirrorDestination -SourceVserver $myPrimaryVserver -DestinationVserver $mySecondaryVserver -VserverContext $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -DestinationVolume $SecondaryFlexgroupMasterName `
-                        -Controller $myPrimaryController -ErrorVariable ErrorVar | Invoke-NcSnapmirrorRelease -RelationshipInfoOnly -ErrorVariable ErrorVar -Confirm:$False
-                        if($? -ne $True){$Return=$False; Throw "ERROR : Failed to release destination relationship [${mySecondaryController}:${mySecondaryVserver}:${PrimaryVolName}] reason [$ErrorVar]"}
-                        Write-LogDebug "New-NcSnapmirror -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Type vault -Policy $PreviousRelationPolicy -Schedule $Schedule -controller $mySecondaryController"
-                        $ret=New-NcSnapmirror -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Type vault -Policy $PreviousRelationPolicy -Schedule $Schedule -controller $mySecondaryController -ErrorVariable ErrorVar
-                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcSnapmirror forced flexgroup failed [$ErrorVar]" }
-                        #$ret=Invoke-NcSnapmirrorResync -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Controller $mySecondaryController -ErrorVariable ErrorVar
-                        #if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Invoke-NcSnapmirrorResync forced flexgroup failed [$ErrorVar]" }
-                        $relation=Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
+                        if($Global:PSTKCall -ne "Rest"){
+                            Write-LogDebug "Get-NcSnapmirrorDestination -SourceVserver $myPrimaryVserver -DestinationVserver $mySecondaryVserver -VserverContext $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -DestinationVolume $SecondaryFlexgroupMasterName `
+                            -Controller $myPrimaryController | Invoke-NcSnapmirrorRelease -RelationshipInfoOnly"
+                            $ret=Get-NcSnapmirrorDestination -SourceVserver $myPrimaryVserver -DestinationVserver $mySecondaryVserver -VserverContext $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -DestinationVolume $SecondaryFlexgroupMasterName `
+                            -Controller $myPrimaryController -ErrorVariable ErrorVar | Invoke-NcSnapmirrorRelease -RelationshipInfoOnly -ErrorVariable ErrorVar -Confirm:$False
+                            if($? -ne $True){$Return=$False; Throw "ERROR : Failed to release destination relationship [${mySecondaryController}:${mySecondaryVserver}:${SecondaryFlexgroupMasterName}] reason [$ErrorVar]"}
+                            
+                            Write-LogDebug "New-NcSnapmirror -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Type vault -Policy $PreviousRelationPolicy -Schedule $Schedule -controller $mySecondaryController"
+                            $ret=New-NcSnapmirror -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Type vault -Policy $PreviousRelationPolicy -Schedule $Schedule -controller $mySecondaryController -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcSnapmirror forced flexgroup failed [$ErrorVar]" }
+                            #$ret=Invoke-NcSnapmirrorResync -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Controller $mySecondaryController -ErrorVariable ErrorVar
+                            #if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Invoke-NcSnapmirrorResync forced flexgroup failed [$ErrorVar]" }
+                            
+                            $relation=Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
+                        }else{
+                            # ! Need to force an ONTAPI call becasue of burt in PSTK and i need a 'PSTK' answer to pipe it into Invoke-NcSnapmirrorRelease
+                            Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName) -DestinationLocation $($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName) -Controller $myPrimaryController -ONTAPI | Invoke-NcSnapmirrorRelease -RelationshipInfoOnly"
+                            $ret=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName) -DestinationLocation $($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName) -Controller $myPrimaryController -ErrorVariable ErrorVar -ONTAPI | Invoke-NcSnapmirrorRelease -RelationshipInfoOnly -ErrorVariable ErrorVar -Confirm:$False
+                            if($? -ne $True){$Return=$False; Throw "ERROR : Failed to release destination relationship [${mySecondaryController}:${mySecondaryVserver}:${SecondaryFlexgroupMasterName}] reason [$ErrorVar]"}
+
+                            Write-LogDebug "New-NcSnapmirror -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Type vault -Policy $PreviousRelationPolicy -Schedule $Schedule -controller $mySecondaryController"
+                            $ret=New-NcSnapmirror -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Type vault -Policy $PreviousRelationPolicy -Schedule $Schedule -controller $mySecondaryController -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcSnapmirror forced flexgroup failed [$ErrorVar]" }
+                            #$ret=Invoke-NcSnapmirrorResync -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Controller $mySecondaryController -ErrorVariable ErrorVar
+                            #if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Invoke-NcSnapmirrorResync forced flexgroup failed [$ErrorVar]" }
+                            
+                            $relation=Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName) -SourceLocation $($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName) -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
+                        }
+                        
                     }elseif($DDR -eq $True){
                         # Double DR mode
                         $Return = $False
