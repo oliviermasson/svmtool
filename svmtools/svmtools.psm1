@@ -4386,7 +4386,7 @@ Try {
         # TODO and if not found then check at cluster level...
         if($Restore -eq $False){
             Write-LogDebug "Get-NcSnapshotPolicy -Name $SnapShotPolicyName -Controller $myPrimaryController"
-            $SnapShotPolicy=Get-NcSnapshotPolicy -Name $SnapShotPolicyName -Controller $myPrimaryController  -ErrorVariable ErrorVar
+            $SnapShotPolicy=Get-NcSnapshotPolicy -Name $SnapShotPolicyName -Controller $myPrimaryController  -ErrorVariable ErrorVar | Where-Object {$_.VserverName -notmatch "-mc"}
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapshotPolicy failed [$ErrorVar]" }
             if($Global:PSTKCall -eq "Rest"){
                 if($SnapShotPolicy.Scope -eq "Cluster"){
@@ -4482,7 +4482,9 @@ Try {
                     if($Result.SideIndicator -eq "=="){
                         # identique check le reste
                         $PrimarySched=$SnapshotPolicySchedules | Where-Object {$_.Schedule -eq $Result.Schedule} | sort-object
+                        if($PrimarySched.SnapmirrorLabel -eq "-" -or $null -eq $PrimarySched.SnapmirrorLabel){$PrimarySched.SnapmirrorLabel="`n"}
                         $SecondarySched=$SecondarySnapshotPolicySchedule | Where-Object {$_.Schedule -eq $Result.Schedule} | sort-object
+                        if($SecondarySched.SnapmirrorLabel -eq "-" -or $null -eq $SecondarySched.SnapmirrorLabel){$SecondarySched.SnapmirrorLabel="`n"}
                         Write-LogDebug "Compare-Object $PrimarySched $SecondarySched -Property Count,Prefix,SnapmirrorLabel"
                         $DetailResults=Compare-Object $PrimarySched $SecondarySched -Property Count,Prefix,SnapmirrorLabel
                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Compare-Object failed [$ErrorVar]" }
@@ -4523,9 +4525,27 @@ Try {
                         $Prefix=$PrimarySchedule.Prefix
                         $SnapmirrorLabel=$PrimarySchedule.SnapmirrorLabel
                         Write-Log "[$workOn] Add new schedule [$Schedule] in Policy [$PolicyName]"
-                        Write-LogDebug "Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController"
-                        $out=Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcSnapshotPolicySchedule failed [$ErrorVar]" }
+                        if($Global:PSTKCall -ne "Rest"){
+                            Write-LogDebug "Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController"
+                            $out=Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcSnapshotPolicySchedule failed [$ErrorVar]" }
+                        }else{
+                            $NewSecondarySnapshotPolicy=Get-NcSnapshotPolicy -Controller $mySecondaryController -Query @{VserverName=$mySecondaryVserver;Policy=$PolicyName} | Where-Object {$_.VserverName -notmatch "-mc"}
+                            $NewSecondarySnapshotPolicyUuid=$NewSecondarySnapshotPolicy.Uuid
+                            $body=@{
+                                count=$Count
+                                prefix=$Prefix
+                                schedule=@{name=$Schedule}
+                                snapmirror_label=$SnapmirrorLabel
+                            } | ConvertTo-Json
+                            $url=$("https://"+$mySecondaryController.Name+"/api/storage/snapshot-policies/"+$NewSecondarySnapshotPolicyUuid+"/schedules")
+                            $CredSecondary=get_local_cDotcred($mySecondaryController)
+                            Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
+                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                            if($? -ne $True){
+                                Write-LogError "ERROR: Post request [$url] reason [$ErrorVar]"
+                            }
+                        }
                     }
                 } 	
             }
@@ -4560,6 +4580,8 @@ Try {
                                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcSnapshotPolicy failed [$ErrorVar]" }
                             }
                             $firstSchedule++
+                            $NewSecondarySnapshotPolicy=Get-NcSnapshotPolicy -Controller $mySecondaryController -Query @{VserverName=$mySecondaryVserver;Policy=$PolicyName} | Where-Object {$_.VserverName -notmatch "-mc"}
+                            $NewSecondarySnapshotPolicyUuid=$NewSecondarySnapshotPolicy.Uuid
                         }
                         else{
                             if($SnapmirrorLabel -ne "-"){
@@ -4572,7 +4594,7 @@ Try {
                                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcSnapshotPolicySchedule failed [$ErrorVar]" }
                             }
                         }
-                    }else{
+                    }else{   # SVM scoped code
                         if($firstSchedule -eq 0){
                             $SvmResource=@()
                             $SvmResource=New-Object "DataONTAP.C.Types.Snapshot.Svm"
@@ -4600,16 +4622,50 @@ Try {
                                 }
                             }
                             $firstSchedule++
-                        }
-                        else{
-                            if($SnapmirrorLabel -ne "-"){
-                                Write-LogDebug "Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController"
-                                $out=Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcSnapshotPolicySchedule failed [$ErrorVar]" }
+                            $NewSecondarySnapshotPolicy=Get-NcSnapshotPolicy -Controller $mySecondaryController -Query @{VserverName=$mySecondaryVserver;Policy=$PolicyName} | Where-Object {$_.VserverName -notmatch "-mc"}
+                            $NewSecondarySnapshotPolicyUuid=$NewSecondarySnapshotPolicy.Uuid
+                        }else{ # not the first schedule
+                            if($Global:PSTKCall -ne "Rest"){
+                                Write-LogWarn "SVM scoped Snapshot Policy require to use lastest PSTK with REST call"
+                                if($SnapmirrorLabel -ne "-"){
+                                    Write-LogDebug "Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController"
+                                    $out=Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcSnapshotPolicySchedule failed [$ErrorVar]" }
+                                }else{
+                                    Write-LogDebug "Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel \`n -Controller $mySecondaryController"
+                                    $out=Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel `n -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcSnapshotPolicySchedule failed [$ErrorVar]" }
+                                }
                             }else{
-                                Write-LogDebug "Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel \`n -Controller $mySecondaryController"
-                                $out=Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel `n -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcSnapshotPolicySchedule failed [$ErrorVar]" }
+                                #! direct REST request needed because of burt with Add-NcSnapshotPolicySchedule with SVM scoped policy
+                                if($SnapmirrorLabel -ne "-"){
+                                    # Write-LogDebug "Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController"
+                                    # $out=Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                    # if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcSnapshotPolicySchedule failed [$ErrorVar]" }
+                                    $body=@{
+                                        count=$Count
+                                        prefix=$Prefix
+                                        schedule=@{name=$Schedule}
+                                        snapmirror_label=$SnapmirrorLabel
+                                    } | ConvertTo-Json
+                                }else{
+                                    # Write-LogDebug "Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel \`n -Controller $mySecondaryController"
+                                    # $out=Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel `n -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                    # if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcSnapshotPolicySchedule failed [$ErrorVar]" }
+                                    $body=@{
+                                        count=$Count
+                                        prefix=$Prefix
+                                        schedule=@{name=$Schedule}
+                                        snapmirror_label="`n"
+                                    } | ConvertTo-Json
+                                }
+                                $url=$("https://"+$mySecondaryController.Name+"/api/storage/snapshot-policies/"+$NewSecondarySnapshotPolicyUuid+"/schedules")
+                                $CredSecondary=get_local_cDotcred($mySecondaryController)
+                                Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
+                                $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                if($? -ne $True){
+                                    Write-LogError "ERROR: Post request [$url] reason [$ErrorVar]"
+                                }
                             }
                         }
                     }
