@@ -7277,7 +7277,7 @@ Try {
         if($? -ne $True){
             Write-LogError "ERROR: Unable to get not nested volume. Reason [$ErrorVar]" 
         }else{
-            $VolListNotNested=$ret.records | ConvertTo-Json | ConvertFrom-Json
+            $VolListNotNested=$ret.records
         }
     }
     $Junctions=@()
@@ -7348,7 +7348,7 @@ Try {
     # Get volume mounted but not under the SVM rootvolume, under / : the root of vserver namespace
     if($Global:PSTKCall -ne "Rest"){
         Write-LogDebug "Get-NcVol -VserverContext $myVserver -Query @{VolumeStateAttributes=@{IsVserverRoot=$false;State=""online""};VolumeIdAttributes=@{JunctionParentName=""!$RootVolumeName"";JunctionPath=""!-,!/""};StyleExtended=""flexvol|flexgroup""} -Controller $myController"
-        $VolListNested= Get-NcVol VserverContext $myVserver -Query @{VolumeIdAttributes=@{JunctionParentName="!$RootVolumeName";JunctionPath="!-,!/";StyleExtended="flexvol|flexgroup"};Vserver=$myVserver;VolumeStateAttributes=@{IsVserverRoot=$false;State="online"}} -Controller $myController -ErrorVariable ErrorVar
+        $VolListNested= Get-NcVol -VserverContext $myVserver -Query @{VolumeIdAttributes=@{JunctionParentName="!$RootVolumeName";JunctionPath="!-,!/";StyleExtended="flexvol|flexgroup"};Vserver=$myVserver;VolumeStateAttributes=@{IsVserverRoot=$false;State="online"}} -Controller $myController -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get Nested Volumes failed [$ErrorVar]" }
     }else{
         $url=$("https://"+$myController.Name+"/api/storage/volumes?svm.name="+$myVserver+"&nas.path=!-,!/&nas.junction_parent.name=!"+$RootVolumeName+"&fields=name,nas.path,nas.junction_parent.name,style,nas.unix_permissions")
@@ -7357,7 +7357,7 @@ Try {
         if($? -ne $True){
             Write-LogError "ERROR: Unable to nested volume. Reason [$ErrorVar]" 
         }else{
-            $VolListNested=$ret.records | ConvertTo-Json | ConvertFrom-Json
+            $VolListNested=$ret.records
         }
     }
     $ListFlexgroup=@()
