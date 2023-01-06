@@ -11849,13 +11849,15 @@ Try {
         }
     }
     $WinSIDCompatible=$False
-    if($Backup -eq $False){
-        $SecondaryVersion=(Get-NcSystemVersionInfo -Controller $mySecondaryController)[0].VersionTuple
-        $SecondaryVersion_text=$SecondaryVersion | Out-String
-        if($SecondaryVersion.Generation -ge 9){
-            if($SecondaryVersion.Major -ge 3){
-                $WinSIDCompatible=$True
-                Write-LogDebug "Secondary Version is [$SecondaryVersion_text] WinSIDCompatible set to True"
+    if($Global:PSTKCall -ne "Rest"){
+        if($Backup -eq $False){
+            $SecondaryVersion=(Get-NcSystemVersionInfo -Controller $mySecondaryController)[0].VersionTuple
+            $SecondaryVersion_text=$SecondaryVersion | Out-String
+            if($SecondaryVersion.Generation -ge 9){
+                if($SecondaryVersion.Major -ge 3){
+                    $WinSIDCompatible=$True
+                    Write-LogDebug "Secondary Version is [$SecondaryVersion_text] WinSIDCompatible set to True"
+                }
             }
         }
     }
@@ -11895,7 +11897,7 @@ Try {
             $PrimaryCifsServerInfos = Get-NcCifsServer -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsServer failed [$ErrorVar]" }
         }else{
-            Write-LogDebug "Get CIFS Server info from previously backed up data [$NcCifsServerInfos]"
+            Write-LogDebug "Get CIFS Server info from previously backed up data [$NcCifsServerInfos] passed as paramter"
             $PrimaryCifsServerInfos=$NcCifsServerInfos
         }
         $PrimaryServer=$PrimaryCifsServerInfos.CifsServer
@@ -12039,6 +12041,7 @@ Try {
         }
     }
 
+    # CIFS shares processing
     Write-LogDebug "Check CIFS shares"
     if($Restore -eq $False){
         if($null -eq $NcCifsShare){
@@ -12129,7 +12132,7 @@ Try {
                     }
                 }else{
                     # modify share on dest only if share is in c$,admin$ or ipc$
-                    # or create it not c$, admin$ or ipc$ share that must be create automaticaly when CIFS server deployed
+                    # or create it, if not c$, admin$ or ipc$ shares that are create automaticaly when CIFS server is deployed
                     # in some case admin$ share is not automaticaly create during CIFS share deployement, so we will create this share too
                     $PrimaryShareName=$sharediff.ShareName
                     Write-LogDebug "Working on share [$PrimaryShareName]"
@@ -12504,7 +12507,6 @@ $request=@"
                 if ( (-not $Global:SecondaryCifsLifCreated) -and ($null -eq $NcCifsServerInfos) ){
                     if (($ret=set_all_lif -mySecondaryVserver $mySecondaryVserver -myPrimaryVserver $myPrimaryVserver -mySecondaryController $mySecondaryController  -myPrimaryController $myPrimaryController -state down) -ne $True ) {
                         Write-LogError "ERROR: Failed to set all lif up on [$mySecondaryVserver]"
-                        clean_and_exit 1
                     }
                 }
             }
@@ -17160,32 +17162,106 @@ Function create_subdir (
 {
     $Return=$True
     $fullpath=$("/vol/"+$RootVolume)
+    $RESTsearch=""
+    $level=0
     foreach($dir in $Dirs.split("/")[1..$Dirs.split("/").count]){
         Write-LogDebug "Work with dir [$dir]"
         $fullpath+=$("/"+$dir)
+        if($level -eq 0){
+            $RESTsearch=$dir
+            $level+=1
+        }else{
+            $RESTsearch+=$("/"+$dir)
+            $level+=1
+        }
+        
         try{
             Write-LogDebug "Get dir detail for path [$fullpath] on [$myVserver]"
-            try{
-                $DirDetails=Read-NcDirectory -Path $fullpath -VserverContext $myVserver -Controller $myController -ErrorAction SilentlyContinue
-            }catch{
+            if($Global:PSTKCall -ne "Rest"){
+                try{
+                    Write-LogDebug "Read-NcDirectory -Path $fullpath -VserverContext $myVserver -Controller $myController"
+                    $DirDetails=Read-NcDirectory -Path $fullpath -VserverContext $myVserver -Controller $myController -ErrorAction SilentlyContinue
+                }catch{
+                    $DirDetails=$null
+                }
+            }else{
+                $Credential=get_local_cDotcred($myController)
+                $url=$("https://"+$myController.Name+"/api/storage/volumes?svm.name="+$myVserver+"&name="+$RootVolume+"&fields=uuid")
+                Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+                $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                if($? -ne $True){
+                    Write-LogError "ERROR: Get volume uuid Reason [$ErrorVar]"
+                    return $False
+                }
+                $VolumeUUID=$ret.records[0].uuid
+                $url=$("https://"+$myController.Name+"/api/storage/volumes/"+$VolumeUUID+"/files/"+$RESTsearch+"?fields=name,size,type,is_empty,unix_permissions")
+                Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
                 $DirDetails=$null
+                $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                if($? -ne $True){
+                    Write-LogError "ERROR: Get volume uuid Reason [$ErrorVar]"
+                    return $False
+                }
+                if($ret.num_records -ge 1){
+                    $DirDetails=$ret.records[0]
+                }else{
+                    Write-LogDebug "Dir [$dir] does not exists on volume [$RootVolume] on dest [$myPrimaryVserver]"
+                }
             }
             if($null -eq $DirDetails){
                 Write-LogDebug "Get dir detail for path [$fullpath] on [$myPrimaryVserver]"
                 $searchPath=(Split-Path -Path $fullpath).replace('\','/')
                 if($Restore -eq $False){
-                    $PrimDirDetails=Read-NcDirectory -Path $searchPath -VserverContext $myPrimaryVserver -Controller $myPrimaryController | Where-Object {$_.Name -eq $dir}
+                    if($Global:PSTKCall -ne "Rest"){
+                        try{
+                            Write-LogDebug "Read-NcDirectory -Path $searchPath -VserverContext $myPrimaryVserver -Controller $myPrimaryController"
+                            $PrimDirDetails=Read-NcDirectory -Path $searchPath -VserverContext $myPrimaryVserver -Controller $myPrimaryController | Where-Object {$_.Name -eq $dir}
+                            $PrimDirPerm=$PrimDirDetails.Perm
+                            $PrimDirType=$PrimDirDetails.Type
+                        }catch{
+                            $PrimDirDetails=$null
+                            Write-LogDebug "Dir [$dir] does not exists on searchPath [$searchPath] on source [$myVserver]"
+                            return $False
+                        }
+                    }else{
+                        $Credential=get_local_cDotcred($myPrimaryController)
+                        $url=$("https://"+$myPrimaryController.Name+"/api/storage/volumes?svm.name="+$myPrimaryVserver+"&name="+$RootVolume+"&fields=uuid")
+                        Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+                        $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                        if($? -ne $True){
+                            Write-LogError "ERROR: Get volume uuid Reason [$ErrorVar]"
+                            return $False
+                        }
+                        $VolumeUUID=$ret.records[0].uuid
+                        $url=$("https://"+$myPrimaryController.Name+"/api/storage/volumes/"+$VolumeUUID+"/files/"+$RESTsearch+"?fields=name,size,type,is_empty,unix_permissions")
+                        Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+                        $PrimDirDetails=$null
+                        $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                        if($? -ne $True){
+                            Write-LogError "ERROR: Get volume uuid Reason [$ErrorVar]"
+                            return $False
+                        }
+                        if($ret.num_records -ge 1){
+                            $PrimDirDetails=$ret.records[0]
+                        }else{
+                            Write-LogDebug "Dir [$dir] does not exists on volume [$RootVolume] on source [$myPrimaryVserver]"
+                            return $False
+                        }
+                        $PrimDirPerm=$PrimDirDetails.unix_permissions
+                        $PrimDirType=$PrimDirDetails.type
+                    }
                 }else{
                     if(Test-Path $($Global:JsonPath+"Read-NcDirectory-"+$dir+".json")){
                         $PrimDirDetails=Get-Content $($Global:JsonPath+"Read-NcDirectory-"+$dir+".json") -Raw | ConvertFrom-Json
+                        
+                        $PrimDirPerm=$PrimDirDetails.Perm
+                        $PrimDirType=$PrimDirDetails.Type
                     }else{
                         $Return=$False
                         $filepath=$($Global:JsonPath+"Read-NcDirectory-"+$dir+".json")
                         Throw "ERROR: failed to read $filepath"
                     }    
                 }
-                $PrimDirPerm=$PrimDirDetails.Perm
-                $PrimDirType=$PrimDirDetails.Type
                 if($PrimDirType -eq "directory"){
                     Write-LogDebug "Create Sub Directory [$dir] on Secondary Vserver [$myVserver] inside volume [$RootVolume] at Path [$fullpath] with Perm [$PrimDirPerm]"
                     Write-LogDebug "New-NcDirectory -Controller $myController -VserverContext $mySecondaryVserver -Permission $PrimDirPerm -Path $fullpath"
@@ -17198,7 +17274,7 @@ Function create_subdir (
                     ## if($? -ne $True) { $Return = $False ; Throw "ERROR : Failed to create Sub Directory [$dir] on volume [$Root] on SVM [$myVserver] Reason : [$ErrorVar]" }    
                 }
             }else{
-                Write-LogDebug "directory [$fullpath] aleready exist"
+                Write-LogDebug "directory [$fullpath] already exist on [$myVserver]"
             }
         }catch{
             handle_error $_ $myVserver
@@ -17289,7 +17365,7 @@ Function mount_volume (
                 $RelativePathToCreate=$CreatePath.replace($ParentPath,"") 
                 if($RelativePathToCreate.Length -gt 1){
                     if($Restore -eq $False){
-                        Write-LogDebug "Treat subdir for a nested volume`nNeed to Create [$RelativePathToCreate] inside volume [$Parent]"
+                        Write-LogDebug "Treat subdir for a nested volume. Need to Create [$RelativePathToCreate] inside volume [$Parent]"
                         if(($ret=create_subdir -myController $myController -myVserver $myVserver -Dirs $RelativePathToCreate -RootVolume $Parent -myPrimaryController $myPrimaryController -myPrimaryVserver $myPrimaryVserver) -ne $True) {
                             Return $False
                             Throw "ERROR: Failed to create all subidr [$RelativePathToCreate] in [$Parent]"
