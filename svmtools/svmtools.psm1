@@ -194,7 +194,7 @@ Function clean_and_exit ([int]$return_code) {
 }
 
 #############################################################################################
-Function handle_error([object]$object,[string]$vserver){
+Function Error_Handling([object]$object,[string]$vserver){
     foreach($appenders in $Global:consolelog.Logger.Appenders){
         if($appenders.Name -match "svmtool.log"){
             $appenders.Threshold=[log4net.Core.Level]::Debug
@@ -949,7 +949,7 @@ Try {
 }
 
 Catch {
-	handle_error $_
+	Error_Handling $_
 	return $False
 }
 }
@@ -1096,7 +1096,7 @@ Try {
 }
 
 Catch {
-	handle_error $_ $myController
+	Error_Handling $_ $myController
 	return $false
 }
 }
@@ -1143,7 +1143,7 @@ Function set_cDotcred_from_cli ([string]$filer, [string]$cred_file ) {
 	    }
     }
     Catch {
-	    handle_error $_ $filer
+	    Error_Handling $_ $filer
 	    return $False
     }
 
@@ -1961,7 +1961,7 @@ Function create_update_vscan_dr (
     }
     catch
     {
-        handle_error $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver
 	    return $Return        
     }
 }
@@ -2075,7 +2075,7 @@ Function create_update_firewallpolicy_dr(
     }
     catch
     {
-        handle_error $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver
 	    return $false        
     }
 }
@@ -2114,7 +2114,7 @@ Function get_vserver_clone(
     }
     catch
     {
-        handle_error $_ $DestinationVserver
+        Error_Handling $_ $DestinationVserver
 	    return $false        
     }
 }
@@ -2231,7 +2231,7 @@ Function create_update_usermapping_dr(
     }
     catch
     {
-        handle_error $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver
         return $Return        
     }
 }
@@ -2437,7 +2437,7 @@ Function create_update_localuser_dr(
     }
     catch
     {
-        handle_error $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver
 	    return $Return        
     }
 }
@@ -2597,7 +2597,7 @@ Function create_update_localunixgroupanduser_dr(
     }
     catch
     {
-        handle_error $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver
         return $Return        
     }
 }
@@ -2778,7 +2778,7 @@ Function create_update_role_dr(
     }
     catch
     {
-        handle_error $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver
         return $Return       
     }
 }
@@ -3620,7 +3620,7 @@ Function create_update_fpolicy_dr(
     }
     catch
     {
-        handle_error $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver
         return $Return        
     }
 }
@@ -4158,7 +4158,7 @@ Function create_update_qospolicy_dr(
     }
     catch
     {
-        handle_error $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver
         return $Return        
     }
 }
@@ -4309,7 +4309,7 @@ Try {
     return $Return
 }
 Catch {
-	handle_error $_ $ctrlName
+	Error_Handling $_ $ctrlName
 	return $Return
 }
 }
@@ -4680,7 +4680,7 @@ Try {
 	return $Return
 }
 Catch {
-	handle_error $_ $myPrimaryVserver
+	Error_Handling $_ $myPrimaryVserver
 	return $Return
 }
 }
@@ -4837,7 +4837,7 @@ Function create_update_efficiency_policy_dr(
     }
     Catch 
     {
-	    handle_error $_ $myPrimaryVserver
+	    Error_Handling $_ $myPrimaryVserver
 	    return $Return
     }
 }
@@ -4964,7 +4964,7 @@ Try {
 	return $Return
 }
 Catch {
-	handle_error $_ $myPrimaryVserver
+	Error_Handling $_ $myPrimaryVserver
 	return $Return
 }
 }
@@ -5077,7 +5077,7 @@ Try {
 	return $Return
 }
 Catch {
-	handle_error $_ $myPrimaryVserver
+	Error_Handling $_ $myPrimaryVserver
 	return $Return
 }
 }
@@ -5248,7 +5248,7 @@ Try {
 	return $Return
 }
 Catch {
-	handle_error $_ $myPrimaryVserver
+	Error_Handling $_ $myPrimaryVserver
 	return $Return
 }
 }
@@ -5393,7 +5393,7 @@ Function set_serial_lundr (
     } 
     Catch 
     {
-    	handle_error $_ $myPrimaryVserver
+    	Error_Handling $_ $myPrimaryVserver
     }
 	if ( $NeedChangeSerial ) 
     {
@@ -5478,7 +5478,7 @@ Try {
 	Return $Return 
 }
 Catch {
-	handle_error $_ $myPrimaryVserver
+	Error_Handling $_ $myPrimaryVserver
 	return $Return
 }
 }
@@ -5590,7 +5590,7 @@ Try {
 	return $Return 
 }
 Catch {
-	handle_error $_ $myPrimaryVserver
+	Error_Handling $_ $myPrimaryVserver
 	return $Return
 }
 }
@@ -6163,7 +6163,7 @@ Try {
 	return $Return 
 }
 Catch {
-	handle_error $_ $myPrimaryVserver
+	Error_Handling $_ $myPrimaryVserver
 	return $Return
 }
 }
@@ -6244,7 +6244,7 @@ Try {
     return $Return  
 }
 Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
 	return $Return
 }
 }
@@ -7111,7 +7111,7 @@ Try {
 	return $Return  
 }
 Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
 	return $Return
 }
 }
@@ -7231,7 +7231,7 @@ Try {
 	return $Return 
 }
 Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
 	return $Return
     }
 }
@@ -7440,7 +7440,7 @@ Try {
     return $Return
 }
 Catch {
-    handle_error $_ $myVserver
+    Error_Handling $_ $myVserver
 	return $Return
 }
 }
@@ -7469,7 +7469,7 @@ Function read_subdir (
                 $Return=$False
             }
         }catch{
-            handle_error $_ $myVserver
+            Error_Handling $_ $myVserver
             return $Return    
         }
     } 
@@ -7549,7 +7549,7 @@ Try {
 	return $Return 
 }
 Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
 	return $Return
 }
 }
@@ -7789,7 +7789,7 @@ Try {
 	return $Return 
 }
 Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
 	return $Return
 }
 }
@@ -7850,7 +7850,7 @@ Try {
 	return $Return 
 }
 Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
 	return $Return
 }
 }
@@ -7897,7 +7897,7 @@ Try {
 	return $Return 
 }
 Catch {
-    handle_error $_
+    Error_Handling $_
 	return $Return
 }
 }
@@ -7955,7 +7955,7 @@ Try {
     }
 }
 Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
 	return $Return
 }
 }
@@ -7992,7 +7992,7 @@ Try {
 	return $Return 
 }
 Catch {
-    handle_error $_ $clustername
+    Error_Handling $_ $clustername
 	return $Return
 }
 }
@@ -8097,7 +8097,7 @@ Try {
 	return $Return 
 }
 Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
 	return $Return
 }
 }
@@ -8119,10 +8119,10 @@ Try {
 
 	Write-LogDebug "start"
 
-
+    Write-LogDebug "Get-NcVserverPeer -Vserver $myPrimaryVserver  -PeerVserver $mySecondaryVserver -Controller $myPrimaryController"
 	$Peer = Get-NcVserverPeer -Vserver $myPrimaryVserver  -PeerVserver $mySecondaryVserver -Controller $myPrimaryController	  -ErrorVariable ErrorVar
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserverPeer failed [$ErrorVar]" }
-	if ( $Peer -ne $null ) {
+	if ( $null -ne $Peer ) {
 		Write-LogDebug "Remove-NcVserverPeer -Vserver $myPrimaryVserver -PeerVserver $mySecondaryVserver -Controller $myPrimaryController -Confirm:$False"	
 		Remove-NcVserverPeer -Vserver $myPrimaryVserver -PeerVserver $mySecondaryVserver  -Controller $myPrimaryController  -ErrorVariable ErrorVar -Confirm:$False
 		if ( $? -ne $True ) { $Return  = $False ; throw "ERROR: Remove-NcVserverPeer failed [$ErrorVar]"  }
@@ -8140,7 +8140,7 @@ Try {
 	return $Return 
 }
 Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
 	return $Return
 }
 }
@@ -8201,7 +8201,7 @@ Function set_snapmirror_schedule_dr(
     }
     Catch 
     {
-        handle_error $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver
         return $Return
     }
 }
@@ -8240,7 +8240,7 @@ Try {
 	return $Return 
 }
 Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
 	return $Return
 }
 }
@@ -8324,7 +8324,7 @@ Function wait_snapmirror_dr_status{
         Write-LogDebug "[$DestinationVserver]: end"
     	return $Return 
     }catch{
-        handle_error $_ $mySecondaryVserver
+        Error_Handling $_ $mySecondaryVserver
     	return $Return
     }
 }
@@ -8423,7 +8423,7 @@ Function wait_snapmirror_dr(
     } 
     Catch 
     {
-        handle_error $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver
         return $Return
     }
 }
@@ -8994,7 +8994,7 @@ Try {
 	return $Return 
 }
 Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
 	return $Return
 }
 }
@@ -9092,7 +9092,7 @@ Try {
 	return $Return 
 }
 Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
 	return $Return
 }
 }
@@ -9570,7 +9570,7 @@ Try {
 }
     Catch 
     {
-        handle_error $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver
 	    return $Return
     }
 }
@@ -9695,7 +9695,7 @@ Try {
 	return $Return 
 }
 Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
 	return $Return
 }
 }
@@ -9814,7 +9814,7 @@ Try {
     return $True 
 }
 Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
     return $Return
 }
 }
@@ -9903,7 +9903,7 @@ Try {
 	return $Return
 }
 Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
 	return $Return
 }
 }
@@ -10009,7 +10009,7 @@ Try {
 	return $NfsServiceDiff 
 }
 Catch {
-    handle_error $_ 
+    Error_Handling $_ 
 	return $Return
 }
 }
@@ -10122,7 +10122,7 @@ Try {
 	return $Return 
 }
 Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
 	return $Return
 }
 }
@@ -10190,7 +10190,7 @@ Function check_update_CIFS_server_dr (
         } #>
     }
     Catch {
-        handle_error $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver
 	    return $Return
     }
 }
@@ -10424,7 +10424,7 @@ Try {
     }
 }
 Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
 	return $Return
 }
 }
@@ -10553,7 +10553,7 @@ Try {
     return $Return
 }
 Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
     return $Return
 }
 }
@@ -10630,7 +10630,7 @@ Try {
     return $True 
 }
 Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
     return $Return
 }
 }
@@ -11272,7 +11272,7 @@ Try {
     return $True 
 }
 Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
     return $Return
 }
 }
@@ -11664,7 +11664,7 @@ Try {
 	return $True 
 }
 Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
 	return $Return
 }
 }
@@ -11798,7 +11798,7 @@ Try {
     return $True
 }
 Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
     return $Return
     }
 }
@@ -11971,7 +11971,7 @@ Try {
     # }
 
     # Home Search Directiory processing
-    Write-LogDebug "Check CIFS Home Search Directory"
+    Write-Log "[$workOn] Check CIFS Home Search Directory"
     $ReCreateCifsHomeSearch=$false
     if($Restore -eq $False){
         # check if NcCifsServerInfos is null or not
@@ -12042,7 +12042,7 @@ Try {
     }
 
     # CIFS shares processing
-    Write-LogDebug "Check CIFS shares"
+    Write-Log "[$workOn] Check CIFS shares"
     if($Restore -eq $False){
         if($null -eq $NcCifsShare){
             Write-LogDebug "Get-NcCifsShare -VserverContext $myPrimaryVserver -Controller $myPrimaryController"
@@ -12118,27 +12118,30 @@ Try {
             $diff=Compare-Object -ReferenceObject $SharesListSource -DifferenceObject $SharesListDest `
             -Property Acl,AttributeCacheTtl,Comment,DirUmask,FileUmask,ForceGroupForCreate,MaxConnectionPerShare,OfflineFilesMode,Path,ShareName,ShareProperties,SymlinkProperties,Volume,VscanFileopProfile `
             -SyncWindow 20000 -CaseSensitive -PassThru | Sort-Object -Property SideIndicator -Descending
-            if($null -ne $diff){Write-LogDebug "Check CIFS shares differences [$diff]"}
+            $diff_text=$diff | select sideindicator,acl,volume,sharename,path,comment | ft | Out-String
+            if($null -ne $diff){Write-LogDebug "Check CIFS shares differences [$diff_text]"}
             else{Write-LogDebug "There is no CIFS shares differences"}
+            
             foreach($sharediff in $diff){
                 $secshare=$SharesListDest | Where-Object {$_.ShareName -eq $sharediff.ShareName}
                 if($sharediff.SideIndicator -eq "=>"){
                     # delete share on dest only if not in c$,admin$,ipc$
                     $sharename=$sharediff.ShareName
-                    if($sharename -notin @("c$","admin$","ipc$")){
+                    if($sharename -notin @("c$","admin$","ipc$","ONTAP_ADMIN$")){
                         Write-LogDebug "Remove Share [$sharename]"
                         $ret=Remove-NcCifsShare -Name $sharename -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
-                        if($? -ne $true){$Return=$False;Write-Error "ERROR: Failed to remove reason [$ErrorVar]"}
+                        if($? -ne $true){$Return=$False;Write-Error "ERROR: Failed to remove share [$sharename] reason [$ErrorVar]"}
                     }
                 }else{
                     # modify share on dest only if share is in c$,admin$ or ipc$
                     # or create it, if not c$, admin$ or ipc$ shares that are create automaticaly when CIFS server is deployed
                     # in some case admin$ share is not automaticaly create during CIFS share deployement, so we will create this share too
                     $PrimaryShareName=$sharediff.ShareName
-                    Write-LogDebug "Working on share [$PrimaryShareName]"
+                    Write-LogDebug "[$workOn] Working on share [$PrimaryShareName]"
                     $PrimaryAclList=$sharediff.Acl
                     $PrimaryAttributeCacheTtl=$sharediff.AttributeCacheTtl
-                    $PrimaryComment=$sharediff.Comment 
+                    $PrimaryComment=$sharediff.Comment
+                    if($null -eq $PrimaryComment -or $PrimaryComment -eq ""){$PrimaryComment="`n"}
                     $PrimaryDirUmask=$sharediff.DirUmask 
                     $PrimaryFileUmask=$sharediff.FileUmask
                     $PrimaryOfflineFilesMode=$sharediff.OfflineFilesMode
@@ -12153,23 +12156,37 @@ Try {
                     if($PrimaryFileUmask.count -eq 0){$PrimaryFileUmask=022}
                     if($null -eq $PrimarySharePropertiesList){$PrimarySharePropertiesList=''}
                     if($null -eq $PrimarySymlinkPropertiesList){$PrimarySymlinkPropertiesList=''}
-                    if($null -eq $PrimaryComment){$PrimaryComment=''}
                     if($null -eq $PrimaryForceGroupForCreate){$PrimaryForceGroupForCreate=''}
                     if($null -eq $PrimaryAttributeCacheTtl){$PrimaryAttributeCacheTtl=10}
                     if($PrimaryShareName -eq "admin$" -and ($null -eq (Get-NcCifsShare -Name $PrimaryShareName -VserverContext $mySecondaryVserver -Controller $mySecondaryController))){
                         Write-Log "[$workOn] Create share [$PrimaryShareName]"
-                        Write-LogDebug "Add-NcCifsShare -Name  $PrimaryShareName -Path $PrimaryPath -DisablePathValidation `
-                        -ShareProperties $PrimarySharePropertiesList -SymlinkProperties $PrimarySymlinkPropertiesList -Comment $PrimaryComment `
-                        -OfflineFilesMode $PrimaryOfflineFilesMode -AttributeCacheTtl $PrimaryAttributeCacheTtl -VscanProfile $PrimaryVscanFileopProfile `
-                        -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare -ForceGroupForCreate $PrimaryForceGroupForCreate `
-                        -Vservercontext $mySecondaryVserver -Controller $mySecondaryController"
-                        $out = Add-NcCifsShare -Name  $PrimaryShareName -Path $PrimaryPath -DisablePathValidation `
-                        -ShareProperties $PrimarySharePropertiesList -SymlinkProperties $PrimarySymlinkPropertiesList `
-                        -Comment $PrimaryComment -OfflineFilesMode $PrimaryOfflineFilesMode -AttributeCacheTtl $PrimaryAttributeCacheTtl `
-                        -VscanProfile $PrimaryVscanFileopProfile -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare `
-                        -ForceGroupForCreate $PrimaryForceGroupForCreate -Vservercontext $mySecondaryVserver `
-                        -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                        if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShare failed [$ErrorVar]" }
+                        if($Global:PSTKCall -ne "Rest"){
+                            Write-LogDebug "Add-NcCifsShare -Name  $PrimaryShareName -Path $PrimaryPath -DisablePathValidation `
+                            -ShareProperties $PrimarySharePropertiesList -SymlinkProperties $PrimarySymlinkPropertiesList -Comment $PrimaryComment `
+                            -OfflineFilesMode $PrimaryOfflineFilesMode -AttributeCacheTtl $PrimaryAttributeCacheTtl -VscanProfile $PrimaryVscanFileopProfile `
+                            -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare -ForceGroupForCreate $PrimaryForceGroupForCreate `
+                            -Vservercontext $mySecondaryVserver -Controller $mySecondaryController"
+                            $out = Add-NcCifsShare -Name  $PrimaryShareName -Path $PrimaryPath -DisablePathValidation `
+                            -ShareProperties $PrimarySharePropertiesList -SymlinkProperties $PrimarySymlinkPropertiesList `
+                            -Comment $PrimaryComment -OfflineFilesMode $PrimaryOfflineFilesMode -AttributeCacheTtl $PrimaryAttributeCacheTtl `
+                            -VscanProfile $PrimaryVscanFileopProfile -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare `
+                            -ForceGroupForCreate $PrimaryForceGroupForCreate -Vservercontext $mySecondaryVserver `
+                            -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShare failed [$ErrorVar]" }
+                        }else{
+                            Write-LogDebug "Add-NcCifsShare -Name  $PrimaryShareName -Path $PrimaryPath -DisablePathValidation `
+                            -ShareProperties $PrimarySharePropertiesList -SymlinkProperties $PrimarySymlinkPropertiesList -Comment $PrimaryComment `
+                            -OfflineFilesMode $PrimaryOfflineFilesMode -VscanProfile $PrimaryVscanFileopProfile `
+                            -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare -ForceGroupForCreate $PrimaryForceGroupForCreate `
+                            -Vservercontext $mySecondaryVserver -Controller $mySecondaryController"
+                            $out = Add-NcCifsShare -Name  $PrimaryShareName -Path $PrimaryPath -DisablePathValidation `
+                            -ShareProperties $PrimarySharePropertiesList -SymlinkProperties $PrimarySymlinkPropertiesList `
+                            -Comment $PrimaryComment -OfflineFilesMode $PrimaryOfflineFilesMode `
+                            -VscanProfile $PrimaryVscanFileopProfile -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare `
+                            -ForceGroupForCreate $PrimaryForceGroupForCreate -Vservercontext $mySecondaryVserver `
+                            -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShare failed [$ErrorVar]" }
+                        }
                         #$SecondaryShare=Get-NcCifsShare -Name $PrimaryShareName -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
                         #if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsShare failed [$ErrorVar]" }
                         $SecondaryAclList=Get-NcCifsShareAcl -Share $PrimaryShareName -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
@@ -12267,20 +12284,35 @@ $request=@"
                             }
                         }                        
                     }
-                    if($PrimaryShareName -notin @("c$","admin$","ipc$")){
+                    if($PrimaryShareName -notin @("c$","admin$","ipc$","ONTAP_ADMIN$")){
                         Write-Log "[$workOn] Create share [$PrimaryShareName]"
-                        Write-LogDebug "Add-NcCifsShare -Name  $PrimaryShareName -Path $PrimaryPath -DisablePathValidation `
-                        -ShareProperties $PrimarySharePropertiesList -SymlinkProperties $PrimarySymlinkPropertiesList -Comment $PrimaryComment `
-                        -OfflineFilesMode $PrimaryOfflineFilesMode -AttributeCacheTtl $PrimaryAttributeCacheTtl -VscanProfile $PrimaryVscanFileopProfile `
-                        -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare -ForceGroupForCreate $PrimaryForceGroupForCreate `
-                        -Vservercontext $mySecondaryVserver -Controller $mySecondaryController"
-                        $out = Add-NcCifsShare -Name  $PrimaryShareName -Path $PrimaryPath -DisablePathValidation `
-                        -ShareProperties $PrimarySharePropertiesList -SymlinkProperties $PrimarySymlinkPropertiesList `
-                        -Comment $PrimaryComment -OfflineFilesMode $PrimaryOfflineFilesMode -AttributeCacheTtl $PrimaryAttributeCacheTtl `
-                        -VscanProfile $PrimaryVscanFileopProfile -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare `
-                        -ForceGroupForCreate $PrimaryForceGroupForCreate -Vservercontext $mySecondaryVserver `
-                        -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                        if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShare failed [$ErrorVar]" }
+                        if($Global:PSTKCall -ne "Rest"){
+                            Write-LogDebug "Add-NcCifsShare -Name  $PrimaryShareName -Path $PrimaryPath -DisablePathValidation `
+                            -ShareProperties $PrimarySharePropertiesList -SymlinkProperties $PrimarySymlinkPropertiesList -Comment $PrimaryComment `
+                            -OfflineFilesMode $PrimaryOfflineFilesMode -AttributeCacheTtl $PrimaryAttributeCacheTtl -VscanProfile $PrimaryVscanFileopProfile `
+                            -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare -ForceGroupForCreate $PrimaryForceGroupForCreate `
+                            -Vservercontext $mySecondaryVserver -Controller $mySecondaryController"
+                            $out = Add-NcCifsShare -Name  $PrimaryShareName -Path $PrimaryPath -DisablePathValidation `
+                            -ShareProperties $PrimarySharePropertiesList -SymlinkProperties $PrimarySymlinkPropertiesList `
+                            -Comment $PrimaryComment -OfflineFilesMode $PrimaryOfflineFilesMode -AttributeCacheTtl $PrimaryAttributeCacheTtl `
+                            -VscanProfile $PrimaryVscanFileopProfile -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare `
+                            -ForceGroupForCreate $PrimaryForceGroupForCreate -Vservercontext $mySecondaryVserver `
+                            -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShare failed [$ErrorVar]" }
+                        }else{
+                            Write-LogDebug "Add-NcCifsShare -Name  $PrimaryShareName -Path $PrimaryPath -DisablePathValidation `
+                            -ShareProperties $PrimarySharePropertiesList -SymlinkProperties $PrimarySymlinkPropertiesList -Comment $PrimaryComment `
+                            -OfflineFilesMode $PrimaryOfflineFilesMode -VscanProfile $PrimaryVscanFileopProfile `
+                            -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare -ForceGroupForCreate $PrimaryForceGroupForCreate `
+                            -Vservercontext $mySecondaryVserver -Controller $mySecondaryController"
+                            $out = Add-NcCifsShare -Name  $PrimaryShareName -Path $PrimaryPath -DisablePathValidation `
+                            -ShareProperties $PrimarySharePropertiesList -SymlinkProperties $PrimarySymlinkPropertiesList `
+                            -Comment $PrimaryComment -OfflineFilesMode $PrimaryOfflineFilesMode `
+                            -VscanProfile $PrimaryVscanFileopProfile -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare `
+                            -ForceGroupForCreate $PrimaryForceGroupForCreate -Vservercontext $mySecondaryVserver `
+                            -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShare failed [$ErrorVar]" }
+                        }
                         #$SecondaryShare=Get-NcCifsShare -Name $PrimaryShareName -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
                         #if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsShare failed [$ErrorVar]" }
                         $SecondaryAclList=Get-NcCifsShareAcl -Share $PrimaryShareName -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
@@ -12381,20 +12413,40 @@ $request=@"
                         # modify existing share c$ or admin$ or ipc$
                         # for that kind of non-data share share-properties and symlinkProperties are not modifiable
                         # so exclude them from the Set-NcCifsShare
+                        if($PrimaryShareName -eq "ipc$"){
+                            Write-LogDebug "Ignoring modification on CIFS share [$PrimaryShareName]"
+                            continue
+                        }
                         Write-Log "[$workOn] Modify share [$PrimaryShareName]"
-                        Write-LogDebug "Set-NcCifsShare -Name $PrimaryShareName `
-                        -FileUmask $PrimaryFileUmask `
-                        -DirUmask $PrimaryDirUmask -Comment $PrimaryComment -AttributeCacheTtl $PrimaryAttributeCacheTtl `
-                        -OfflineFilesMode $PrimaryOfflineFilesMode -VscanProfile $PrimaryVscanFileopProfile `
-                        -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare -ForceGroupForCreate $PrimaryForceGroupForCreate `
-                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                        $out=Set-NcCifsShare -Name $PrimaryShareName `
-                        -FileUmask $PrimaryFileUmask `
-                        -DirUmask $PrimaryDirUmask -Comment $PrimaryComment -AttributeCacheTtl $PrimaryAttributeCacheTtl `
-                        -OfflineFilesMode $PrimaryOfflineFilesMode -VscanProfile $PrimaryVscanFileopProfile `
-                        -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare -ForceGroupForCreate $PrimaryForceGroupForCreate `
-                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
-                        if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Set-NcCifsShare failed [$ErrorVar] display [$out]" }
+                        if($Global:PSTKCall -ne "Rest"){
+                            Write-LogDebug "Set-NcCifsShare -Name $PrimaryShareName `
+                            -FileUmask $PrimaryFileUmask `
+                            -DirUmask $PrimaryDirUmask -Comment $PrimaryComment -AttributeCacheTtl $PrimaryAttributeCacheTtl `
+                            -OfflineFilesMode $PrimaryOfflineFilesMode -VscanProfile $PrimaryVscanFileopProfile `
+                            -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare -ForceGroupForCreate $PrimaryForceGroupForCreate `
+                            -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                            $out=Set-NcCifsShare -Name $PrimaryShareName `
+                            -FileUmask $PrimaryFileUmask `
+                            -DirUmask $PrimaryDirUmask -Comment $PrimaryComment -AttributeCacheTtl $PrimaryAttributeCacheTtl `
+                            -OfflineFilesMode $PrimaryOfflineFilesMode -VscanProfile $PrimaryVscanFileopProfile `
+                            -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare -ForceGroupForCreate $PrimaryForceGroupForCreate `
+                            -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Set-NcCifsShare failed [$ErrorVar] display [$out]" }
+                        }else{
+                            Write-LogDebug "Set-NcCifsShare -Name $PrimaryShareName `
+                            -FileUmask $PrimaryFileUmask `
+                            -DirUmask $PrimaryDirUmask -Comment $PrimaryComment `
+                            -OfflineFilesMode $PrimaryOfflineFilesMode -VscanProfile $PrimaryVscanFileopProfile `
+                            -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare -ForceGroupForCreate $PrimaryForceGroupForCreate `
+                            -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                            $out=Set-NcCifsShare -Name $PrimaryShareName `
+                            -FileUmask $PrimaryFileUmask `
+                            -DirUmask $PrimaryDirUmask -Comment $PrimaryComment `
+                            -OfflineFilesMode $PrimaryOfflineFilesMode -VscanProfile $PrimaryVscanFileopProfile `
+                            -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare -ForceGroupForCreate $PrimaryForceGroupForCreate `
+                            -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Set-NcCifsShare failed [$ErrorVar] display [$out]" }
+                        }
                         if($secshare.Acl -ne $PrimaryAclList){
                             $SecondaryAclList=Get-NcCifsShareAcl -Share $PrimaryShareName -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
                             foreach($acl in $SecondaryAclList){
@@ -12516,7 +12568,7 @@ $request=@"
 	return $True
 }
 Catch {
-    handle_error $_ $workOn
+    Error_Handling $_ $workOn
 	return $Return
 }
 }
@@ -12633,7 +12685,7 @@ Try {
 	return $Return 
 }
 Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
 	return $Return
 }
 }
@@ -13288,7 +13340,7 @@ Function show_vserver_dr (
     }
     Catch 
     {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
     }
 }
 
@@ -13466,7 +13518,7 @@ Try {
     Write-LogDebug "[$myPrimaryVserver]: end"
     return $Return 
 } Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
 	return $False
 }
 }
@@ -13796,7 +13848,7 @@ Try {
     Write-LogDebug "[$myPrimaryVserver]: end"
     return $Return 
 } Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
 	return $Return
 }
 }
@@ -13906,7 +13958,7 @@ Try {
     Write-LogDebug "end"
     return $Return 
 } Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
     return $Return
 }
 }
@@ -14042,7 +14094,7 @@ Try {
     Write-LogDebug "end" 
     return $Return
 }catch{
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
     return $Return
 }
 }
@@ -14155,7 +14207,7 @@ Try {
 
 }
 catch{
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
 	return $Return
 }
 }
@@ -14221,7 +14273,7 @@ Try {
     return $Return
 }
 Catch {
-    handle_error $_ $mySecondaryVserver
+    Error_Handling $_ $mySecondaryVserver
 	return $Return
 }
 }
@@ -14262,7 +14314,7 @@ Try {
 
 	if ( ( remove_vserver_peer -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver ) -ne $True ) {
 		Write-LogError "ERROR: remove_vserver_peer failed" 
-		return $false
+		# return $false
 	}
 
 	if ( ( umount_voldr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver) -ne $True ) {
@@ -14314,7 +14366,7 @@ Try {
 	return $true 
 }
 Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
 	return $Return
 }
 }
@@ -14458,7 +14510,7 @@ Try {
 	return $Return 
 }
 Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
 	return $Return
 }
 }
@@ -14556,7 +14608,7 @@ Try {
         }
 	}
 } Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
 }
     Write-LogDebug "end"
 	return $Return 
@@ -14705,7 +14757,7 @@ try{
     return $Return
 } 
 Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
 }
     Write-LogDebug "end"
 	return $Return 
@@ -14941,7 +14993,7 @@ try{
     }
 
 } Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
 }
     Write-LogDebug "end"
 	return $Return 
@@ -15303,7 +15355,7 @@ try{
         }
     }
 } Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
 }
     Write-LogDebug "end Migrate_cifs_server"
 	return $Return 
@@ -15771,7 +15823,7 @@ try{
     Write-LogDebug "[$myPrimaryVserver]: end"
     return $True
 } Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
 }
     Write-LogDebug "end"
 	return $Return 
@@ -16079,7 +16131,7 @@ Try {
 	return $Return 
 }
 Catch {
-    handle_error $_ $myVserver
+    Error_Handling $_ $myVserver
 	return $Return
 }
 }
@@ -16164,7 +16216,7 @@ Try {
 	return $Return 
 }
 Catch {
-    handle_error $_ $myVserver
+    Error_Handling $_ $myVserver
 	return $Return
 }
 }
@@ -16199,7 +16251,7 @@ Try {
     Write-LogDebug "end"
     Return $Return
 }catch{
-    handle_error $_ $myVserver
+    Error_Handling $_ $myVserver
 	return $Return
 }
 }
@@ -16965,7 +17017,7 @@ Function resync_reverse_vserver_dr (
     }
     Catch 
     {
-        handle_error $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver
 	    return $Return
     }
 }
@@ -17040,7 +17092,7 @@ Function resync_vserver_dr (
     }
     Catch 
     {
-        handle_error $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver
     	return $Return
     }
 }
@@ -17145,7 +17197,7 @@ Try {
 	return $Return
 }
 Catch {
-    handle_error $_ $myVserver
+    Error_Handling $_ $myVserver
 	return $Return
     }
 }
@@ -17194,18 +17246,16 @@ Function create_subdir (
                     return $False
                 }
                 $VolumeUUID=$ret.records[0].uuid
-                $url=$("https://"+$myController.Name+"/api/storage/volumes/"+$VolumeUUID+"/files/"+$RESTsearch+"?fields=name,size,type,is_empty,unix_permissions")
+                $PathToScan=$RESTsearch -replace "/","%2F"
+                $url=$("https://"+$myController.Name+"/api/storage/volumes/"+$VolumeUUID+"/files/"+$PathToScan+"?fields=name,size,type,is_empty,unix_permissions")
                 Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
                 $DirDetails=$null
-                $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
-                if($? -ne $True){
-                    Write-LogError "ERROR: Get volume uuid Reason [$ErrorVar]"
-                    return $False
-                }
-                if($ret.num_records -ge 1){
+                try{
+                    $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                     $DirDetails=$ret.records[0]
-                }else{
-                    Write-LogDebug "Dir [$dir] does not exists on volume [$RootVolume] on dest [$myPrimaryVserver]"
+                }catch{
+                    $response=$_.ErrorDetails.Message | ConvertFrom-Json
+                    Write-LogDebug "Dir [$RESTsearch] not found on volume [$RootVolume] on dest [$myVserver]. Reason [$($response.error.message)]"
                 }
             }
             if($null -eq $DirDetails){
@@ -17236,19 +17286,16 @@ Function create_subdir (
                         $url=$("https://"+$myPrimaryController.Name+"/api/storage/volumes/"+$VolumeUUID+"/files/"+$RESTsearch+"?fields=name,size,type,is_empty,unix_permissions")
                         Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
                         $PrimDirDetails=$null
-                        $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
-                        if($? -ne $True){
-                            Write-LogError "ERROR: Get volume uuid Reason [$ErrorVar]"
-                            return $False
-                        }
-                        if($ret.num_records -ge 1){
+                        try{
+                            $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                             $PrimDirDetails=$ret.records[0]
-                        }else{
-                            Write-LogDebug "Dir [$dir] does not exists on volume [$RootVolume] on source [$myPrimaryVserver]"
+                            $PrimDirPerm=$PrimDirDetails.unix_permissions
+                            $PrimDirType=$PrimDirDetails.type
+                        }catch{
+                            $response=$_.ErrorDetails.Message | ConvertFrom-Json
+                            Write-LogDebug "Dir [$RESTsearch] not found on volume [$RootVolume] on dest [$myPrimaryVserver]. Reason [$($response.error.message)]"
                             return $False
                         }
-                        $PrimDirPerm=$PrimDirDetails.unix_permissions
-                        $PrimDirType=$PrimDirDetails.type
                     }
                 }else{
                     if(Test-Path $($Global:JsonPath+"Read-NcDirectory-"+$dir+".json")){
@@ -17257,16 +17304,22 @@ Function create_subdir (
                         $PrimDirPerm=$PrimDirDetails.Perm
                         $PrimDirType=$PrimDirDetails.Type
                     }else{
-                        $Return=$False
                         $filepath=$($Global:JsonPath+"Read-NcDirectory-"+$dir+".json")
-                        Throw "ERROR: failed to read $filepath"
+                        Write-LogError "ERROR: failed to read $filepath"
+                        return $False
                     }    
                 }
                 if($PrimDirType -eq "directory"){
                     Write-LogDebug "Create Sub Directory [$dir] on Secondary Vserver [$myVserver] inside volume [$RootVolume] at Path [$fullpath] with Perm [$PrimDirPerm]"
-                    Write-LogDebug "New-NcDirectory -Controller $myController -VserverContext $mySecondaryVserver -Permission $PrimDirPerm -Path $fullpath"
-                    $out=New-NcDirectory -Controller $mySecondaryController -VserverContext $mySecondaryVserver -Permission $PrimDirPerm -Path $fullpath -ErrorVariable ErrorVar -Confirm:$False
-                    if($? -ne $True) { $Return = $False ; Throw "ERROR : Failed to create Sub Directory [$dir] on volume [$Root] on SVM [$myVserver] Reason : [$ErrorVar]" } 
+                    if($Global:PSTKCall -ne "Rest"){
+                        Write-LogDebug "New-NcDirectory -Controller $myController -VserverContext $mySecondaryVserver -Permission $PrimDirPerm -Path $fullpath"
+                        $out=New-NcDirectory -Controller $mySecondaryController -VserverContext $mySecondaryVserver -Permission $PrimDirPerm -Path $fullpath -ErrorVariable ErrorVar -Confirm:$False
+                        if($? -ne $True) { $Return = $False ; Throw "ERROR : Failed to create Sub Directory [$dir] on volume [$Root] on SVM [$myVserver] Reason : [$ErrorVar]" } 
+                    }else{
+                        Write-LogDebug "New-NcDirectory -Controller $myController -VserverContext $mySecondaryVserver -Permission $PrimDirPerm -Path $fullpath -Type directory"
+                        $out=New-NcDirectory -Controller $mySecondaryController -VserverContext $mySecondaryVserver -Permission $PrimDirPerm -Path $fullpath -Type directory -ErrorVariable ErrorVar -Confirm:$False
+                        if($? -ne $True) { $Return = $False ; Throw "ERROR : Failed to create Sub Directory [$dir] on volume [$Root] on SVM [$myVserver] Reason : [$ErrorVar]" } 
+                    }
                 }elseif($PrimDirType -eq "symlink"){
                     Write-LogDebug "Create SymLink [$dir] on Secondary Vserver [$myVserver] inside volume [$RootVolume] with target [$fullpath]"
                     Write-LogError "Create symlink manually"
@@ -17277,7 +17330,7 @@ Function create_subdir (
                 Write-LogDebug "directory [$fullpath] already exist on [$myVserver]"
             }
         }catch{
-            handle_error $_ $myVserver
+            Error_Handling $_ $myVserver
             return $Return    
         }
     } 
@@ -17343,18 +17396,18 @@ Function mount_volume (
                 $volType= (Get-NcVol -Controller $myController -Vserver $myVserver -Volume $myVolumeName).VolumeIdAttributes.Type
             }
             if($volType -eq "dp" -and $Restore -eq $False){
-                Write-LogDebug "Need to break all associated SM relationship with [$myVolumeName] before beeing able to create a directory inside this volume"
-                Write-LogDebug "Invoke-NcSnapmirrorQuiesce -DestinationVserver $myVserver -DestinationVolume $myVolumeName -Controller $mySecondaryController"
-                $ret=Invoke-NcSnapmirrorQuiesce -DestinationVserver $myVserver -DestinationVolume $myVolumeName -Controller $mySecondaryController -ErrorVariable ErrorVar -Confirm:$False
+                Write-LogDebug "Need to break all associated SM relationship with [$Parent] before beeing able to create a directory inside this volume"
+                Write-LogDebug "Invoke-NcSnapmirrorQuiesce -DestinationVserver $myVserver -DestinationVolume $Parent -Controller $mySecondaryController"
+                $ret=Invoke-NcSnapmirrorQuiesce -DestinationVserver $myVserver -DestinationVolume $Parent -Controller $mySecondaryController -ErrorVariable ErrorVar -Confirm:$False
                 if($? -ne $True){$Return=$False; Throw "ERROR : Failed to quiesce destination relationship [${mySecondaryController}:${mySecondaryVserver}:${PrimaryVol}] reason [$ErrorVar]"}
-                $ret=wait_snapmirror_dr_status -DestinationVserver $myVserver -PrimaryVolumeName $myVolumeName -Status "quiesced" -MirrorState "snapmirrored" -mySecondaryController $mySecondaryController
+                $ret=wait_snapmirror_dr_status -DestinationVserver $myVserver -PrimaryVolumeName $Parent -Status "quiesced" -MirrorState "snapmirrored" -mySecondaryController $mySecondaryController
                 if($ret -eq $false){
                     $Return=$False
                     Throw "ERROR : Failed to quiesce a snapmirror relationship. Increase timeout?"
                 }
-                Write-LogDebug "Invoke-NcSnapmirrorBreak -Controller $myController -Confirm:$false -DestinationVserver $myVserver -DestinationVolume $myVolumeName" 
-                $out=Invoke-NcSnapmirrorBreak -Controller $myController -Confirm:$false -DestinationVserver $myVserver -DestinationVolume $myVolumeName -ErrorVariable ErrorVar
-                if($? -ne $True){throw "ERROR: Failed to break SM destination [$myVserver]:[$myVolumeName] on [$myController] reason [$ErrorVar]"}
+                Write-LogDebug "Invoke-NcSnapmirrorBreak -Controller $myController -Confirm:$false -DestinationVserver $myVserver -DestinationVolume $Parent" 
+                $out=Invoke-NcSnapmirrorBreak -Controller $myController -Confirm:$false -DestinationVserver $myVserver -DestinationVolume $Parent -ErrorVariable ErrorVar
+                if($? -ne $True){throw "ERROR: Failed to break SM destination [$myVserver]:[$Parent] on [$myController] reason [$ErrorVar]"}
             }
         }
         $CreatePath=(Split-Path -Path $JunctionPath).Replace('\','/')
@@ -17414,8 +17467,8 @@ Function mount_volume (
         }
         if($voltype -eq "dp" -and $Restore -eq $False){
             Write-LogDebug "resync snapmirror previously broken"
-            $ret=Invoke-NcSnapmirrorResync -DestinationVserver $myVserver -DestinationVolume $myVolumeName -Controller $myController -Confirm:$False -ErrorVariable ErrorVar  
-            if($? -ne $True){throw "ERROR: Failed to resync SM destination [$myVserver]:[$myVolumeName] on [$myController] reason [$ErrorVar]"}  
+            $ret=Invoke-NcSnapmirrorResync -DestinationVserver $myVserver -DestinationVolume $Parent -Controller $myController -Confirm:$False -ErrorVariable ErrorVar  
+            if($? -ne $True){throw "ERROR: Failed to resync SM destination [$myVserver]:[$Parent] on [$myController] reason [$ErrorVar]"}  
         }
         #$ret=analyse_junction_path -myController $mySecondaryController -myVserver $mySecondaryVserver -Dest
         $ret=analyse_junction_path -myController $myController -myVserver $myVserver -Dest
@@ -17423,7 +17476,7 @@ Function mount_volume (
         Write-LogDebug "end $myVolumeName"
         return $Return  
     }catch{
-        handle_error $_ $myVserver
+        Error_Handling $_ $myVserver
         return $Return    
     }                 
     Write-LogDebug "end $myVolumeName"
@@ -17523,7 +17576,7 @@ Try {
         Write-LogDebug "end"
         return $Return
     }catch{
-        handle_error $_ $myVserver
+        Error_Handling $_ $myVserver
         return $Return
     }
 }
@@ -17617,7 +17670,7 @@ Try {
     Write-LogDebug "end"
     return $Return
     }catch{
-        handle_error $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver
         return $Return
     }
 }
@@ -17787,7 +17840,7 @@ Try {
     }
 }
 Catch {
-    handle_error $_ $myVserver
+    Error_Handling $_ $myVserver
 	return $Return
 }
 }
@@ -17885,7 +17938,7 @@ Try {
   	Return $Return
 }
 Catch {
-    handle_error $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver
 	return $Return
 }
 }
@@ -17919,7 +17972,7 @@ Function get_volumes_from_selectvolumedb (
     }
     Catch 
     {
-        handle_error $_ $myVserver
+        Error_Handling $_ $myVserver
         return $Return
     }
 }
@@ -17955,7 +18008,7 @@ Function Is_SelectVolumedb (
             return $False   
         }    
     }catch{
-        handle_error $_ $SourceVserver
+        Error_Handling $_ $SourceVserver
     	return $Return
     }
 }
@@ -18032,7 +18085,7 @@ Function Purge_SelectVolumedb (
         }
            
     }catch{
-        handle_error $_ $SourceVserver
+        Error_Handling $_ $SourceVserver
     	return $Return
     }
 }
@@ -18116,7 +18169,7 @@ Function Save_Cluster_To_JSON (
         Write-LogDebug "end"
         return $Return
     }catch{
-        handle_error $_ $SourceVserver
+        Error_Handling $_ $SourceVserver
     	return $Return    
     }    
 }
@@ -18209,7 +18262,7 @@ Function Save_Cifs_Infos_To_JSON (
         Write-LogDebug "end"
         return $Return
     }catch{
-        handle_error $_ $SourceVserver
+        Error_Handling $_ $SourceVserver
     	return $Return    
     }
 }
@@ -18262,7 +18315,7 @@ Function Read_Cifs_Symlink_from_Json (
         return $CifsInfos,$CifsSearchDir,$CifsShare,$CifsShareAcl
 
     }catch{
-        handle_error $_ $myVserver
+        Error_Handling $_ $myVserver
     	return $False    
     }
 }
@@ -18318,7 +18371,7 @@ Function Save_Cifs_Symlink_To_JSON (
         Write-LogDebug "end"
         return $Return
     }catch{
-        handle_error $_ $SourceVserver
+        Error_Handling $_ $SourceVserver
     	return $Return    
     }
 }
@@ -18364,7 +18417,7 @@ Function Restore_Cifs_Symlink_from_Json (
         Write-LogDebug "end"
         return $True
     }catch{
-        handle_error $_ $myVserver
+        Error_Handling $_ $myVserver
     	return $Return    
     }
 }
@@ -18479,7 +18532,7 @@ Function Save_CIFS_To_JSON (
         Write-LogDebug "end"
         return $Return
     }catch{
-        handle_error $_ $SourceVserver
+        Error_Handling $_ $SourceVserver
     	return $Return    
     }
 }
@@ -18598,7 +18651,7 @@ Function Set_CIFS_from_JSON (
         Write-LogDebug "end"
         return $True
     }catch{
-        handle_error $_ $ToVserver
+        Error_Handling $_ $ToVserver
     	return $Return    
     }
 }
@@ -18653,7 +18706,7 @@ Function Add_CIFS_from_JSON (
         Write-LogDebug "end"
         return $True
     }catch{
-        handle_error $_ $ToVserver
+        Error_Handling $_ $ToVserver
     	return $Return    
     }
 }
@@ -18760,7 +18813,7 @@ Function Set_LIF_from_JSON (
         Write-LogDebug "end"
         return $True
     }catch{
-        handle_error $_ $ToVserver
+        Error_Handling $_ $ToVserver
     	return $Return    
     }
 }
@@ -18873,7 +18926,7 @@ Function Save_Route_To_JSON (
         Write-LogDebug "end"
         return $Return
     }catch{
-        handle_error $_ $SourceVserver
+        Error_Handling $_ $SourceVserver
     	return $Return    
     }
 }
@@ -18985,7 +19038,7 @@ Function Save_LIF_To_JSON (
         Write-LogDebug "end"
         return $Return
     }catch{
-        handle_error $_ $SourceVserver
+        Error_Handling $_ $SourceVserver
     	return $Return    
     }
 }
@@ -19071,7 +19124,7 @@ Function Save_Volume_To_Selectvolumedb (
     }
     Catch 
     {
-        handle_error $_ $SourceVserver
+        Error_Handling $_ $SourceVserver
     	return $Return
     }
 }
@@ -19190,7 +19243,7 @@ Function save_vol_options_to_voldb (
     }
     Catch 
     {
-        handle_error $_ $myVserver
+        Error_Handling $_ $myVserver
     	return $Return
     }
 }
@@ -19717,7 +19770,7 @@ Function set_vol_options_from_voldb (
     }
     Catch 
     {
-        handle_error $_ $myVserver
+        Error_Handling $_ $myVserver
     	return $Return
     }
 }
@@ -19886,7 +19939,7 @@ Function save_shareacl_options_to_shareacldb (
     }
     Catch 
     {
-        handle_error $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver
     	return $Return
     }
 }
@@ -20014,7 +20067,7 @@ Function set_shareacl_options_from_shareacldb (
     }
     Catch 
     {
-        handle_error $_ $myVserver
+        Error_Handling $_ $myVserver
     	return $Return
     }
 }
@@ -20280,7 +20333,7 @@ Function restore_quota (
     }
     Catch 
     {
-        handle_error $_ $myVserver
+        Error_Handling $_ $myVserver
 	    return $Return
     }
 }
@@ -20565,7 +20618,7 @@ Function create_quota_rules_from_quotadb (
     }
     Catch 
     {
-        handle_error $_ $myVserver
+        Error_Handling $_ $myVserver
 	    return $Return
     }
 }
@@ -20643,7 +20696,7 @@ Try {
     return $Return
 }
 Catch {
-    handle_error $_ $myVserver
+    Error_Handling $_ $myVserver
 	return $Return
 }
 }
@@ -20865,7 +20918,7 @@ Try {
 	return $Return 
 }
 Catch {
-    handle_error $_ $myVserver
+    Error_Handling $_ $myVserver
 	return $Return
 }
 }
@@ -20995,7 +21048,7 @@ Try {
     return $Return
 }
 Catch {
-        handle_error $_ $workOn
+        Error_Handling $_ $workOn
         return $Return
     }
 }
@@ -21029,7 +21082,7 @@ Try {
     Write-LogDebug "end"
 }
 Catch {
-        handle_error $_ $workOn
+        Error_Handling $_ $workOn
         return $Return
     }
 }
@@ -21264,7 +21317,7 @@ Function create_update_servicepolicy_dr(
     }
     catch
     {
-        handle_error $_ $workOn
+        Error_Handling $_ $workOn
 	    return $false        
     }
 }
