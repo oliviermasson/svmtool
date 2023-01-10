@@ -1017,15 +1017,15 @@ Function get_local_cred ([string]$myCredential,[switch]$ResetPassword,[switch]$A
     {
         if( -not $Global:NonInteractive -or ( $null -ne $Global:ActiveDirectoryCredentials ) ){
             $status = set_cred_from_cli $myCredential $Global:CRED_CONF_FILE
-		    $cred=read_cred_from_file $Global:CRED_CONF_FILE
-		    if ( $null -eq $cred ) 
+            $cred=read_cred_from_file $Global:CRED_CONF_FILE
+            if ( $null -eq $cred ) 
             {
-			    Write-LogError "ERROR: Unable to set your credentials for $myCredential Exit" 
-        	    clean_and_exit 1
-		    }
+                Write-LogError "ERROR: Unable to set your credentials for $myCredential Exit" 
+                clean_and_exit 1
+            }
         }else{
             Write-LogError "ERROR: Unable to set your credentials for $myCredential in NonInteractive Mode | Exit" 
-        	clean_and_exit 1
+            clean_and_exit 1
         }
 	}
 	return $cred
@@ -10424,7 +10424,7 @@ Try {
     }
 }
 Catch {
-    Error_Handling $_ $myPrimaryVserver
+    q
 	return $Return
 }
 }
@@ -11477,17 +11477,17 @@ Try {
                         Write-Log ("[$workOn] Custom vlan found [{0}], using this port instead of the temp cifs lif" -f $SecondaryCifsLifCustomVlanPort.InterfaceName)
                         $InterfaceMasterCurrentPort = $SecondaryCifsLifCustomVlanPort.InterfaceName
                     }                    
-			        $InterfaceMasterDataProtocols=$InterfaceMaster.DataProtocols
-			        $InterfaceMasterDnsDomainName=$InterfaceMaster.DnsDomainName
-			        $InterfaceMasterRole=$InterfaceMaster.Role
-			        $InterfaceMasterFirewallPolicy=$InterfaceMaster.FirewallPolicy
-			        $InterfaceMasterIsAutoRevert=$InterfaceMaster.IsAutoRevert
+                    $InterfaceMasterDataProtocols=$InterfaceMaster.DataProtocols
+                    $InterfaceMasterDnsDomainName=$InterfaceMaster.DnsDomainName
+                    $InterfaceMasterRole=$InterfaceMaster.Role
+                    $InterfaceMasterFirewallPolicy=$InterfaceMaster.FirewallPolicy
+                    $InterfaceMasterIsAutoRevert=$InterfaceMaster.IsAutoRevert
                     if($Global:PSTKCall -eq "Rest"){$InterfaceMasterServicePolicy=$InterfaceMaster.ServicePolicy}
 
-			        $SecondaryInterface  = Get-NcNetInterface -InterfaceName $TempInterfaceName -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
-			        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
-			        if ( $null -eq $SecondaryInterface ) 
-			        {
+                    $SecondaryInterface  = Get-NcNetInterface -InterfaceName $TempInterfaceName -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
+                    if ( $null -eq $SecondaryInterface ) 
+                    {
                         if( -not ($Global:ForceCloneOriginal.IsPresent) ){
                             Write-LogDebug "Dns Domain is only set during Migrate, ActivateDR, ReActivate or CloneVserverDR with ForceCloneOriginal"
                             Write-LogDebug "Dns Domain will remain empty for temporary LIF"
@@ -18699,7 +18699,7 @@ Function Add_CIFS_from_JSON (
         }elseif($CifsServerOnSource.AdministrativeStatus -eq "down" -and $CifsServerOnSource.CifsServer -eq $CIFSName){
             Write-LogDebug "Start-NcCifsServer -VserverContext $ToVserver -Controller $ToNcController" 
             $out = Start-NcCifsServer -VserverContext $ToVserver -Controller $ToNcController  -ErrorVariable ErrorVar
-            if ( $? -ne $True ) { throw "ERROR: Add-NcCifsServer failed [$ErrorVar]" }else{Write-Log "[$ToVserver] Cifs server [$CIFSName] started"}    
+            if ( $? -ne $True ) { throw "ERROR: Start-NcCifsServer failed [$ErrorVar]" }else{Write-Log "[$ToVserver] Cifs server [$CIFSName] started"}    
         }elseif($CifsServerOnSource.CifsServer -ne $CIFSName){
             Write-LogWarn "CIFS server on source is already started, but with different identity [$($CifsServerOnSource.CifsServer)]"    
         }
