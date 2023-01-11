@@ -580,7 +580,7 @@ Function create_vserver_config_file_cli (
         $myVserverDR=$VserverDR
         $ForceAskForVserverDR=$False
 	}else{
-        $myVserverDR=$($Vserver+"_DR")
+        $myVserverDR=$($Vserver+"-DR")
     } 
 
 	if ((Test-Path $ConfigFile) -eq $True ) {
@@ -1312,7 +1312,7 @@ Catch {
 Function ask_IpAddr_from_cli ([string] $myIpAddr,[string] $workOn="",[bool]$forceAsk=$False) {
 	$loop = $True
 	While ( $loop -eq $True ) {
-        #Wait-Debugger
+        # Wait-Debugger
 		$AskIPAddr = Read-HostDefault -question "[$workOn] Please Enter a valid IP Address" -default $myIPAddr -forceAsk $forceAsk
 		if ( ( validate_ip_format $AskIPAddr ) -eq $True ) {
 				$loop = $False
@@ -3306,13 +3306,13 @@ Function create_update_fpolicy_dr(
                                     }else{
                                         # ! Force ONTAPI Mode because of bug in New-NcFpolicyPolicy in REST which require a mandaotry existing scope variable
                                         Write-LogDebug "New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
-                                        -EngineName $PrimaryFpolicyEngineName -Scope $PrimaryFpolPolScope `
+                                        -EngineName $PrimaryFpolicyEngineName `
                                         -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ZapiCall"
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController "
                                         $out=New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
-                                        -EngineName $PrimaryFpolicyEngineName -Scope $PrimaryFpolPolScope `
+                                        -EngineName $PrimaryFpolicyEngineName `
                                         -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ZapiCall
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
                                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" }
                                     }
                                 }
@@ -3344,12 +3344,12 @@ Function create_update_fpolicy_dr(
                                         # ! Force ONTAPI Mode because of bug in New-NcFpolicyPolicy in REST which require a mandaotry existing scope variable
                                         Write-LogDebug "New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
                                         -EngineName $PrimaryFpolicyEngineName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                        -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -Scope $PrimaryFpolPolScope  `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ZapiCall"
+                                        -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName  `
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
                                         $out=New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
                                         -EngineName $PrimaryFpolicyEngineName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                        -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -Scope $PrimaryFpolPolScope `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ZapiCall
+                                        -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName `
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" }
                                     }
                                 }
@@ -3383,13 +3383,13 @@ Function create_update_fpolicy_dr(
                                     }else{
                                         # ! Force ONTAPI Mode because of bug in New-NcFpolicyPolicy in REST which require a mandaotry existing scope variable
                                         Write-LogDebug "New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -NonMandatory `
-                                        -EngineName $PrimaryFpolicyEngineName -Scope $PrimaryFpolPolScope `
+                                        -EngineName $PrimaryFpolicyEngineName `
                                         -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ZapiCall"
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController "
                                         $out=New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -NonMandatory `
-                                        -EngineName $PrimaryFpolicyEngineName -Scope $PrimaryFpolPolScope `
+                                        -EngineName $PrimaryFpolicyEngineName `
                                         -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ZapiCall
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
                                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" } 
                                     }
                                 }
@@ -3422,11 +3422,11 @@ Function create_update_fpolicy_dr(
                                         Write-LogDebug "New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -NonMandatory `
                                         -EngineName $PrimaryFpolicyEngineName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
                                         -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                        -Scope $PrimaryFpolPolScope -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ZapiCall"
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController "
                                         $out=New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -NonMandatory `
                                         -EngineName $PrimaryFpolicyEngineName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                        -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -Scope $PrimaryFpolPolScope `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ZapiCall
+                                        -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName `
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
                                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" }
                                     }
                                 }
@@ -4172,7 +4172,7 @@ Function create_update_cron_dr(
 Try {
     $Return = $True 
     if($Backup -eq $False -and $Restore -eq $False){
-        $ctrlName=$myPrimaryController.Name    
+        $ctrlName=$myPrimaryController.Name   
     }
     if($Backup -eq $True){
         $ctrlName=$myPrimaryController.Name
@@ -4185,55 +4185,130 @@ Try {
     Write-LogDebug "[$ctrlName]: start"
     Write-Log "[$ctrlName] Check Cluster Cron configuration"
     if($Restore -eq $False){
-        $PrimaryCronList = Get-NcJobCronSchedule -Controller $myPrimaryController -ErrorVariable ErrorVar
-        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcJobCronSchedule failed [$ErrorVar]" }
+        $PrimaryCronList = Get-NcJobSchedule -Controller $myPrimaryController -ErrorVariable ErrorVar
+        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcJobSchedule failed [$ErrorVar]" }
     }else{
-        if(Test-Path $($Global:JsonPath+"Get-NcJobCronSchedule.json")){
-            $PrimaryCronList=Get-Content $($Global:JsonPath+"Get-NcJobCronSchedule.json") -Raw | ConvertFrom-Json
+        if(Test-Path $($Global:JsonPath+"Get-NcJobSchedule.json")){
+            $PrimaryCronList=Get-Content $($Global:JsonPath+"Get-NcJobSchedule.json") -Raw | ConvertFrom-Json
         }else{
             $Return=$False
-            $filepath=$($Global:JsonPath+"Get-NcJobCronSchedule.json")
+            $filepath=$($Global:JsonPath+"Get-NcJobSchedule.json")
             Throw "ERROR: failed to read $filepath"
         }
     }
     if($Backup -eq $True){
-        $PrimaryCronList | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcJobCronSchedule.json") -Encoding ASCII -Width 65535
-        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcJobCronSchedule.json") -ErrorAction SilentlyContinue) ){
-            Write-LogDebug "$($Global:JsonPath+"Get-NcJobCronSchedule.json") saved successfully"
+        $PrimaryCronList | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcJobSchedule.json") -Encoding ASCII -Width 65535
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcJobSchedule.json") -ErrorAction SilentlyContinue) ){
+            Write-LogDebug "$($Global:JsonPath+"Get-NcJobSchedule.json") saved successfully"
         }else{
-            Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcJobCronSchedule.json")"
+            Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcJobSchedule.json")"
             $Return=$False
         }
     }
     if($Backup -eq $False){
         $PSVersion=$PSVersionTable.PSVersion
-        if($PSVersionTable.PSVersion.Major -le 5){
+        $PrimaryName=(Get-NcCluster -Controller $myPrimaryController).Name
+        $SecondaryName=(Get-NcCluster -Controller $mySecondaryController).Name
+        # if($PSVersionTable.PSVersion.Major -le 5){
+        if($True){
             Write-LogDebug "Running svmtool with Powershell version [$PSVersion]"
             $begindate=get-date
             Write-LogDebug "Begin at $begindate"
-            foreach ( $Cron in ( $PrimaryCronList | Skip-Null ) ) {
-                $PrimaryJobScheduleName = $Cron.JobScheduleName
-                $PrimaryJobScheduleDescription = $Cron.JobScheduleDescription
-                $PrimaryJobScheduleCronMonth = $Cron.JobScheduleCronMonth
-                $PrimaryJobScheduleCronDayOfWeek = $Cron.JobScheduleCronDayOfWeek
-                $PrimaryJobScheduleCronDay = $Cron.JobScheduleCronDay
-                $PrimaryJobScheduleCronHour = $Cron.JobScheduleCronHour
-                $PrimaryJobScheduleCronMinute = $Cron.JobScheduleCronMinute
-                Write-LogDebug "Working on [$PrimaryJobScheduleName]"
-                $SecondaryCron = Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcJobCronSchedule failed [$ErrorVar]" }
-                if ( $null -ne $SecondaryCron ) {
-                    $SecondaryJobScheduleName = $Cron.JobScheduleName
-                    $SecondaryJobScheduleDescription = $Cron.JobScheduleDescription
-                    if ( $PrimaryJobScheduleDescription -ne $SecondaryJobScheduleDescription ) {
-                        Write-LogDebug "Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar"
-                        $out=Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar
-                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobCronSchedule failed [$ErrorVar]" }
+            foreach ( $Schedule in ( $PrimaryCronList | Skip-Null ) ) {
+                $PrimaryJobScheduleName = $Schedule.JobScheduleName
+                $PrimaryJobScheduleType = $Schedule.Type
+                # Write-LogDebug "Schedule [$PrimaryJobScheduleName] is type [$PrimaryJobScheduleType]"
+                if($PrimaryJobScheduleType -eq "cron"){
+                    $cron=Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $myPrimaryController -JobScheduleCluster $PrimaryName
+                    $PrimaryJobScheduleDescription = $cron.JobScheduleDescription
+                    $PrimaryJobScheduleCronMonth = $cron.JobScheduleCronMonth
+                    $PrimaryJobScheduleCronDayOfWeek = $cron.JobScheduleCronDayOfWeek
+                    $PrimaryJobScheduleCronDay = $cron.JobScheduleCronDay
+                    $PrimaryJobScheduleCronHour = $cron.JobScheduleCronHour
+                    $PrimaryJobScheduleCronMinute = $cron.JobScheduleCronMinute
+                }else{
+                    $interval=Get-NcJobIntervalSchedule -Name $PrimaryJobScheduleName -Controller $myPrimaryController -JobScheduleCluster $PrimaryName
+                    $PrimaryJobScheduleDescription = $interval.JobScheduleDescription
+                    $PrimaryJobScheduleCronMonth = $interval.JobScheduleCronMonth
+                    $PrimaryJobScheduleIntervalSeconds = $interval.JobScheduleIntervalSeconds
+                    $PrimaryJobScheduleIntervalDays = $interval.JobScheduleIntervalDays
+                    $PrimaryJobScheduleIntervalHours = $interval.JobScheduleIntervalHours
+                    $PrimaryJobScheduleIntervalMinutes = $interval.JobScheduleIntervalMinutes
+                    if($Global:PSTKCall -eq "Rest"){
+                        $PrimaryJobScheduleInterval = $interval.Interval
+                    }
+                }
+                Write-LogDebug "Working on [$PrimaryJobScheduleName] type [$PrimaryJobScheduleType]"
+                if($PrimaryJobScheduleType -eq "cron"){
+                    $SecondarySchedule = Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController  -ErrorVariable ErrorVar  -JobScheduleCluster $SecondaryName
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcJobCronSchedule failed [$ErrorVar]" }
+                    $SecondaryJobScheduleDescription = $SecondarySchedule.JobScheduleDescription
+                    $SecondaryJobScheduleCronMonth = $SecondarySchedule.JobScheduleCronMonth
+                    $SecondaryJobScheduleCronDayOfWeek = $SecondarySchedule.JobScheduleCronDayOfWeek
+                    $SecondaryJobScheduleCronDay = $SecondarySchedule.JobScheduleCronDay
+                    $SecondaryJobScheduleCronHour = $SecondarySchedule.JobScheduleCronHour
+                    $SecondaryJobScheduleCronMinute = $SecondarySchedule.JobScheduleCronMinute
+                }else{
+                    $SecondarySchedule = Get-NcJobIntervalSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController  -ErrorVariable ErrorVar  -JobScheduleCluster $SecondaryName
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcJobIntervalSchedule failed [$ErrorVar]" }
+                    $SecondaryJobScheduleInterval = $SecondarySchedule.Interval
+                }
+                
+                if ( $null -ne $SecondarySchedule ) {
+                    
+                    if($Global:PSTKCall -ne "Rest"){
+                        if ( $PrimaryJobScheduleDescription -ne $SecondaryJobScheduleDescription ) {
+                            if($PrimaryJobScheduleType -eq "cron"){
+                                Write-LogDebug "Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar"
+                                $out=Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobCronSchedule failed [$ErrorVar]" }
+                            }else{
+                                Write-LogDebug "Set-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes  -ErrorVariable ErrorVar"
+                                $out=Set-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes  -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobIntervalSchedule failed [$ErrorVar]" }
+                            }
+                        }
+                    }else{
+                        if($PrimaryJobScheduleType -eq "interval"){
+                            if($SecondaryJobScheduleInterval -ne $PrimaryJobScheduleInterval){
+                                Write-LogDebug "Set-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Interval $PrimaryJobScheduleInterval -ErrorVariable ErrorVar"
+                                $out=Set-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Interval $PrimaryJobScheduleInterval -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobIntervalSchedule failed [$ErrorVar]" }
+                            }
+                        }else{
+                            if($PrimaryJobScheduleCronMonth -ne $SecondaryJobScheduleCronMonth `
+                            -or $PrimaryJobScheduleCronDayOfWeek -ne $SecondaryJobScheduleCronDayOfWeek `
+                            -or $PrimaryJobScheduleCronDay -ne $SecondaryJobScheduleCronDay `
+                            -or $PrimaryJobScheduleCronHour -ne $SecondaryJobScheduleCronHour `
+                            -or $PrimaryJobScheduleCronMinute -ne $SecondaryJobScheduleCronMinute){
+                                Write-LogDebug "Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar"
+                                $out=Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobCronSchedule failed [$ErrorVar]" }
+                            }
+                        }
                     }
                 } else {
-                    Write-LogDebug "Set-AddJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar"
-                    $out=Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar
-                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobCronSchedule failed [$ErrorVar]" }
+                    if($Global:PSTKCall -ne "Rest"){
+                        if($PrimaryJobScheduleType -eq "cron"){
+                            Write-LogDebug "Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -ErrorVariable ErrorVar"
+                            $out=Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcJobCronSchedule failed [$ErrorVar]" }
+                        }else{
+                            Write-LogDebug "Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes -ErrorVariable ErrorVar"
+                            $out=Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes  -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcJobIntervalSchedule failed [$ErrorVar]" }
+                        }
+                    }else{
+                        if($PrimaryJobScheduleType -eq "interval"){
+                            Write-LogDebug "Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Interval $PrimaryJobScheduleInterval -ErrorVariable ErrorVar"
+                            $out=Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Interval $PrimaryJobScheduleInterval -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcJobIntervalSchedule failed [$ErrorVar]" }
+                        }else{
+                            Write-LogDebug "Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes -ErrorVariable ErrorVar"
+                            $out=Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes  -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcJobIntervalSchedule failed [$ErrorVar]" }
+                        }
+                    }
                 }
             }
             $finishdate=get-date
@@ -4245,60 +4320,70 @@ Try {
             $begindate=get-date
             Write-LogDebug "Begin at $begindate"
             $ScriptPath=$PSScriptRoot
-            ( $PrimaryCronList | Skip-Null ) | ForEach-Object -Parallel {
-                #Wait-Debugger
-                $module = Import-Module "$using:ScriptPath" -PassThru
-                #$module = Import-Module "C:\Users\masson\Downloads\PSTK 9.8 CORE\NetApp.ONTAP\NetApp.ONTAP.psd1"
-                $module = Import-Module NetApp.ONTAP
-                # workaround for BURT 1385162
-                $DataONTAP_SkipEmsReport = $null
-                $DataONTAP_SkipUsageReport = $true
-                #$guid = ([guid]::NewGuid()).Guid
-                #$jobCronLog="jobcronlog_$guid"
-                $jobCronLog="jobcronlog"
-                $JOBLOGFILE = ($using:LOGDIR + '\' + $jobCronLog)
-                # appenders (logfile, eventviewer & console)
-                if($LogLevelConsole -eq ""){$LogLevelConsole="Info"}
-                if($LogLevelLogFile -eq ""){$LogLevelLogFile="Debug"}
-                
-                <# $masterLogFileAppender = create_rolling_log_appender -name "svmtool.log_$guid"  -file $JOBLOGFILE -threshold $LogLevelLogFile
-                $consoleAppender = create_console_appender -name "console_$guid" -threshold $LogLevelConsole
+            try{
+                ( $PrimaryCronList | Skip-Null ) | ForEach-Object -Parallel {
+                    $module = Import-Module "$using:ScriptPath" -PassThru
+                    #$module = Import-Module "C:\Users\masson\Downloads\PSTK 9.8 CORE\NetApp.ONTAP\NetApp.ONTAP.psd1"
+                    $module = Import-Module NetApp.ONTAP
+                    # workaround for BURT 1385162
+                    $DataONTAP_SkipEmsReport = $null
+                    $DataONTAP_SkipUsageReport = $true
+                    #$guid = ([guid]::NewGuid()).Guid
+                    #$jobCronLog="jobcronlog_$guid"
+                    $jobCronLog="jobcronlog"
+                    $JOBLOGFILE = ($using:LOGDIR + '\' + $jobCronLog)
+                    # appenders (logfile, eventviewer & console)
+                    if($LogLevelConsole -eq ""){$LogLevelConsole="Info"}
+                    if($LogLevelLogFile -eq ""){$LogLevelLogFile="Debug"}
+                    
+                    <# $masterLogFileAppender = create_rolling_log_appender -name "svmtool.log_$guid"  -file $JOBLOGFILE -threshold $LogLevelLogFile
+                    $consoleAppender = create_console_appender -name "console_$guid" -threshold $LogLevelConsole
 
-                # initialize console
-                add_appender -loggerinstance "console_$guid" $masterLogFileAppender
-                add_appender -loggerinstance "console_$guid" $consoleAppender
-                set_log_level -loggerinstance "console_$guid" -level "All"
-                $Global:ConsoleLog = get_logger -name "console_$guid"
+                    # initialize console
+                    add_appender -loggerinstance "console_$guid" $masterLogFileAppender
+                    add_appender -loggerinstance "console_$guid" $consoleAppender
+                    set_log_level -loggerinstance "console_$guid" -level "All"
+                    $Global:ConsoleLog = get_logger -name "console_$guid"
 
-                add_appender -loggerinstance "logonly_$guid" $masterLogFileAppender
-                set_log_level -loggerinstance "logonly_$guid" -level "All"
-                $Global:MasterLog = get_logger -name "logonly"  #>
+                    add_appender -loggerinstance "logonly_$guid" $masterLogFileAppender
+                    set_log_level -loggerinstance "logonly_$guid" -level "All"
+                    $Global:MasterLog = get_logger -name "logonly"  #>
 
-                $Cron=$_
-                $PrimaryJobScheduleName = $Cron.JobScheduleName
-                $PrimaryJobScheduleDescription = $Cron.JobScheduleDescription
-                $PrimaryJobScheduleCronMonth = $Cron.JobScheduleCronMonth
-                $PrimaryJobScheduleCronDayOfWeek = $Cron.JobScheduleCronDayOfWeek
-                $PrimaryJobScheduleCronDay = $Cron.JobScheduleCronDay
-                $PrimaryJobScheduleCronHour = $Cron.JobScheduleCronHour
-                $PrimaryJobScheduleCronMinute = $Cron.JobScheduleCronMinute
-                #Write-LogDebug "Working on [$PrimaryJobScheduleName]"
-                $SecondaryCron = Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $using:mySecondaryController  -ErrorVariable ErrorVar
-                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcJobCronSchedule failed [$ErrorVar]" }
-                if ( $null -ne $SecondaryCron ) {
-                    $SecondaryJobScheduleName = $Cron.JobScheduleName
-                    $SecondaryJobScheduleDescription = $Cron.JobScheduleDescription
-                    if ( $PrimaryJobScheduleDescription -ne $SecondaryJobScheduleDescription ) {
-                        #Write-LogDebug "Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar"
-                        $out=Set-NcJobCronSchedule -Controller $using:mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar
-                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobCronSchedule failed [$ErrorVar]" }
+                    $Cron=$_
+                    $PrimaryJobScheduleName = $Cron.JobScheduleName
+                    $PrimaryJobScheduleDescription = $Cron.JobScheduleDescription
+                    $PrimaryJobScheduleCronMonth = $Cron.JobScheduleCronMonth
+                    $PrimaryJobScheduleCronDayOfWeek = $Cron.JobScheduleCronDayOfWeek
+                    $PrimaryJobScheduleCronDay = $Cron.JobScheduleCronDay
+                    $PrimaryJobScheduleCronHour = $Cron.JobScheduleCronHour
+                    $PrimaryJobScheduleCronMinute = $Cron.JobScheduleCronMinute
+                    #Write-LogDebug "Working on [$PrimaryJobScheduleName]"
+                    $SecondaryCron = Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $using:mySecondaryController  -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcJobCronSchedule failed [$ErrorVar]" }
+                    if ( $null -ne $SecondaryCron ) {
+                        $SecondaryJobScheduleName = $Cron.JobScheduleName
+                        $SecondaryJobScheduleDescription = $Cron.JobScheduleDescription
+                        if ( $PrimaryJobScheduleDescription -ne $SecondaryJobScheduleDescription ) {
+                            #Write-LogDebug "Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar"
+                            $out=Set-NcJobCronSchedule -Controller $using:mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobCronSchedule failed [$ErrorVar]" }
+                        }
+                    } else {
+                        #Write-LogDebug "Set-AddJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar"
+                        
+                        $ret=Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $using:mySecondaryController
+                        if($null -eq $ret){
+                            try{
+                                $out=Add-NcJobCronSchedule -Controller $using:mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -ErrorAction SilentlyContinue
+                            }catch{
+                                throw "error $_"
+                            }
+                        }
                     }
-                } else {
-                    #Write-LogDebug "Set-AddJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar"
-                    $out=Add-NcJobCronSchedule -Controller $using:mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar
-                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobCronSchedule failed [$ErrorVar]" }
-                }
-            } -ThrottleLimit 10  
+                } -ThrottleLimit 10  -ErrorVariable allErrors 
+            }catch{
+                Write-LogDebug "Error in loop [$allErrors]"
+            }
             $finishdate=get-date
             Write-LogDebug "Finish at $finishdate"
             $took=($finishdate-$begindate).TotalSeconds
@@ -7048,7 +7133,7 @@ Try {
                             
                             if($ProtectJob.JobCompletion -ne "success"){
                                 $reason=$($ProtectJobDetail.JobState+":"+$ProtectJobDetail.JobCompletion)
-                                Write-LogError "[$mySecondaryVserver] Protect Flexgroup [$SecondaryFlexgroupMasterName] not compoleted [$reason]"
+                                Write-LogError "[$mySecondaryVserver] Protect Flexgroup [$SecondaryFlexgroupMasterName] not completed [$reason]"
                             }
                             
                             $StartTime=Get-date
@@ -7066,6 +7151,7 @@ Try {
                                         $SnapmirrorProtectJobDone=$True
                                         $ProtectFlexgroupDone=$True
                                     }
+                                    Start-Sleep 2
                                     $CurrentTime=Get-date
                                     $Global:TimeoutTime = ($CurrentTime - $StartTime).TotalSeconds
                                     if ( $Global:TimeoutTime -gt $Global:STOP_TIMEOUT ) { # STOP_TIMEOUT equal to 5 minutes
@@ -11458,7 +11544,7 @@ Try {
                 $InterfaceMaster = Get-NcNetInterface $SecondaryCifsLifMaster -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
                 #}
                 if($InterfaceMaster){
-			        $TempInterfaceName=("tmp_lif_to_join_in_ad_" + $InterfaceMaster.InterfaceName)
+                    $TempInterfaceName=("tmp_lif_to_join_in_ad_" + $InterfaceMaster.InterfaceName)
                     $TempIpAddress=$TemporarySecondaryCifsIp
                     $InterfaceMasterNetMask=$InterfaceMasterPrimary.Netmask
                     <#if($Global:NonInteractive -and $ForClone){
@@ -11466,7 +11552,7 @@ Try {
                     }else{
                         $InterfaceMasterNetMask=$InterfaceMaster.Netmask
                     } #>
-			        $InterfaceMasterCurrentNode=$InterfaceMaster.CurrentNode
+                    $InterfaceMasterCurrentNode=$InterfaceMaster.CurrentNode
                     $InterfaceMasterCurrentPort=$InterfaceMaster.CurrentPort
                     if ($SecondaryCifsLifCustomVlan) {
                         Write-Log "[$workOn] a custom vlan has been provided for the temp cifs lif [$SecondaryCifsLifCustomVlan]"
@@ -11493,8 +11579,8 @@ Try {
                             Write-LogDebug "Dns Domain will remain empty for temporary LIF"
                             $InterfaceMasterDnsDomainName=""    
                         }
-				        Write-Log "[$workOn] Create the LIF [$TempInterfaceName] (cloning from $SecondaryCifsLifMaster)"
-				        Write-Log "[$workOn] LIF [$TempInterfaceName] is the Temp Cifs LIF, it must be in Administrative up status"
+                        Write-Log "[$workOn] Create the LIF [$TempInterfaceName] (cloning from $SecondaryCifsLifMaster)"
+                        Write-Log "[$workOn] LIF [$TempInterfaceName] is the Temp Cifs LIF, it must be in Administrative up status"
                         if($Global:PSTKCall -eq "Rest"){
                             Write-LogDebug "New-NcNetInterface -Name $TempInterfaceName -Vserver $mySecondaryVserver -ServicePolicy $InterfaceMasterServicePolicy -Node $InterfaceMasterCurrentNode -Port $InterfaceMasterCurrentPort -DataProtocols $InterfaceMasterDataProtocols -Address $TempIpAddress -Netmask $InterfaceMasterNetMask -DnsDomain $InterfaceMasterDnsDomainName -AdministrativeStatus up -AutoRevert $InterfaceMasterIsAutoRevert -Controller $mySecondaryController"
                             $SecondaryInterface=New-NcNetInterface -Name $TempInterfaceName -Vserver $mySecondaryVserver  -ServicePolicy $InterfaceMasterServicePolicy -Node $InterfaceMasterCurrentNode -Port $InterfaceMasterCurrentPort -DataProtocols $InterfaceMasterDataProtocols -Address $TempIpAddress -Netmask $InterfaceMasterNetMask -DnsDomain $InterfaceMasterDnsDomainName -AdministrativeStatus up -AutoRevert $InterfaceMasterIsAutoRevert -Controller $mySecondaryController  -ErrorVariable ErrorVar 
@@ -11502,7 +11588,7 @@ Try {
                             Write-LogDebug "New-NcNetInterface -Name $TempInterfaceName -Vserver $mySecondaryVserver -Role $InterfaceMasterRole -Node $InterfaceMasterCurrentNode -Port $InterfaceMasterCurrentPort -DataProtocols $InterfaceMasterDataProtocols -FirewallPolicy $InterfaceMasterFirewallPolicy -Address $TempIpAddress -Netmask $InterfaceMasterNetMask -DnsDomain $InterfaceMasterDnsDomainName -AdministrativeStatus up -AutoRevert $InterfaceMasterIsAutoRevert -Controller $mySecondaryController"
                             $SecondaryInterface=New-NcNetInterface -Name $TempInterfaceName -Vserver $mySecondaryVserver  -Role $InterfaceMasterRole -Node $InterfaceMasterCurrentNode -Port $InterfaceMasterCurrentPort -DataProtocols $InterfaceMasterDataProtocols -FirewallPolicy $InterfaceMasterFirewallPolicy -Address $TempIpAddress -Netmask $InterfaceMasterNetMask -DnsDomain $InterfaceMasterDnsDomainName -AdministrativeStatus up -AutoRevert $InterfaceMasterIsAutoRevert -Controller $mySecondaryController  -ErrorVariable ErrorVar
                         }
-				        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcNetInterface failed [$ErrorVar]" ;  }
+                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcNetInterface failed [$ErrorVar]" ;  }
                         $TempCifsLif = Get-NcNetInterface ("tmp_lif_to_join_in_ad_" + $SecondaryCifsLifMaster) -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
                         $SecondaryCifsLifCreated=$true
                         
@@ -11603,28 +11689,80 @@ Try {
                         if($Global:PSTKCall -eq "Rest"){
                             Write-LogDebug "Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite $SecondaryDefaultSite -AdminCredential $ADCred -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -Controller $mySecondaryController" 
                             $out = Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite  $SecondaryDefaultSite -AdminCredential $ADCred -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                            $JobUuid=$out.Uuid
+                            Write-LogDebug "Check Add-NcCifsServer job [$JobUuid]"
+                            $Job=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController -ErrorVariable ErrorVar
+                            $StartTime=Get-Date
+                            $Finished=$False
+                            While($Finished -eq $False){
+                                Start-Sleep 1
+                                $CurrentTime=Get-Date
+                                $TimeoutTime = ($CurrentTime - $StartTime).TotalSeconds
+                                if ( $TimeoutTime -gt $Global:STOP_TIMEOUT ) {
+                                    throw "ERROR: Timeout waiting for CIFS server creation. Check ONTAP"
+                                }
+                                $Job=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                $result=$?
+                                if($Job.JobState -ne "running"){
+                                    $Finished=$True
+                                }
+                            }
+                            if($result -ne $True){
+                                Throw "ERROR: Failed to get Add-NcCifsServer Job Details with reason [$ErroVar]"
+                            }else{
+                                if($Job.JobState -ne "success"){
+                                    Throw "ERROR : Failed to Add-NcCifsServer with reason [$($Job.JobCompletion)]"
+                                }else{
+                                    Write-Log "[$workOn] Cifs server is joined"
+                                }
+                            }
                         }else{
                             Write-LogDebug "Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite $SecondaryDefaultSite -AdminCredential $ADCred -Force -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -Controller $mySecondaryController" 
                             $out = Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite  $SecondaryDefaultSite -AdminCredential $ADCred -Force -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) { throw "ERROR: Add-NcCifsServer failed [$ErrorVar]" ; }else{ Write-Log "[$workOn] Cifs server is joined"}
                         }
-                        if ( $? -ne $True ) { throw "ERROR: Add-NcCifsServer failed [$ErrorVar]" ; }else{ Write-Log "[$workOn] Cifs server is joined"}
                     }else{
                         if($Global:PSTKCall -eq "Rest"){
                             Write-LogDebug "Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite $SecondaryDefaultSite -AdminCredential $ADCred -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -NetbiosAlias $SecondaryCifsNetbiosAlias -Controller $mySecondaryController" 
                             $out = Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite  $SecondaryDefaultSite -AdminCredential $ADCred -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -NetbiosAlias $SecondaryCifsNetbiosAlias -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                            $JobUuid=$out.Uuid
+                            Write-LogDebug "Check Add-NcCifsServer job [$JobUuid]"
+                            $Job=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController -ErrorVariable ErrorVar
+                            $StartTime=Get-Date
+                            $Finished=$False
+                            While($Finished -eq $False){
+                                Start-Sleep 1
+                                $CurrentTime=Get-Date
+                                $TimeoutTime = ($CurrentTime - $StartTime).TotalSeconds
+                                if ( $TimeoutTime -gt $Global:STOP_TIMEOUT ) {
+                                    throw "ERROR: Timeout waiting for CIFS server creation. Check ONTAP"
+                                }
+                                $Job=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                $result=$?
+                                if($Job.JobState -ne "running"){
+                                    $Finished=$True
+                                }
+                            }
+                            if($result -ne $True){
+                                Throw "ERROR: Failed to get Add-NcCifsServer Job Details with reason [$ErroVar]"
+                            }else{
+                                if($Job.JobState -ne "success"){
+                                    Throw "ERROR : Failed to Add-NcCifsServer with reason [$($Job.JobCompletion)]"
+                                }else{
+                                    Write-Log "[$workOn] Cifs server is joined"
+                                }
+                            }
                         }else{
                             Write-LogDebug "Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite $SecondaryDefaultSite -AdminCredential $ADCred -Force -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -NetbiosAlias $SecondaryCifsNetbiosAlias -Controller $mySecondaryController" 
                             $out = Add-NcCifsServer -Name $SecondaryCifsServer -Domain $SecondaryDomain -OrganizationalUnit $SecondaryOrganizationalUnit -DefaultSite  $SecondaryDefaultSite -AdminCredential $ADCred -Force -AdministrativeStatus $CIFSAdminState -VserverContext $mySecondaryVserver -NetbiosAlias $SecondaryCifsNetbiosAlias -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) { throw "ERROR: Add-NcCifsServer failed [$ErrorVar]" ; }else{ Write-Log "[$workOn] Cifs server is joined"}
                         }
-                        if ( $? -ne $True ) { throw "ERROR: Add-NcCifsServer failed [$ErrorVar]" ; }else{ Write-Log "[$workOn] Cifs server is joined"}
                     }
                     if( ($myInterfaceName.Length -gt 0) -and ($Global:RESTORE_ORIGINAL -eq $False -and ( -not ($Global:ForceCloneOriginal.IsPresent))) )
                     {
                         Write-LogDebug "Set-NcNetInterface -Name $myInterfaceName -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController"
                         $out=Set-NcNetInterface -Name $myInterfaceName -Vserver $mySecondaryVserver -AdministrativeStatus "down" -Controller $mySecondaryController  -ErrorVariable ErrorVar
-
                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcNetInterface down failed [$ErrorVar]" ; }  
-
                     }
                 }
                 else{
@@ -12118,7 +12256,7 @@ Try {
             $diff=Compare-Object -ReferenceObject $SharesListSource -DifferenceObject $SharesListDest `
             -Property Acl,AttributeCacheTtl,Comment,DirUmask,FileUmask,ForceGroupForCreate,MaxConnectionPerShare,OfflineFilesMode,Path,ShareName,ShareProperties,SymlinkProperties,Volume,VscanFileopProfile `
             -SyncWindow 20000 -CaseSensitive -PassThru | Sort-Object -Property SideIndicator -Descending
-            $diff_text=$diff | select sideindicator,acl,volume,sharename,path,comment | ft | Out-String
+            $diff_text=$diff | Select-Object sideindicator,acl,volume,sharename,path,comment | Format-Table | Out-String
             if($null -ne $diff){Write-LogDebug "Check CIFS shares differences [$diff_text]"}
             else{Write-LogDebug "There is no CIFS shares differences"}
             
@@ -12741,7 +12879,7 @@ Function display_clone_vserver(
     }
     # Verify if NFS service is Running if yes the stop it
     $NfsService = Get-NcNfsService -VserverContext  $myVserver -Controller $myController  -ErrorVariable ErrorVar
-    if ( $NfsService -eq $null ) {
+    if ( $null -eq $NfsService ) {
         Format-ColorBrackets "NFS Services           : [no]" -ForceColor "darkyellow"
     } else {
         if ( $NfsService.GeneralAccess -eq $True ) {
@@ -12752,7 +12890,7 @@ Function display_clone_vserver(
     }
     # Verify if CIFS Service is Running if yes stop it
     $CifService = Get-NcCifsServer  -VserverContext  $myVserver -Controller $myController  -ErrorVariable ErrorVar
-    if ( $CifService -eq $null ) {
+    if ( $null -eq $CifService ) {
         Format-ColorBrackets "CIFS Services          : [no]" -ForceColor "darkyellow"
     } else {
         if ( $CifService.AdministrativeStatus -eq 'up' ) {
@@ -12763,7 +12901,7 @@ Function display_clone_vserver(
     }
     # Verify if ISCSI service is Running if yes the stop it
     $IscsiService = Get-NcIscsiService -VserverContext  $myVserver -Controller $myController  -ErrorVariable ErrorVar
-    if ( $IscsiService -eq $null ) {
+    if ( $null -eq $IscsiService ) {
         Format-ColorBrackets "ISCSI Services         : [no]" -ForceColor "darkyellow"
     } else {
         if ( $IscsiService.IsAvailable -eq $True ) {
@@ -16163,7 +16301,7 @@ Try {
 	# Verify if ISCSI service is Running 
 	$IscsiService = Get-NcIscsiService -VserverContext  $myVserver -Controller $myNcController  -ErrorVariable ErrorVar
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcIscsiService failed [$ErrorVar]" }
-	if ( $IscsiService -eq $null ) {
+	if ( $null -eq $IscsiService ) {
 		Write-Log "[$myVserver] No ISCSI services in vserver"
 	} else {
 		if ( $IscsiService.IsAvailable -ne $True ) {
@@ -16181,7 +16319,7 @@ Try {
 	# Verify if NFS service is Running 
 	$NfsService = Get-NcNfsService -VserverContext  $myVserver -Controller $myNcController  -ErrorVariable ErrorVar
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNfsService failed [$ErrorVar]" }
-	if ( $NfsService -eq $null ) {
+	if ( $null -eq $NfsService ) {
 		Write-Log "[$myVserver] No NFS services in vserver"
 	} else {
 		if ( $NfsService.GeneralAccess -ne $True ) {
@@ -16199,7 +16337,7 @@ Try {
 	# Verify if CIFS Service is Running 
 	$CifService = Get-NcCifsServer  -VserverContext  $myVserver -Controller $myNcController  -ErrorVariable ErrorVar
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsServer failed [$ErrorVar]" }
-	if ( $CifService -eq $null ) {
+	if ( $null -eq $CifService ) {
 		Write-Log "[$myVserver] No CIFS services in vserver"
 	} else {
 		if ( $CifService.AdministrativeStatus -ne 'up' ) {

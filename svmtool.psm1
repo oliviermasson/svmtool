@@ -943,7 +943,7 @@ function Update-SvmDr {
 
     Remove-SvmDr -Instance Default -Vserver cifs
 
-    Do you really want to delete SVM_DR [cifs-dr] from secondary cluster  [c3po] ? [y/n] : y
+    Do you really want to delete SVM-DR [cifs-dr] from secondary cluster  [c3po] ? [y/n] : y
     remove snapmirror relation for volume [cifs:vol1] [cifs-dr:vol1]
     Release Relation [cifs:vol1] [cifs-dr:vol1]
     Remove volume [vol1] from [cifs-dr]
