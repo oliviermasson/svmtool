@@ -3308,11 +3308,11 @@ Function create_update_fpolicy_dr(
                                         Write-LogDebug "New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
                                         -EngineName $PrimaryFpolicyEngineName `
                                         -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController "
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ZapiCall"
                                         $out=New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
                                         -EngineName $PrimaryFpolicyEngineName `
                                         -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ZapiCall
                                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" }
                                     }
                                 }
@@ -3344,12 +3344,12 @@ Function create_update_fpolicy_dr(
                                         # ! Force ONTAPI Mode because of bug in New-NcFpolicyPolicy in REST which require a mandaotry existing scope variable
                                         Write-LogDebug "New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
                                         -EngineName $PrimaryFpolicyEngineName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                        -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName  `
+                                        -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName  -ZapiCall`
                                         -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
                                         $out=New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
                                         -EngineName $PrimaryFpolicyEngineName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
                                         -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ZapiCall
                                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" }
                                     }
                                 }
@@ -3385,11 +3385,11 @@ Function create_update_fpolicy_dr(
                                         Write-LogDebug "New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -NonMandatory `
                                         -EngineName $PrimaryFpolicyEngineName `
                                         -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController "
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController -zapicall"
                                         $out=New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -NonMandatory `
                                         -EngineName $PrimaryFpolicyEngineName `
                                         -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ZapiCall
                                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" } 
                                     }
                                 }
@@ -3422,11 +3422,11 @@ Function create_update_fpolicy_dr(
                                         Write-LogDebug "New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -NonMandatory `
                                         -EngineName $PrimaryFpolicyEngineName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
                                         -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController "
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ZapiCall"
                                         $out=New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -NonMandatory `
                                         -EngineName $PrimaryFpolicyEngineName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
                                         -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ZapiCall
                                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" }
                                     }
                                 }
@@ -4185,7 +4185,8 @@ Try {
     Write-LogDebug "[$ctrlName]: start"
     Write-Log "[$ctrlName] Check Cluster Cron configuration"
     if($Restore -eq $False){
-        $PrimaryCronList = Get-NcJobSchedule -Controller $myPrimaryController -ErrorVariable ErrorVar
+        $PrimaryName=(Get-NcCluster -Controller $myPrimaryController).ClusterName
+        $PrimaryCronList = Get-NcJobSchedule -Controller $myPrimaryController -ErrorVariable ErrorVar -Query @{JobScheduleCluster=$PrimaryName}
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcJobSchedule failed [$ErrorVar]" }
     }else{
         if(Test-Path $($Global:JsonPath+"Get-NcJobSchedule.json")){
@@ -4207,33 +4208,33 @@ Try {
     }
     if($Backup -eq $False){
         $PSVersion=$PSVersionTable.PSVersion
-        $PrimaryName=(Get-NcCluster -Controller $myPrimaryController).Name
-        $SecondaryName=(Get-NcCluster -Controller $mySecondaryController).Name
+        
+        $SecondaryName=(Get-NcCluster -Controller $mySecondaryController).ClusterName
         # if($PSVersionTable.PSVersion.Major -le 5){
         if($True){
             Write-LogDebug "Running svmtool with Powershell version [$PSVersion]"
             $begindate=get-date
             Write-LogDebug "Begin at $begindate"
+            Write-LogDebug "Proceed with Cluster Schedule"
             foreach ( $Schedule in ( $PrimaryCronList | Skip-Null ) ) {
                 $PrimaryJobScheduleName = $Schedule.JobScheduleName
                 $PrimaryJobScheduleType = $Schedule.Type
                 # Write-LogDebug "Schedule [$PrimaryJobScheduleName] is type [$PrimaryJobScheduleType]"
                 if($PrimaryJobScheduleType -eq "cron"){
                     $cron=Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $myPrimaryController -JobScheduleCluster $PrimaryName
-                    $PrimaryJobScheduleDescription = $cron.JobScheduleDescription
-                    $PrimaryJobScheduleCronMonth = $cron.JobScheduleCronMonth
-                    $PrimaryJobScheduleCronDayOfWeek = $cron.JobScheduleCronDayOfWeek
-                    $PrimaryJobScheduleCronDay = $cron.JobScheduleCronDay
-                    $PrimaryJobScheduleCronHour = $cron.JobScheduleCronHour
-                    $PrimaryJobScheduleCronMinute = $cron.JobScheduleCronMinute
+                    $PrimaryJobScheduleDescription = if($null -eq $cron.JobScheduleDescription){""}else{$cron.JobScheduleDescription}
+                    $PrimaryJobScheduleCronMonth = if($null -eq $cron.JobScheduleCronMonth){""}else{$cron.JobScheduleCronMonth}
+                    $PrimaryJobScheduleCronDayOfWeek = if($null -eq $cron.JobScheduleCronDayOfWeek){""}else{$cron.JobScheduleCronDayOfWeek}
+                    $PrimaryJobScheduleCronDay = if($null -eq $cron.JobScheduleCronDay){""}else{$cron.JobScheduleCronDay}
+                    $PrimaryJobScheduleCronHour = if($null -eq $cron.JobScheduleCronHour){""}else{$cron.JobScheduleCronHour}
+                    $PrimaryJobScheduleCronMinute = if($null -eq $cron.JobScheduleCronMinute){""}else{$cron.JobScheduleCronMinute}
                 }else{
                     $interval=Get-NcJobIntervalSchedule -Name $PrimaryJobScheduleName -Controller $myPrimaryController -JobScheduleCluster $PrimaryName
-                    $PrimaryJobScheduleDescription = $interval.JobScheduleDescription
-                    $PrimaryJobScheduleCronMonth = $interval.JobScheduleCronMonth
-                    $PrimaryJobScheduleIntervalSeconds = $interval.JobScheduleIntervalSeconds
-                    $PrimaryJobScheduleIntervalDays = $interval.JobScheduleIntervalDays
-                    $PrimaryJobScheduleIntervalHours = $interval.JobScheduleIntervalHours
-                    $PrimaryJobScheduleIntervalMinutes = $interval.JobScheduleIntervalMinutes
+                    $PrimaryJobScheduleDescription = if($null -eq $interval.JobScheduleDescription){""}else{$interval.JobScheduleDescription}
+                    $PrimaryJobScheduleIntervalSeconds = if($null -eq $interval.JobScheduleIntervalSeconds){""}else{$interval.JobScheduleIntervalSeconds}
+                    $PrimaryJobScheduleIntervalDays = if($null -eq $interval.JobScheduleIntervalDays){""}else{$interval.JobScheduleIntervalDays}
+                    $PrimaryJobScheduleIntervalHours = if($null -eq $interval.JobScheduleIntervalHours){""}else{$interval.JobScheduleIntervalHours}
+                    $PrimaryJobScheduleIntervalMinutes = if($null -eq $interval.JobScheduleIntervalMinutes){""}else{$interval.JobScheduleIntervalMinutes}
                     if($Global:PSTKCall -eq "Rest"){
                         $PrimaryJobScheduleInterval = $interval.Interval
                     }
@@ -4242,12 +4243,14 @@ Try {
                 if($PrimaryJobScheduleType -eq "cron"){
                     $SecondarySchedule = Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController  -ErrorVariable ErrorVar  -JobScheduleCluster $SecondaryName
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcJobCronSchedule failed [$ErrorVar]" }
-                    $SecondaryJobScheduleDescription = $SecondarySchedule.JobScheduleDescription
-                    $SecondaryJobScheduleCronMonth = $SecondarySchedule.JobScheduleCronMonth
-                    $SecondaryJobScheduleCronDayOfWeek = $SecondarySchedule.JobScheduleCronDayOfWeek
-                    $SecondaryJobScheduleCronDay = $SecondarySchedule.JobScheduleCronDay
-                    $SecondaryJobScheduleCronHour = $SecondarySchedule.JobScheduleCronHour
-                    $SecondaryJobScheduleCronMinute = $SecondarySchedule.JobScheduleCronMinute
+                    if($null -ne $SecondarySchedule){
+                        $SecondaryJobScheduleDescription = if($null -eq $SecondarySchedule.JobScheduleDescription){""}else{$SecondarySchedule.JobScheduleDescription}
+                        $SecondaryJobScheduleCronMonth = if($null -eq $SecondarySchedule.JobScheduleCronMonth){""}else{$SecondarySchedule.JobScheduleCronMonth}
+                        $SecondaryJobScheduleCronDayOfWeek = if($null -eq $SecondarySchedule.JobScheduleCronDayOfWeek){""}else{$SecondarySchedule.JobScheduleCronDayOfWeek}
+                        $SecondaryJobScheduleCronDay = if($null -eq $SecondarySchedule.JobScheduleCronDay){""}else{$SecondarySchedule.JobScheduleCronDay}
+                        $SecondaryJobScheduleCronHour = if($null -eq $SecondarySchedule.JobScheduleCronHour){""}else{$SecondarySchedule.JobScheduleCronHour}
+                        $SecondaryJobScheduleCronMinute = if($null -eq $SecondarySchedule.JobScheduleCronMinute){""}else{$SecondarySchedule.JobScheduleCronMinute}
+                    }
                 }else{
                     $SecondarySchedule = Get-NcJobIntervalSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController  -ErrorVariable ErrorVar  -JobScheduleCluster $SecondaryName
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcJobIntervalSchedule failed [$ErrorVar]" }
@@ -4259,10 +4262,19 @@ Try {
                     if($Global:PSTKCall -ne "Rest"){
                         if ( $PrimaryJobScheduleDescription -ne $SecondaryJobScheduleDescription ) {
                             if($PrimaryJobScheduleType -eq "cron"){
+                                $PrimaryJobScheduleCronMonth = if("" -eq $cron.JobScheduleCronMonth){$null}else{$cron.JobScheduleCronMonth}
+                                $PrimaryJobScheduleCronDayOfWeek = if("" -eq $cron.JobScheduleCronDayOfWeek){$null}else{$cron.JobScheduleCronDayOfWeek}
+                                $PrimaryJobScheduleCronDay = if("" -eq $cron.JobScheduleCronDay){$null}else{$cron.JobScheduleCronDay}
+                                $PrimaryJobScheduleCronHour = if("" -eq $cron.JobScheduleCronHour){$null}else{$cron.JobScheduleCronHour}
+                                $PrimaryJobScheduleCronMinute = if("" -eq $cron.JobScheduleCronMinute){$null}else{$cron.JobScheduleCronMinute}
                                 Write-LogDebug "Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar"
                                 $out=Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar
                                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobCronSchedule failed [$ErrorVar]" }
                             }else{
+                                $PrimaryJobScheduleIntervalSeconds = if("" -eq $interval.JobScheduleIntervalSeconds){$null}else{$interval.JobScheduleIntervalSeconds}
+                                $PrimaryJobScheduleIntervalDays = if("" -eq $interval.JobScheduleIntervalDays){$null}else{$interval.JobScheduleIntervalDays}
+                                $PrimaryJobScheduleIntervalHours = if("" -eq $interval.JobScheduleIntervalHours){$null}else{$interval.JobScheduleIntervalHours}
+                                $PrimaryJobScheduleIntervalMinutes = if("" -eq $interval.JobScheduleIntervalMinutes){$null}else{$interval.JobScheduleIntervalMinutes}
                                 Write-LogDebug "Set-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes  -ErrorVariable ErrorVar"
                                 $out=Set-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes  -ErrorVariable ErrorVar
                                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobIntervalSchedule failed [$ErrorVar]" }
@@ -4281,6 +4293,11 @@ Try {
                             -or $PrimaryJobScheduleCronDay -ne $SecondaryJobScheduleCronDay `
                             -or $PrimaryJobScheduleCronHour -ne $SecondaryJobScheduleCronHour `
                             -or $PrimaryJobScheduleCronMinute -ne $SecondaryJobScheduleCronMinute){
+                                $PrimaryJobScheduleCronMonth = if("" -eq $cron.JobScheduleCronMonth){$null}else{$cron.JobScheduleCronMonth}
+                                $PrimaryJobScheduleCronDayOfWeek = if("" -eq $cron.JobScheduleCronDayOfWeek){$null}else{$cron.JobScheduleCronDayOfWeek}
+                                $PrimaryJobScheduleCronDay = if("" -eq $cron.JobScheduleCronDay){$null}else{$cron.JobScheduleCronDay}
+                                $PrimaryJobScheduleCronHour = if("" -eq $cron.JobScheduleCronHour){$null}else{$cron.JobScheduleCronHour}
+                                $PrimaryJobScheduleCronMinute = if("" -eq $cron.JobScheduleCronMinute){$null}else{$cron.JobScheduleCronMinute}
                                 Write-LogDebug "Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar"
                                 $out=Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar
                                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobCronSchedule failed [$ErrorVar]" }
@@ -4290,23 +4307,184 @@ Try {
                 } else {
                     if($Global:PSTKCall -ne "Rest"){
                         if($PrimaryJobScheduleType -eq "cron"){
+                            $PrimaryJobScheduleCronMonth = if("" -eq $cron.JobScheduleCronMonth){$null}else{$cron.JobScheduleCronMonth}
+                            $PrimaryJobScheduleCronDayOfWeek = if("" -eq $cron.JobScheduleCronDayOfWeek){$null}else{$cron.JobScheduleCronDayOfWeek}
+                            $PrimaryJobScheduleCronDay = if("" -eq $cron.JobScheduleCronDay){$null}else{$cron.JobScheduleCronDay}
+                            $PrimaryJobScheduleCronHour = if("" -eq $cron.JobScheduleCronHour){$null}else{$cron.JobScheduleCronHour}
+                            $PrimaryJobScheduleCronMinute = if("" -eq $cron.JobScheduleCronMinute){$null}else{$cron.JobScheduleCronMinute}
                             Write-LogDebug "Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -ErrorVariable ErrorVar"
-                            $out=Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar
-                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcJobCronSchedule failed [$ErrorVar]" }
+                            $out=Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -ErrorAction SilentlyContinue
                         }else{
+                            $PrimaryJobScheduleIntervalSeconds = if("" -eq $interval.JobScheduleIntervalSeconds){$null}else{$interval.JobScheduleIntervalSeconds}
+                            $PrimaryJobScheduleIntervalDays = if("" -eq $interval.JobScheduleIntervalDays){$null}else{$interval.JobScheduleIntervalDays}
+                            $PrimaryJobScheduleIntervalHours = if("" -eq $interval.JobScheduleIntervalHours){$null}else{$interval.JobScheduleIntervalHours}
+                            $PrimaryJobScheduleIntervalMinutes = if("" -eq $interval.JobScheduleIntervalMinutes){$null}else{$interval.JobScheduleIntervalMinutes}
                             Write-LogDebug "Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes -ErrorVariable ErrorVar"
-                            $out=Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes  -ErrorVariable ErrorVar
-                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcJobIntervalSchedule failed [$ErrorVar]" }
+                            $out=Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes  -ErrorVariable ErrorVar -ErrorAction SilentlyContinue
                         }
                     }else{
                         if($PrimaryJobScheduleType -eq "interval"){
                             Write-LogDebug "Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Interval $PrimaryJobScheduleInterval -ErrorVariable ErrorVar"
-                            $out=Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Interval $PrimaryJobScheduleInterval -ErrorVariable ErrorVar
-                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcJobIntervalSchedule failed [$ErrorVar]" }
+                            $out=Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Interval $PrimaryJobScheduleInterval -ErrorVariable ErrorVar -ErrorAction SilentlyContinue
                         }else{
-                            Write-LogDebug "Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes -ErrorVariable ErrorVar"
-                            $out=Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes  -ErrorVariable ErrorVar
-                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcJobIntervalSchedule failed [$ErrorVar]" }
+                            $PrimaryJobScheduleCronMonth = if("" -eq $cron.JobScheduleCronMonth){$null}else{$cron.JobScheduleCronMonth}
+                            $PrimaryJobScheduleCronDayOfWeek = if("" -eq $cron.JobScheduleCronDayOfWeek){$null}else{$cron.JobScheduleCronDayOfWeek}
+                            $PrimaryJobScheduleCronDay = if("" -eq $cron.JobScheduleCronDay){$null}else{$cron.JobScheduleCronDay}
+                            $PrimaryJobScheduleCronHour = if("" -eq $cron.JobScheduleCronHour){$null}else{$cron.JobScheduleCronHour}
+                            $PrimaryJobScheduleCronMinute = if("" -eq $cron.JobScheduleCronMinute){$null}else{$cron.JobScheduleCronMinute}
+                            Write-LogDebug "Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -ErrorVariable ErrorVar"
+                            $out=Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -ErrorAction SilentlyContinue
+                        }
+                    }
+                }
+            }
+            if($Global:OntapPrimaryVersion -ge 9.10 -and $Global:OntapSecondaryVersion -ge 9.10){
+                if($Restore -eq $False){
+                    $PrimaryName=(Get-NcCluster -Controller $myPrimaryController).ClusterName
+                    $PrimaryCronListVserver = Get-NcJobSchedule -Controller $myPrimaryController -ErrorVariable ErrorVar -VserverContext $myPrimaryVserver
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcJobSchedule failed [$ErrorVar]" }
+                }else{
+                    if(Test-Path $($Global:JsonPath+"Get-NcJobSchedule.json")){
+                        $PrimaryCronListVserver=Get-Content $($Global:JsonPath+"Get-NcJobSchedule.json") -Raw | ConvertFrom-Json
+                    }else{
+                        $Return=$False
+                        $filepath=$($Global:JsonPath+"Get-NcJobSchedule.json")
+                        Throw "ERROR: failed to read $filepath"
+                    }
+                }
+                if($Backup -eq $True){
+                    $PrimaryCronListVserver | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcJobSchedule.json") -Encoding ASCII -Width 65535
+                    if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcJobSchedule.json") -ErrorAction SilentlyContinue) ){
+                        Write-LogDebug "$($Global:JsonPath+"Get-NcJobSchedule.json") saved successfully"
+                    }else{
+                        Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcJobSchedule.json")"
+                        $Return=$False
+                    }
+                }
+                Write-LogDebug "Proceed with Vserver Schedule"
+                foreach ( $Schedule in ( $PrimaryCronListVserver | Skip-Null ) ) {
+                    $PrimaryJobScheduleName = $Schedule.JobScheduleName
+                    $PrimaryJobScheduleType = $Schedule.Type
+                    # Write-LogDebug "Schedule [$PrimaryJobScheduleName] is type [$PrimaryJobScheduleType]"
+                    if($PrimaryJobScheduleType -eq "cron"){
+                        $cron=Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $myPrimaryController -VserverContext $myPrimaryVserver
+                        $PrimaryJobScheduleDescription = if($null -eq $cron.JobScheduleDescription){""}else{$cron.JobScheduleDescription}
+                        $PrimaryJobScheduleCronMonth = if($null -eq $cron.JobScheduleCronMonth){""}else{$cron.JobScheduleCronMonth}
+                        $PrimaryJobScheduleCronDayOfWeek = if($null -eq $cron.JobScheduleCronDayOfWeek){""}else{$cron.JobScheduleCronDayOfWeek}
+                        $PrimaryJobScheduleCronDay = if($null -eq $cron.JobScheduleCronDay){""}else{$cron.JobScheduleCronDay}
+                        $PrimaryJobScheduleCronHour = if($null -eq $cron.JobScheduleCronHour){""}else{$cron.JobScheduleCronHour}
+                        $PrimaryJobScheduleCronMinute = if($null -eq $cron.JobScheduleCronMinute){""}else{$cron.JobScheduleCronMinute}
+                    }else{
+                        $interval=Get-NcJobIntervalSchedule -Name $PrimaryJobScheduleName -Controller $myPrimaryController -VserverContext $myPrimaryVserver
+                        $PrimaryJobScheduleDescription = if($null -eq $interval.JobScheduleDescription){""}else{$interval.JobScheduleDescription}
+                        $PrimaryJobScheduleIntervalSeconds = if($null -eq $interval.JobScheduleIntervalSeconds){""}else{$interval.JobScheduleIntervalSeconds}
+                        $PrimaryJobScheduleIntervalDays = if($null -eq $interval.JobScheduleIntervalDays){""}else{$interval.JobScheduleIntervalDays}
+                        $PrimaryJobScheduleIntervalHours = if($null -eq $interval.JobScheduleIntervalHours){""}else{$interval.JobScheduleIntervalHours}
+                        $PrimaryJobScheduleIntervalMinutes = if($null -eq $interval.JobScheduleIntervalMinutes){""}else{$interval.JobScheduleIntervalMinutes}
+                        if($Global:PSTKCall -eq "Rest"){
+                            $PrimaryJobScheduleInterval = $interval.Interval
+                        }
+                    }
+                    Write-LogDebug "Working on [$PrimaryJobScheduleName] type [$PrimaryJobScheduleType]"
+                    if($PrimaryJobScheduleType -eq "cron"){
+                        $SecondarySchedule = Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController  -ErrorVariable ErrorVar  -VserverContext $mySecondaryVserver
+                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcJobCronSchedule failed [$ErrorVar]" }
+                        if($null -ne $SecondarySchedule){
+                            $SecondaryJobScheduleDescription = if($null -eq $SecondarySchedule.JobScheduleDescription){""}else{$SecondarySchedule.JobScheduleDescription}
+                            $SecondaryJobScheduleCronMonth = if($null -eq $SecondarySchedule.JobScheduleCronMonth){""}else{$SecondarySchedule.JobScheduleCronMonth}
+                            $SecondaryJobScheduleCronDayOfWeek = if($null -eq $SecondarySchedule.JobScheduleCronDayOfWeek){""}else{$SecondarySchedule.JobScheduleCronDayOfWeek}
+                            $SecondaryJobScheduleCronDay = if($null -eq $SecondarySchedule.JobScheduleCronDay){""}else{$SecondarySchedule.JobScheduleCronDay}
+                            $SecondaryJobScheduleCronHour = if($null -eq $SecondarySchedule.JobScheduleCronHour){""}else{$SecondarySchedule.JobScheduleCronHour}
+                            $SecondaryJobScheduleCronMinute = if($null -eq $SecondarySchedule.JobScheduleCronMinute){""}else{$SecondarySchedule.JobScheduleCronMinute}
+                        }
+                    }else{
+                        $SecondarySchedule = Get-NcJobIntervalSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController  -ErrorVariable ErrorVar  -VserverContext $mySecondaryVserver
+                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcJobIntervalSchedule failed [$ErrorVar]" }
+                        $SecondaryJobScheduleInterval = $SecondarySchedule.Interval
+                    }
+                    
+                    if ( $null -ne $SecondarySchedule ) {
+                        
+                        if($Global:PSTKCall -ne "Rest"){
+                            if ( $PrimaryJobScheduleDescription -ne $SecondaryJobScheduleDescription ) {
+                                if($PrimaryJobScheduleType -eq "cron"){
+                                    $PrimaryJobScheduleCronMonth = if("" -eq $cron.JobScheduleCronMonth){$null}else{$cron.JobScheduleCronMonth}
+                                    $PrimaryJobScheduleCronDayOfWeek = if("" -eq $cron.JobScheduleCronDayOfWeek){$null}else{$cron.JobScheduleCronDayOfWeek}
+                                    $PrimaryJobScheduleCronDay = if("" -eq $cron.JobScheduleCronDay){$null}else{$cron.JobScheduleCronDay}
+                                    $PrimaryJobScheduleCronHour = if("" -eq $cron.JobScheduleCronHour){$null}else{$cron.JobScheduleCronHour}
+                                    $PrimaryJobScheduleCronMinute = if("" -eq $cron.JobScheduleCronMinute){$null}else{$cron.JobScheduleCronMinute}
+                                    Write-LogDebug "Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -VserverContext $mySecondaryVserver"
+                                    $out=Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -VserverContext $mySecondaryVserver
+                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobCronSchedule failed [$ErrorVar]" }
+                                }else{
+                                    $PrimaryJobScheduleIntervalSeconds = if("" -eq $interval.JobScheduleIntervalSeconds){$null}else{$interval.JobScheduleIntervalSeconds}
+                                    $PrimaryJobScheduleIntervalDays = if("" -eq $interval.JobScheduleIntervalDays){$null}else{$interval.JobScheduleIntervalDays}
+                                    $PrimaryJobScheduleIntervalHours = if("" -eq $interval.JobScheduleIntervalHours){$null}else{$interval.JobScheduleIntervalHours}
+                                    $PrimaryJobScheduleIntervalMinutes = if("" -eq $interval.JobScheduleIntervalMinutes){$null}else{$interval.JobScheduleIntervalMinutes}
+                                    Write-LogDebug "Set-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes  -ErrorVariable ErrorVar -VserverContext $mySecondaryVserver"
+                                    $out=Set-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes  -ErrorVariable ErrorVar -VserverContext $mySecondaryVserver
+                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobIntervalSchedule failed [$ErrorVar]" }
+                                }
+                            }
+                        }else{
+                            if($PrimaryJobScheduleType -eq "interval"){
+                                if($SecondaryJobScheduleInterval -ne $PrimaryJobScheduleInterval){
+                                    Write-LogDebug "Set-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Interval $PrimaryJobScheduleInterval -ErrorVariable ErrorVar -VserverContext $mySecondaryVserver"
+                                    $out=Set-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Interval $PrimaryJobScheduleInterval -ErrorVariable ErrorVar -VserverContext $mySecondaryVserver
+                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobIntervalSchedule failed [$ErrorVar]" }
+                                }
+                            }else{
+                                if($PrimaryJobScheduleCronMonth -ne $SecondaryJobScheduleCronMonth `
+                                -or $PrimaryJobScheduleCronDayOfWeek -ne $SecondaryJobScheduleCronDayOfWeek `
+                                -or $PrimaryJobScheduleCronDay -ne $SecondaryJobScheduleCronDay `
+                                -or $PrimaryJobScheduleCronHour -ne $SecondaryJobScheduleCronHour `
+                                -or $PrimaryJobScheduleCronMinute -ne $SecondaryJobScheduleCronMinute){
+                                    $PrimaryJobScheduleCronMonth = if("" -eq $cron.JobScheduleCronMonth){$null}else{$cron.JobScheduleCronMonth}
+                                    $PrimaryJobScheduleCronDayOfWeek = if("" -eq $cron.JobScheduleCronDayOfWeek){$null}else{$cron.JobScheduleCronDayOfWeek}
+                                    $PrimaryJobScheduleCronDay = if("" -eq $cron.JobScheduleCronDay){$null}else{$cron.JobScheduleCronDay}
+                                    $PrimaryJobScheduleCronHour = if("" -eq $cron.JobScheduleCronHour){$null}else{$cron.JobScheduleCronHour}
+                                    $PrimaryJobScheduleCronMinute = if("" -eq $cron.JobScheduleCronMinute){$null}else{$cron.JobScheduleCronMinute}
+                                    Write-LogDebug "Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -VserverContext $mySecondaryVserver"
+                                    $out=Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -VserverContext $mySecondaryVserver
+                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobCronSchedule failed [$ErrorVar]" }
+                                }
+                            }
+                        }
+                    } else {
+                        if($Global:PSTKCall -ne "Rest"){
+                            if($PrimaryJobScheduleType -eq "cron"){
+                                $PrimaryJobScheduleCronMonth = if("" -eq $cron.JobScheduleCronMonth){$null}else{$cron.JobScheduleCronMonth}
+                                $PrimaryJobScheduleCronDayOfWeek = if("" -eq $cron.JobScheduleCronDayOfWeek){$null}else{$cron.JobScheduleCronDayOfWeek}
+                                $PrimaryJobScheduleCronDay = if("" -eq $cron.JobScheduleCronDay){$null}else{$cron.JobScheduleCronDay}
+                                $PrimaryJobScheduleCronHour = if("" -eq $cron.JobScheduleCronHour){$null}else{$cron.JobScheduleCronHour}
+                                $PrimaryJobScheduleCronMinute = if("" -eq $cron.JobScheduleCronMinute){$null}else{$cron.JobScheduleCronMinute}
+                                Write-LogDebug "Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -ErrorVariable ErrorVar -VserverContext $mySecondaryVserver"
+                                $out=Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -ErrorAction SilentlyContinue -VserverContext $mySecondaryVserver
+                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcJobCronSchedule failed [$ErrorVar]" }
+                            }else{
+                                $PrimaryJobScheduleIntervalSeconds = if("" -eq $interval.JobScheduleIntervalSeconds){$null}else{$interval.JobScheduleIntervalSeconds}
+                                $PrimaryJobScheduleIntervalDays = if("" -eq $interval.JobScheduleIntervalDays){$null}else{$interval.JobScheduleIntervalDays}
+                                $PrimaryJobScheduleIntervalHours = if("" -eq $interval.JobScheduleIntervalHours){$null}else{$interval.JobScheduleIntervalHours}
+                                $PrimaryJobScheduleIntervalMinutes = if("" -eq $interval.JobScheduleIntervalMinutes){$null}else{$interval.JobScheduleIntervalMinutes}
+                                Write-LogDebug "Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes -ErrorVariable ErrorVar -VserverContext $mySecondaryVserver"
+                                $out=Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes  -ErrorVariable ErrorVar -ErrorAction SilentlyContinue -VserverContext $mySecondaryVserver
+                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcJobIntervalSchedule failed [$ErrorVar]" }
+                            }
+                        }else{
+                            if($PrimaryJobScheduleType -eq "interval"){
+                                Write-LogDebug "Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Interval $PrimaryJobScheduleInterval -ErrorVariable ErrorVar -VserverContext $mySecondaryVserver"
+                                $out=Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Interval $PrimaryJobScheduleInterval -ErrorVariable ErrorVar -ErrorAction SilentlyContinue -VserverContext $mySecondaryVserver
+                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcJobIntervalSchedule failed [$ErrorVar]" }
+                            }else{
+                                $PrimaryJobScheduleCronMonth = if("" -eq $cron.JobScheduleCronMonth){$null}else{$cron.JobScheduleCronMonth}
+                                $PrimaryJobScheduleCronDayOfWeek = if("" -eq $cron.JobScheduleCronDayOfWeek){$null}else{$cron.JobScheduleCronDayOfWeek}
+                                $PrimaryJobScheduleCronDay = if("" -eq $cron.JobScheduleCronDay){$null}else{$cron.JobScheduleCronDay}
+                                $PrimaryJobScheduleCronHour = if("" -eq $cron.JobScheduleCronHour){$null}else{$cron.JobScheduleCronHour}
+                                $PrimaryJobScheduleCronMinute = if("" -eq $cron.JobScheduleCronMinute){$null}else{$cron.JobScheduleCronMinute}
+                                Write-LogDebug "Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -ErrorVariable ErrorVar -VserverContext $mySecondaryVserver"
+                                $out=Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -ErrorAction SilentlyContinue -VserverContext $mySecondaryVserver
+                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcJobCronSchedule failed [$ErrorVar]" }
+                            }
                         }
                     }
                 }
@@ -6017,12 +6195,12 @@ Try {
             $PrimaryVolIsInfiniteVolume=$PrimaryVol.IsInfiniteVolume
             $PrimaryVolIsVserverRoot=$PrimaryVol.VolumeStateAttributes.IsVserverRoot
             $PrimaryVolExtendStyle=$PrimaryVol.VolumeIdAttributes.StyleExtended
-            if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapPrimaryVersion -ge "9.10")){
+            if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapPrimaryVersion -ge 9.10)){
                 # ONTAP >= 9.10
                 # support of AntiRansomware state per volume
                 $PrimaryVolAntiRansomware=$PrimaryVol.AntiRansomware.state
             }
-            if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapPrimaryVersion -ge "9.08")){
+            if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapPrimaryVersion -ge 9.08)){
                 # ONTAP >= 9.8
                 # support of Filesystem Analytics per volume
                 $PrimaryVolFSASupported=$PrimaryVol.Analytics.Supported
@@ -6093,12 +6271,12 @@ Try {
                     $SecondaryVolJunctionPath=$SecondaryVol.VolumeIdAttributes.JunctionPath
                     $SecondaryVolIsInfiniteVolume=$SecondaryVol.IsInfiniteVolume
                     $SecondaryVolIsVserverRoot=$SecondaryVol.VolumeStateAttributes.IsVserverRoot
-                    if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapSecondaryVersion -ge "9.10")){
+                    if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapSecondaryVersion -ge 9.10)){
                         # ONTAP >= 9.10
                         # support of AntiRansomware state per volume
                         $SecondaryVolAntiRansomware=$SecondaryVol.AntiRansomware.state 
                     }
-                    if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapSecondaryVersion -ge "9.08")){
+                    if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapSecondaryVersion -ge 9.08)){
                         # ONTAP >= 9.8
                         # support of Filesystem Analytics per volume
                         $SecondaryVolFSASupported=$SecondaryVol.Analytics.Supported
@@ -6467,7 +6645,7 @@ Try {
     if($Global:AllowEncryption -eq "True"){
         # $SecondaryVersionTuple=(Get-NcSystemVersionInfo -Controller $mySecondaryController | Select-Object VersionTuple).VersionTuple
         # if($SecondaryVersionTuple.Generation -ge 9 -and $SecondaryVersionTuple.Major -ge 3){
-        if($Global:OntapSecondaryVersion -gt "9.03"){
+        if($Global:OntapSecondaryVersion -gt 9.03){
             Write-Log "[$mySecondaryController] Destination Cluster runs ONTAP 9.3 or greater"
             Write-Log "[$mySecondaryController] Volume conversion into Encrypted Volume is supported"
             $ConversionSupported=$True
@@ -6519,13 +6697,13 @@ Try {
                 $PrimaryVolAsyncDeleteClientState=$null
                 $PrimaryVolAsyncDeleteClientTrashDirectory=$null
                 
-                if(($Global:OntapPrimaryVersion -ge "9.10")){
+                if(($Global:OntapPrimaryVersion -ge 9.10)){
                     # ONTAP >= 9.10
                     $PrimaryVolAntiRansomware=$PrimaryVol.anti_ransomware.state
                     $PrimaryVolSnaplockType=$PrimaryVol.snaplock.type 
                     $PrimaryVolActivityTrackState=$PrimaryVol.activity_tracking.state
                 }
-                if(($Global:OntapPrimaryVersion -ge "9.08")){
+                if(($Global:OntapPrimaryVersion -ge 9.08)){
                     # ONTAP >= 9.8
                     # support of Filesystem Analytics per volume
                     $PrimaryVolAnalyticsState=$PrimaryVol.analytics.state
@@ -6536,7 +6714,7 @@ Try {
                         $PrimaryVolTieringObjectTags=$PrimaryVol.tiering.object_tags
                     }
                 }
-                if(($Global:OntapPrimaryVersion -ge "9.11")){
+                if(($Global:OntapPrimaryVersion -ge 9.11)){
                     # ONTAP >= 9.11
                     $PrimaryVolAsyncDeleteClientState=$PrimaryVol.asynchronous_directory_delete.enabled
                     $PrimaryVolAsyncDeleteClientTrashDirectory=$PrimaryVol.asynchronous_directory_delete.trash_bin
@@ -6740,7 +6918,7 @@ Try {
                         $ForceRest=$False
                         $NewNcVolParameters=@{}
                         
-                        if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapSecondaryVersion -ge "9.10")){
+                        if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapSecondaryVersion -ge 9.10)){
                             # * Rest POST method does not support to set anti-ransomware state on DP volume
                             if(($PrimaryVolAntiRansomware -eq "enabled") -and ($Global:VOLUME_TYPE -eq "RW")){
                                 $NewNcVolParameters.anti_ransomware=@{"state"="enabled"}
@@ -6757,14 +6935,14 @@ Try {
                             # }
                         }
                         # * Rest POST method does not support to set analytics state on DP volume
-                        if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapSecondaryVersion -ge "9.08") -and ($Global:VOLUME_TYPE -eq "RW")){
+                        if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapSecondaryVersion -ge 9.08) -and ($Global:VOLUME_TYPE -eq "RW")){
                             if($PrimaryVolAnalyticsState -eq "on"){
                                 $NewNcVolParameters.analytics=@{"state"="on"}
                                 $ForceRest=$True
                             }
                         }
                         # * Rest POST method does not support to set analytics state on DP volume
-                        if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapPrimaryVersion -ge "9.11") -and ($Global:VOLUME_TYPE -eq "RW")){
+                        if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapPrimaryVersion -ge 9.11) -and ($Global:VOLUME_TYPE -eq "RW")){
                             if($PrimaryVolAsyncDeleteClientState -eq $True){
                                 $NewNcVolParameters.asynchronous_directory_delete=@{"enabled"=$True}
                                 $ForceRest=$True
@@ -7598,8 +7776,8 @@ Try {
 	    while ( ( $retry -eq $True ) -and ( $count -lt $MOUNT_RETRY_COUNT ) ) {
 		    $count++
             $retry = $False
-            Write-LogDebug "Get-NcSnapmirror -DestinationVserver $DestVserverDR -DestinationVolume $DestVolume -SourceVolume $VolumeName -SourceVserver $myPrimaryVserver -Controller $mySecondaryController"
-            $relationList = Get-NcSnapmirror -DestinationVserver $DestVserverDR -DestinationVolume $DestVolume -SourceVolume $VolumeName -SourceVserver $myPrimaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+            Write-LogDebug "Get-NcSnapmirror -DestinationLocation $($DestVserverDR+":"+$DestVolume) -SourceLocation $($myPrimaryVserver+":"+$VolumeName) -Controller $mySecondaryController"
+            $relationList = Get-NcSnapmirror -DestinationLocation $($DestVserverDR+":"+$DestVolume) -SourceLocation $($myPrimaryVserver+":"+$VolumeName) -Controller $mySecondaryController -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapMirror failed [$ErrorVar]" } 
             foreach ( $relation in ( $relationList | Skip-Null ) ) {
                 $DestinationVolume=$relation.DestinationVolume
@@ -7769,15 +7947,9 @@ Try {
 		    $count++
             $retry = $False
             if($Restore -eq $False -and $Backup -eq $False ){
-                if($Global:PSTKCall -ne "Rest"){
-                    Write-LogDebug "Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -DestinationVolume $DestVolume -SourceVolume $volume -SourceVserver $myPrimaryVserver -Controller $mySecondaryController"
-                    $relationList = Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -DestinationVolume $DestVolume -SourceVolume $volume -SourceVserver $myPrimaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
-                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapMirror failed [$ErrorVar]" } 
-                }else{
-                    Write-LogDebug "Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":"+$DestVolume) -SourceLocation $($myPrimaryVserver+":"+$volume) -Controller $mySecondaryController"
-                    $relationList = Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":"+$DestVolume) -SourceLocation $($myPrimaryVserver+":"+$volume) -Controller $mySecondaryController -ErrorVariable ErrorVar
-                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapMirror failed [$ErrorVar]" } 
-                }
+                Write-LogDebug "Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":"+$DestVolume) -SourceLocation $($myPrimaryVserver+":"+$volume) -Controller $mySecondaryController"
+                $relationList = Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":"+$DestVolume) -SourceLocation $($myPrimaryVserver+":"+$volume) -Controller $mySecondaryController -ErrorVariable ErrorVar
+                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapMirror failed [$ErrorVar]" } 
             }
             if($Restore -eq $True){
                 if(Test-Path $($Global:JsonPath+"Get-NcVol.json")){
@@ -8248,8 +8420,8 @@ Function set_snapmirror_schedule_dr(
         $mySecondaryCluster = (Get-NcCluster -Controller $mySecondaryController  -ErrorVariable ErrorVar).ClusterName          
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCluster failed [$ErrorVar]" }
 
-        Write-LogDebug "Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -SourceVserver $myPrimaryVserver -Controller $mySecondaryController"
-        $relationList = Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -SourceVserver $myPrimaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+        Write-LogDebug "Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":*") -Controller $mySecondaryController"
+        $relationList = Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":*") -Controller $mySecondaryController  -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
         foreach ( $relation in ( $relationList | Skip-Null ) ) {
             $MirrorState=$relation.MirrorState
@@ -8306,8 +8478,8 @@ Try {
 	$mySecondaryCluster = (Get-NcCluster -Controller $mySecondaryController  -ErrorVariable ErrorVar).ClusterName			
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCluster failed [$ErrorVar]" }
 
-	Write-LogDebug "Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -SourceVserver $myPrimaryVserver -Controller $mySecondaryController"
-	$relationList = Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -SourceVserver $myPrimaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+	Write-LogDebug "Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":*") -Controller $mySecondaryController"
+            $relationList = Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":*") -Controller $mySecondaryController  -ErrorVariable ErrorVar
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
 	foreach ( $relation in ( $relationList | Skip-Null ) ) {
 		$MirrorState=$relation.MirrorState
@@ -8354,24 +8526,14 @@ Function wait_snapmirror_dr_status{
         while ( ( $GoodStatus -eq $false ) -and ( $isTimeOut -eq $false ) ){
             Start-Sleep 2
             if($SourceCluster -and $SourceVserver){
-                if($Global:PSTKCall -ne "Rest"){
-                    Write-LogDebug "Get-NcSnapmirror -DestinationVserver $DestinationVserver -DestinationVolume $SecondaryVolumeName -SourceVserver $SourceVserver -SourceVolume $PrimaryVolumeName -Controller $mySecondaryController"
-                    $relation=Get-NcSnapmirror -DestinationVserver $DestinationVserver -DestinationVolume $SecondaryVolumeName -SourceVserver $SourceVserver -SourceVolume $PrimaryVolumeName -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
-                }else{
-                    Write-LogDebug "Get-NcSnapmirror -DestinationLocation $($DestinationVserver+":"+$SecondaryVolumeName) -SourceLocation $($SourceVserver+":"+$PrimaryVolumeName) -Controller $mySecondaryController"
-                    $relation=Get-NcSnapmirror -DestinationLocation $($DestinationVserver+":"+$SecondaryVolumeName) -SourceLocation $($SourceVserver+":"+$PrimaryVolumeName) -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
-                }
+                Write-LogDebug "Get-NcSnapmirror -DestinationLocation $($DestinationVserver+":"+$SecondaryVolumeName) -SourceLocation $($SourceVserver+":"+$PrimaryVolumeName) -Controller $mySecondaryController"
+                $relation=Get-NcSnapmirror -DestinationLocation $($DestinationVserver+":"+$SecondaryVolumeName) -SourceLocation $($SourceVserver+":"+$PrimaryVolumeName) -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
             }else{
-                if($Global:PSTKCall -ne "Rest"){
-                    Write-LogDebug "Get-NcSnapmirror -DestinationVserver $DestinationVserver -DestinationVolume $SecondaryVolumeName -Controller $mySecondaryController "
-                    $relation=Get-NcSnapmirror -DestinationVserver $DestinationVserver -DestinationVolume $SecondaryVolumeName -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
-                }else{
-                    $relation=Get-NcSnapmirror -DestinationLocation $($DestinationVserver+":"+$SecondaryVolumeName) -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
-                }
+                Write-LogDebug "Get-NcSnapmirror -DestinationLocation $($DestinationVserver+":"+$SecondaryVolumeName) -Controller $mySecondaryController"
+                $relation=Get-NcSnapmirror -DestinationLocation $($DestinationVserver+":"+$SecondaryVolumeName) -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
+                
             }
             
             foreach($rel in $relation){
@@ -8442,8 +8604,8 @@ Function wait_snapmirror_dr(
         while ( ( $GoodStatus -eq $false ) -and ( $isTimeout -eq $false ) ) 
         {
             Start-Sleep 2
-            Write-LogDebug "Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -SourceVserver $myPrimaryVserver -Controller $mySecondaryController"
-            $relationList = Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -SourceVserver $myPrimaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+            Write-LogDebug "Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":*") -Controller $mySecondaryController"
+            $relationList = Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":*") -Controller $mySecondaryController  -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
             if( $null -eq $relationList ){
                 Write-LogDebug "No SnapMirror relationship"
@@ -8629,8 +8791,8 @@ Try {
             if ( ( $PrimaryVolState -eq "online" ) -and ( $PrimaryVolType -eq "rw" ) -and ( $PrimaryVolIsVserverRoot -eq $False ) -and ( $PrimaryVolIsInfiniteVolume -eq $False ) ) 
             {
                 if($Global:PSTKCall -ne "Rest"){
-                    Write-LogDebug "Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -DestinationVolume $PrimaryVolName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryVolName -Controller $mySecondaryController"
-                    $relation=Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -DestinationVolume $PrimaryVolName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryVolName -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                    Write-LogDebug "Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":"+$PrimaryVolName) -SourceLocation $($myPrimaryVserver+":"+$PrimaryVolName) -Controller $mySecondaryController"
+                    $relation=Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":"+$PrimaryVolName) -SourceLocation $($myPrimaryVserver+":"+$PrimaryVolName) -Controller $mySecondaryController  -ErrorVariable ErrorVar
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
                 }else{
                     Write-LogDebug "Get-NcSnapmirror -SourceLocation $($myPrimaryVserver+":"+$PrimaryVolName) -DestinationLocation $($mySecondaryVserver+":"+$PrimaryVolName) -Controller $mySecondaryController"
@@ -8721,8 +8883,8 @@ Try {
                     elseif($DDR -eq $True)
                     {
                         Write-LogDebug "Enter DRfromDR mode"
-                        Write-LogDebug "Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -DestinationVolume $PrimaryVolName -Controller $mySecondaryController"
-                        $relationDRList = Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -DestinationVolume $PrimaryVolName -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                        Write-LogDebug "Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":"+$PrimaryVolName) -Controller $mySecondaryController"
+                        $relationDRList = Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":"+$PrimaryVolName) -Controller $mySecondaryController  -ErrorVariable ErrorVar
                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
                         foreach ( $relationDR in ( $relationDRList | Skip-Null ) ) {
                             $MirrorState=$relationDR.MirrorState
@@ -8947,8 +9109,8 @@ Try {
             # if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
             if ( ( $PrimaryFlexgroupState -eq "online" ) -and ( $PrimaryFlexgroupType -eq "rw" ) ){
                 if($Global:PSTKCall -ne "Rest"){
-                    Write-LogDebug "Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Controller $mySecondaryController"
-                    $relation=Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                    Write-LogDebug "Get-NcSnapmirror -SourceLocation $($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName) -DestinationLocation $($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName) -Controller $mySecondaryController"
+                    $relation=Get-NcSnapmirror -SourceLocation $($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName) -DestinationLocation $($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName) -Controller $mySecondaryController  -ErrorVariable ErrorVar
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
                 }else{
                     Write-LogDebug "Get-NcSnapmirror -SourceLocation $($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName) -DestinationLocation $($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName) -Controller $mySecondaryController"
@@ -8986,9 +9148,9 @@ Try {
                         }
                         Write-Log "[$workOn] Recreate Flexgroup relationship [$myPrimaryVserver`:$PrimaryFlexgroupMasterName] --> [$mySecondaryVserver`:$SecondaryFlexgroupMasterName] schedule [$Schedule]"
                         if($Global:PSTKCall -ne "Rest"){
-                            Write-LogDebug "Get-NcSnapmirrorDestination -SourceVserver $myPrimaryVserver -DestinationVserver $mySecondaryVserver -VserverContext $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -DestinationVolume $SecondaryFlexgroupMasterName `
+                            Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName) -DestinationLocation $($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName) `
                             -Controller $myPrimaryController | Invoke-NcSnapmirrorRelease -RelationshipInfoOnly"
-                            $ret=Get-NcSnapmirrorDestination -SourceVserver $myPrimaryVserver -DestinationVserver $mySecondaryVserver -VserverContext $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -DestinationVolume $SecondaryFlexgroupMasterName `
+                            $ret=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName) -DestinationLocation $($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName) `
                             -Controller $myPrimaryController -ErrorVariable ErrorVar | Invoke-NcSnapmirrorRelease -RelationshipInfoOnly -ErrorVariable ErrorVar -Confirm:$False
                             if($? -ne $True){$Return=$False; Throw "ERROR : Failed to release destination relationship [${mySecondaryController}:${mySecondaryVserver}:${SecondaryFlexgroupMasterName}] reason [$ErrorVar]"}
                             
@@ -8998,12 +9160,12 @@ Try {
                             #$ret=Invoke-NcSnapmirrorResync -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Controller $mySecondaryController -ErrorVariable ErrorVar
                             #if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Invoke-NcSnapmirrorResync forced flexgroup failed [$ErrorVar]" }
                             
-                            $relation=Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                            $relation=Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName) -SourceLocation $($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName) -Controller $mySecondaryController  -ErrorVariable ErrorVar
                             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
                         }else{
                             # ! Need to force an ONTAPI call becasue of burt in PSTK and i need a 'PSTK' answer to pipe it into Invoke-NcSnapmirrorRelease
-                            Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName) -DestinationLocation $($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName) -Controller $myPrimaryController -ONTAPI | Invoke-NcSnapmirrorRelease -RelationshipInfoOnly"
-                            $ret=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName) -DestinationLocation $($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName) -Controller $myPrimaryController -ErrorVariable ErrorVar -ONTAPI | Invoke-NcSnapmirrorRelease -RelationshipInfoOnly -ErrorVariable ErrorVar -Confirm:$False
+                            Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName) -DestinationLocation $($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName) -Controller $myPrimaryController -ZapiCall | Invoke-NcSnapmirrorRelease -RelationshipInfoOnly"
+                            $ret=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName) -DestinationLocation $($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName) -Controller $myPrimaryController -ErrorVariable ErrorVar -ZapiCall | Invoke-NcSnapmirrorRelease -RelationshipInfoOnly -ErrorVariable ErrorVar -Confirm:$False
                             if($? -ne $True){$Return=$False; Throw "ERROR : Failed to release destination relationship [${mySecondaryController}:${mySecondaryVserver}:${SecondaryFlexgroupMasterName}] reason [$ErrorVar]"}
 
                             Write-LogDebug "New-NcSnapmirror -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Type vault -Policy $PreviousRelationPolicy -Schedule $Schedule -controller $mySecondaryController"
@@ -9101,8 +9263,8 @@ Try {
 	$mySecondaryCluster = (Get-NcCluster -Controller $mySecondaryController  -ErrorVariable ErrorVar).ClusterName			
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCluster failed [$ErrorVar]" }
 
-	Write-LogDebug "Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -SourceVserver $myPrimaryVserver -Controller $mySecondaryController"
-	$relationList=Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -SourceVserver $myPrimaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+	Write-LogDebug "Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":*") -Controller $mySecondaryController"
+        $relationList = Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":*") -Controller $mySecondaryController  -ErrorVariable ErrorVar
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
 	foreach ( $relation in ( $relationList  | Skip-Null ) ) {
 			$MirrorState=$relation.MirrorState
@@ -9142,9 +9304,15 @@ Try {
 	}
 	
     if($NoRelease -eq $False){
-	    Write-LogDebug "Get-NcSnapmirrorDestination  -SourceVserver $myPrimaryVserver -DestinationVserver $mySecondaryVserver  -VserverContext $myPrimaryVserver -Controller $myPrimaryController"
-	    $relationList=Get-NcSnapmirrorDestination  -SourceVserver $myPrimaryVserver -DestinationVserver $mySecondaryVserver  -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
-	    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
+        if($Global:PTSKCall -ne "Rest"){
+            Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -VserverContext $myPrimaryVserver -Controller $myPrimaryController"
+            $relationList=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
+        }else{
+            Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -VserverContext $myPrimaryVserver -Controller $myPrimaryController -ZapiCall"
+            $relationList=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -VserverContext $myPrimaryVserver -Controller $myPrimaryController -ZapiCall -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
+        }
 	    foreach ( $relation in ( $relationList | Skip-Null ) ) {
             $MirrorState=$relation.MirrorState
             $SourceVolume=$relation.SourceVolume
@@ -12437,45 +12605,31 @@ $request=@"
                             -ForceGroupForCreate $PrimaryForceGroupForCreate -Vservercontext $mySecondaryVserver `
                             -Controller $mySecondaryController  -ErrorVariable ErrorVar
                             if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShare failed [$ErrorVar]" }
-                        }else{
-                            Write-LogDebug "Add-NcCifsShare -Name  $PrimaryShareName -Path $PrimaryPath -DisablePathValidation `
-                            -ShareProperties $PrimarySharePropertiesList -SymlinkProperties $PrimarySymlinkPropertiesList -Comment $PrimaryComment `
-                            -OfflineFilesMode $PrimaryOfflineFilesMode -VscanProfile $PrimaryVscanFileopProfile `
-                            -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare -ForceGroupForCreate $PrimaryForceGroupForCreate `
-                            -Vservercontext $mySecondaryVserver -Controller $mySecondaryController"
-                            $out = Add-NcCifsShare -Name  $PrimaryShareName -Path $PrimaryPath -DisablePathValidation `
-                            -ShareProperties $PrimarySharePropertiesList -SymlinkProperties $PrimarySymlinkPropertiesList `
-                            -Comment $PrimaryComment -OfflineFilesMode $PrimaryOfflineFilesMode `
-                            -VscanProfile $PrimaryVscanFileopProfile -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare `
-                            -ForceGroupForCreate $PrimaryForceGroupForCreate -Vservercontext $mySecondaryVserver `
-                            -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                            if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShare failed [$ErrorVar]" }
-                        }
-                        #$SecondaryShare=Get-NcCifsShare -Name $PrimaryShareName -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
-                        #if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsShare failed [$ErrorVar]" }
-                        $SecondaryAclList=Get-NcCifsShareAcl -Share $PrimaryShareName -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
-						if($? -ne $True){$Return=$False;Write-Error "ERROR: Failed to Get-NcCifsShareAcl on $PrimaryShareName [$ErrorVar]"}
-                        foreach($acl in $SecondaryAclList){
-                            $aclUser=$acl.UserOrGroup
-                            $acltype=$acl.UserGroupType
-                            Write-LogDebug "Remove-NcCifsShareAcl -Share $PrimaryShareName -UserOrGroup $aclUser -UserGroupType $acltype `
-                            -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                            $out=Remove-NcCifsShareAcl -Share $PrimaryShareName -UserOrGroup $aclUser -UserGroupType $acltype `
-                            -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErroVar -confirm:$False
-                            if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Remove-NcCifsShareAcl failed [$ErrorVar]" }
-                        }
-                        $PrimaryAclList=$PrimaryAllAclList | Where-Object {$_.Share -eq "$PrimaryShareName"}
-                        #$PrimaryAclList=Get-NcCifsShareAcl -Share $PrimaryShareName -VserverContext $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErroVar
-                        foreach($acl in $PrimaryAclList){
-                            $aclPermission=$acl.Permission    
-                            $aclShare=$acl.Share
-                            $aclUnixid=$acl.Unixid
-                            $aclUserGroupType=$acl.UserGroupType
-                            $aclUserOrGroup=$acl.UserOrGroup
-                            $aclWinsid=$acl.Winsid
-                            $aclUnixidSpecified=$acl.UnixidSpecified
-                            if($aclUnixidSpecified -eq $true)
-                            {
+                            #$SecondaryShare=Get-NcCifsShare -Name $PrimaryShareName -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
+                            #if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsShare failed [$ErrorVar]" }
+                            $SecondaryAclList=Get-NcCifsShareAcl -Share $PrimaryShareName -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                            if($? -ne $True){$Return=$False;Write-Error "ERROR: Failed to Get-NcCifsShareAcl on $PrimaryShareName [$ErrorVar]"}
+                            foreach($acl in $SecondaryAclList){
+                                $aclUser=$acl.UserOrGroup
+                                $acltype=$acl.UserGroupType
+                                Write-LogDebug "Remove-NcCifsShareAcl -Share $PrimaryShareName -UserOrGroup $aclUser -UserGroupType $acltype `
+                                -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                                $out=Remove-NcCifsShareAcl -Share $PrimaryShareName -UserOrGroup $aclUser -UserGroupType $acltype `
+                                -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErroVar -confirm:$False
+                                if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Remove-NcCifsShareAcl failed [$ErrorVar]" }
+                            }
+                            $PrimaryAclList=$PrimaryAllAclList | Where-Object {$_.Share -eq "$PrimaryShareName"}
+                            #$PrimaryAclList=Get-NcCifsShareAcl -Share $PrimaryShareName -VserverContext $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErroVar
+                            foreach($acl in $PrimaryAclList){
+                                $aclPermission=$acl.Permission    
+                                $aclShare=$acl.Share
+                                $aclUnixid=$acl.Unixid
+                                $aclUserGroupType=$acl.UserGroupType
+                                $aclUserOrGroup=$acl.UserOrGroup
+                                $aclWinsid=$acl.Winsid
+                                $aclUnixidSpecified=$acl.UnixidSpecified
+                                if($aclUnixidSpecified -eq $true)
+                                {
 $request=@"
 <cifs-share-access-control-create>
 <permission>$aclPermission</permission>
@@ -12485,17 +12639,17 @@ $request=@"
 <user-or-group>$aclUnixid</user-or-group>
 </cifs-share-access-control-create>                            
 "@
-								$request = ("$request" -f (xmlEncode -text $aclShare))					  
-                                if($WinSIDCompatible -eq $True){
-                                    Write-LogDebug "Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                                    $out=Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
-                                    if($? -ne $True){$Return=$False;Write-Error "ERROR: Failed to set access-control for share [$aclShare] display [$out]"}
-                                }else{
-                                    Write-LogDebug "Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUnixid -Permission $aclPermission -UserGroupType  $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $myController"
-                                    $out=Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUnixid -Permission $aclPermission -UserGroupType  $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
-                                    if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShareAcl failed [$ErrorVar]" }
-                                }
-                            }elseif($aclUserGroupType -eq "windows"){
+                                    $request = ("$request" -f (xmlEncode -text $aclShare))					  
+                                    if($WinSIDCompatible -eq $True){
+                                        Write-LogDebug "Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                                        $out=Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                        if($? -ne $True){$Return=$False;Write-Error "ERROR: Failed to set access-control for share [$aclShare] display [$out]"}
+                                    }else{
+                                        Write-LogDebug "Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUnixid -Permission $aclPermission -UserGroupType  $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $myController"
+                                        $out=Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUnixid -Permission $aclPermission -UserGroupType  $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
+                                        if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShareAcl failed [$ErrorVar]" }
+                                    }
+                                }elseif($aclUserGroupType -eq "windows"){
 $request=@"
 <cifs-share-access-control-create>
 <permission>$aclPermission</permission>
@@ -12506,26 +12660,26 @@ $request=@"
 <winsid>$aclWinsid</winsid>
 </cifs-share-access-control-create>                            
 "@
-								$request = ("$request" -f (xmlEncode -text $aclShare))
-                                if($WinSIDCompatible -eq $True){
-                                    Write-LogDebug "Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                                    $out=Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
-                                    if($? -ne $True){$Return=$False;Write-Error "ERROR: Failed to set access-control for share [$aclShare] display [$out]"}
-                                }else{
-                                    $SecondaryServer=(Get-NcCifsServer -VserverContext $mySecondaryVserver -controller $mySecondaryController).CifsServer
-                                    $domain=$aclUserOrGroup.split("\")[0]
-                                    $user=$aclUserOrGroup.split("\")[1]
-                                    $domain=$domain -replace $PrimaryServer,$SecondaryServer
-                                    if($null -ne $user){
-                                        $aclUserOrGroup= @($domain,$user) -join "\" 
+                                    $request = ("$request" -f (xmlEncode -text $aclShare))
+                                    if($WinSIDCompatible -eq $True){
+                                        Write-LogDebug "Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                                        $out=Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                        if($? -ne $True){$Return=$False;Write-Error "ERROR: Failed to set access-control for share [$aclShare] display [$out]"}
                                     }else{
-                                        $aclUserOrGroup=$domain    
+                                        $SecondaryServer=(Get-NcCifsServer -VserverContext $mySecondaryVserver -controller $mySecondaryController).CifsServer
+                                        $domain=$aclUserOrGroup.split("\")[0]
+                                        $user=$aclUserOrGroup.split("\")[1]
+                                        $domain=$domain -replace $PrimaryServer,$SecondaryServer
+                                        if($null -ne $user){
+                                            $aclUserOrGroup= @($domain,$user) -join "\" 
+                                        }else{
+                                            $aclUserOrGroup=$domain    
+                                        }
+                                        Write-LogDebug "Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUserOrGroup -Permission $aclPermission -UserGroupType $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $myController"
+                                        $out=Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUserOrGroup -Permission $aclPermission -UserGroupType $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
+                                        if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShareAcl failed [$ErrorVar]" }
                                     }
-                                    Write-LogDebug "Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUserOrGroup -Permission $aclPermission -UserGroupType $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $myController"
-                                    $out=Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUserOrGroup -Permission $aclPermission -UserGroupType $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
-                                    if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShareAcl failed [$ErrorVar]" }
-                                }
-                            }elseif($aclUserGroupType -match "unix"){
+                                }elseif($aclUserGroupType -match "unix"){
 $request=@"
 <cifs-share-access-control-create>
 <permission>$aclPermission</permission>
@@ -12535,18 +12689,33 @@ $request=@"
 <user-or-group>$aclUserOrGroup</user-or-group>
 </cifs-share-access-control-create>                            
 "@
-								$request = ("$request" -f (xmlEncode -text $aclShare))
-                                if($WinSIDCompatible -eq $True){
-                                    Write-LogDebug "Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                                    $out=Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
-                                    if($? -ne $True){$Return=$False;Write-Error "ERROR: Failed to set access-control for share [$aclShare] display [$out]"}
-                                }else{
-                                    Write-LogDebug "Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUserOrGroup -Permission $aclPermission -UserGroupType $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $myController"
-                                    $out=Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUserOrGroup -Permission $aclPermission -UserGroupType $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
-                                    if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShareAcl failed [$ErrorVar]" }
+                                    $request = ("$request" -f (xmlEncode -text $aclShare))
+                                    if($WinSIDCompatible -eq $True){
+                                        Write-LogDebug "Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                                        $out=Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                        if($? -ne $True){$Return=$False;Write-Error "ERROR: Failed to set access-control for share [$aclShare] display [$out]"}
+                                    }else{
+                                        Write-LogDebug "Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUserOrGroup -Permission $aclPermission -UserGroupType $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $myController"
+                                        $out=Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUserOrGroup -Permission $aclPermission -UserGroupType $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
+                                        if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShareAcl failed [$ErrorVar]" }
+                                    }
                                 }
-                            }
-                        } 
+                            } 
+                        }else{
+                            # ! need to switch to Direct REST request to include all ACL during the creation
+                            # Write-LogDebug "Add-NcCifsShare -Name  $PrimaryShareName -Path $PrimaryPath -DisablePathValidation `
+                            # -ShareProperties $PrimarySharePropertiesList -SymlinkProperties $PrimarySymlinkPropertiesList -Comment $PrimaryComment `
+                            # -OfflineFilesMode $PrimaryOfflineFilesMode -VscanProfile $PrimaryVscanFileopProfile `
+                            # -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare -ForceGroupForCreate $PrimaryForceGroupForCreate `
+                            # -Vservercontext $mySecondaryVserver -Controller $mySecondaryController"
+                            # $out = Add-NcCifsShare -Name  $PrimaryShareName -Path $PrimaryPath -DisablePathValidation `
+                            # -ShareProperties $PrimarySharePropertiesList -SymlinkProperties $PrimarySymlinkPropertiesList `
+                            # -Comment $PrimaryComment -OfflineFilesMode $PrimaryOfflineFilesMode `
+                            # -VscanProfile $PrimaryVscanFileopProfile -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare `
+                            # -ForceGroupForCreate $PrimaryForceGroupForCreate -Vservercontext $mySecondaryVserver `
+                            # -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                            # if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShare failed [$ErrorVar]" }
+                        }
                     }else{
                         # modify existing share c$ or admin$ or ipc$
                         # for that kind of non-data share share-properties and symlinkProperties are not modifiable
@@ -13328,8 +13497,8 @@ Function show_vserver_dr (
 
         if ( $null -ne $SecondaryVserver ) 
         {
-            Write-LogDebug "Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -SourceVserver $myPrimaryVserver -Expand -Controller $mySecondaryController"
-            $relationList = Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -SourceVserver $myPrimaryVserver -Expand -Controller $mySecondaryController  -ErrorVariable ErrorVar
+            Write-LogDebug "Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":*") -Expand -Controller $mySecondaryController"
+            $relationList = Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":*") -Expand -Controller $mySecondaryController  -ErrorVariable ErrorVar
             $NumberOfRelationships=$relationList.count
             Format-ColorBrackets  "SNAPMIRROR LIST [$NumberOfRelationships] :"
             Format-ColorBrackets  "---------------------"
@@ -13397,8 +13566,8 @@ Function show_vserver_dr (
 
         if ( $null -ne $PrimaryVserver ) 
         {
-            Write-LogDebug "Get-NcSnapmirror -DestinationVserver $myPrimaryVserver -SourceVserver $mySecondaryVserver -Expand -Controller $myPrimaryController"
-            $relationList = Get-NcSnapmirror -DestinationVserver $myPrimaryVserver -SourceVserver $mySecondaryVserver -Expand -Controller $myPrimaryController  -ErrorVariable ErrorVar
+            Write-LogDebug "Get-NcSnapmirror -DestinationLocation $($myPrimaryVserver+":*") -SourceLocation $($mySecondaryVserver+":*") -Expand -Controller $myPrimaryController"
+            $relationList = Get-NcSnapmirror -DestinationLocation $($myPrimaryVserver+":*") -SourceLocation $($mySecondaryVserver+":*") -Expand -Controller $myPrimaryController  -ErrorVariable ErrorVar
             $NumberOfRelationships=$relationList.count
             Format-ColorBrackets  "`nREVERSE SNAPMIRROR LIST [$NumberOfRelationships]:"
             Format-ColorBrackets  "-------------------------------"
@@ -14538,14 +14707,14 @@ Try {
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCluster failed [$ErrorVar]" }
 
 	Write-LogDebug "start"
-	if ( $mySecondaryVserver -eq $null -or $mySecondaryVserver -eq "" ) {
+	if ( $null -eq $mySecondaryVserver -or $mySecondaryVserver -eq "" ) {
 		Write-LogError "ERROR: update_snapmirror_vserver null entry" 
 		clean_and_exit 2
 	}
-	Write-LogDebug "Get-NcSnapmirror -SourceVserver $myPrimaryVserver -DestinationVserver $mySecondaryVserver -Controller $mySecondaryController"
-	$relationList = Get-NcSnapmirror -SourceVserver $myPrimaryVserver -DestinationVserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+	Write-LogDebug "Get-NcSnapmirror -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $mySecondaryController"
+	$relationList = Get-NcSnapmirror -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $mySecondaryController  -ErrorVariable ErrorVar
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapMrirror failed [$ErrorVar]" }
-	if ( ( $relationList -eq $null ) -or ( $relationList.count -eq 0 ) ) {
+	if ( ( $null -eq $relationList ) -or ( $relationList.count -eq 0 ) ) {
 		Write-Log "[$mySecondaryVserver] No Snapmirror relation [$myPrimaryVserver]->[$mySecondaryVserver]"
 		return $True
 	}
@@ -14630,8 +14799,8 @@ Try {
 		}
 	}
 
-	Write-LogDebug "Get-NcSnapmirror -SourceVserver $myPrimaryVserver -DestinationVserver $mySecondaryVserver -Controller $mySecondaryController"
-	$relationList = Get-NcSnapmirror -SourceVserver $myPrimaryVserver -DestinationVserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+	Write-LogDebug "Get-NcSnapmirror -SourceLocation $($myPrimaryVserver+":*") -DestinationLcation $($mySecondaryVserver+":*") -Controller $mySecondaryController"
+	$relationList = Get-NcSnapmirror -SourceLocation $($myPrimaryVserver+":*") -DestinationLcation $($mySecondaryVserver+":*") -Controller $mySecondaryController  -ErrorVariable ErrorVar
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
 	foreach ( $relation in ( $relationList | Skip-Null ) ) {
 		$MirrorState=$relation.MirrorState
@@ -14677,8 +14846,8 @@ Try {
 		$Return = $False
 		throw "ERROR: break_snapmirror_vserver_dr mySecondaryVserver is null" 
 	}
-	Write-LogDebug "Get-NcSnapmirror -SourceVserver $myPrimaryVserver -DestinationVserver $mySecondaryVserver -Controller $myController"
-	$relationList = Get-NcSnapmirror -SourceVserver $myPrimaryVserver -DestinationVserver $mySecondaryVserver -Controller $myController  -ErrorVariable ErrorVar
+	Write-LogDebug "Get-NcSnapmirror -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myController"
+	$relationList = Get-NcSnapmirror -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myController  -ErrorVariable ErrorVar
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
 	foreach ( $relation in ( $relationList | Skip-Null ) ) 
     {
@@ -15473,11 +15642,19 @@ try{
             $ASK_WAIT = Read-HostOptions -question "[$myPrimaryVserver] Do you want to delete SVM on source cluster [$PrimaryClusterName] ?" -options "y/n" -default $defaultanswer
         }
         if ($ASK_WAIT -eq 'y') {
-            # If we must delete source SVM, we must first release all snapmirror relationship to be able to delete the vserver peering inside remove_vserver_source()
-            Write-LogDebug "Get-NcSnapmirrorDestination -SourceVserver $myPrimaryVserver -DestinationVserver $mySecondaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar | Where-Object {$_.RelationshipGroupType -match none|flexgroup} | Invoke-NcSnapmirrorRelease"
-            #$ret=Invoke-NcSnapmirrorRelease -Controller $myPrimaryController -Query @{DestinationVserver=$mySecondaryVserver;DestinationVolume="*";SourceVserver=$myPrimaryVserver;SourceVolume"*"} -ErrorVariable ErrorVar -Confirm:$False
-            $ret=Get-NcSnapmirrorDestination -SourceVserver $myPrimaryVserver -DestinationVserver $mySecondaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar | Where-Object {$_.RelationshipGroupType -match "none|flexgroup"} | Invoke-NcSnapmirrorRelease -Controller $myPrimaryController -ErrorVariable ErrorVar -Confirm:$False
-            if($? -ne $True){$Return=$False; Throw "ERROR : Failed to release destination relationship [${mySecondaryController}:${mySecondaryVserver}:* reason [$ErrorVar]"}
+            if($Global:PSTKCall -ne "Rest"){
+                # If we must delete source SVM, we must first release all snapmirror relationship to be able to delete the vserver peering inside remove_vserver_source()
+                Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myPrimaryController -ErrorVariable ErrorVar | Where-Object {$_.RelationshipGroupType -match none|flexgroup} | Invoke-NcSnapmirrorRelease"
+                #$ret=Invoke-NcSnapmirrorRelease -Controller $myPrimaryController -Query @{DestinationVserver=$mySecondaryVserver;DestinationVolume="*";SourceVserver=$myPrimaryVserver;SourceVolume"*"} -ErrorVariable ErrorVar -Confirm:$False
+                $ret=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myPrimaryController -ErrorVariable ErrorVar | Where-Object {$_.RelationshipGroupType -match "none|flexgroup"} | Invoke-NcSnapmirrorRelease -Controller $myPrimaryController -ErrorVariable ErrorVar -Confirm:$False
+                if($? -ne $True){$Return=$False; Throw "ERROR : Failed to release destination relationship [${mySecondaryController}:${mySecondaryVserver}:* reason [$ErrorVar]"}
+            }else{
+                # If we must delete source SVM, we must first release all snapmirror relationship to be able to delete the vserver peering inside remove_vserver_source()
+                Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myPrimaryController -ErrorVariable ErrorVar -ZapiCall | Where-Object {$_.RelationshipGroupType -match none|flexgroup} | Invoke-NcSnapmirrorRelease"
+                #$ret=Invoke-NcSnapmirrorRelease -Controller $myPrimaryController -Query @{DestinationVserver=$mySecondaryVserver;DestinationVolume="*";SourceVserver=$myPrimaryVserver;SourceVolume"*"} -ErrorVariable ErrorVar -Confirm:$False
+                $ret=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myPrimaryController -ErrorVariable ErrorVar -ZapiCall | Where-Object {$_.RelationshipGroupType -match "none|flexgroup"} | Invoke-NcSnapmirrorRelease -Controller $myPrimaryController -ErrorVariable ErrorVar -Confirm:$False
+                if($? -ne $True){$Return=$False; Throw "ERROR : Failed to release destination relationship [${mySecondaryController}:${mySecondaryVserver}:* reason [$ErrorVar]"}
+            }
             if ( ( $ret = remove_vserver_source -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver) -eq $False ) {
                 Write-LogError "ERROR: remove_vserver_dr: Unable to remove vserver [$myPrimaryVserver]" 
                 clean_and_exit 1
@@ -16914,18 +17091,18 @@ Function resync_reverse_vserver_dr (
 
 	    Write-LogDebug "start"
         # check current normal relationships
-	    Write-LogDebug "Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -SourceVserver $myPrimaryVserver -Controller $mySecondaryController"
-	    $relationList = Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -SourceVserver $myPrimaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+	    Write-LogDebug "Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":*") -Controller $mySecondaryController"
+        $relationList = Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":*") -Controller $mySecondaryController  -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
-        if ( $Global:ForceRecreate -and ( $relationList -eq $null ) )
+        if ( $Global:ForceRecreate -and ( $null -eq $relationList ) )
         {
             if ( ( create_snapmirror_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -Force -DDR $False ) -ne $True ) 
             { 
                 Write-LogError "ERROR: Failed to recreate all snapmirror relations "
                 return $False
             }
-            Write-LogDebug "Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -SourceVserver $myPrimaryVserver -Controller $mySecondaryController"
-	        $relationList = Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -SourceVserver $myPrimaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+            Write-LogDebug "Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":*") -Controller $mySecondaryController"
+            $relationList = Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":*") -Controller $mySecondaryController  -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }          
         }
 
@@ -17184,8 +17361,8 @@ Function resync_vserver_dr (
                 return $False
             }
         }
-    	Write-LogDebug "Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -SourceVserver $myPrimaryVserver -Controller $mySecondaryController"
-    	$relationList = Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -SourceVserver $myPrimaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+    	Write-LogDebug "Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":*") -Controller $mySecondaryController"
+        $relationList = Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":*") -Controller $mySecondaryController  -ErrorVariable ErrorVar
     	if ( $? -ne $True ) 
         { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
         if($null -eq $relationList -and -not $Global:ForceRecreate){
@@ -17257,23 +17434,29 @@ Try {
                         return $False
                 }
         }
-  	if ( $myVserver -eq $null ) { $myVserver = "*" }
-  	if ( $myVolume -eq $null ) { $myVolume  = "*" } 
+  	if ( $null -eq $myVserver ) { $myVserver = "*" }
+  	if ( $null -eq $myVolume ) { $myVolume  = "*" } 
 
   	$Source=$myVserver + ':' + $myVolume 
 
   	$NcCluster = Get-NcCluster -Controller $myController
   	$SourceCluster = $NcCluster.ClusterName
 
-    Write-LogDebug "Get-NcSnapmirrorDestination  -SourceVserver $myVserver -VserverContext $myVserver -DestinationVserver $mySecondaryVserver -Controller $myController"
-    $relationlist=Get-NcSnapmirrorDestination  -SourceVserver $myVserver -VserverContext $myVserver -DestinationVserver $mySecondaryVserver -Controller $myController  -ErrorVariable ErrorVar
-	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" } 
-  	if ( $relationlist -eq $null ) {
+    if($Global:PSTKCall -ne "Rest"){
+        Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -VserverContext $myVserver -DestinationLocation $($mySecondaryVserver+":*") -Controller $myController"
+        $relationList=Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -VserverContext $myVserver -DestinationLocation $($mySecondaryVserver+":*") -Controller $myController  -ErrorVariable ErrorVar
+        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" } 
+    }else{
+        Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -VserverContext $myVserver -DestinationLocation $($mySecondaryVserver+":*") -Controller $myController -ZapiCall"
+        $relationList=Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -VserverContext $myVserver -DestinationLocation $($mySecondaryVserver+":*") -Controller $myController  -ErrorVariable ErrorVar -ZapiCall
+        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" } 
+    }
+  	if ( $null -eq $relationList ) {
 		Write-LogDebug "SnapMirror No Relations found" ;
         Write-LogDebug "end"
 		return $True 
   	}
-  	foreach ( $relation in $relationlist ) {
+  	foreach ( $relation in $relationList ) {
 		$SourceVolume = $relation.SourceVolume
 		$SourceVserver = $relation.SourceVserver
 		$DestinationVolume = $relation.DestinationVolume
@@ -17488,9 +17671,10 @@ Function mount_volume (
     
     $Return = $True 
     Write-LogDebug "start $myVolumeName"
-    $RootVolume = (Get-NcVol -VserverContext $myVserver -Controller $myController -Query @{VolumeStateAttributes=@{IsVserverRoot=$True};Vserver=$myVserver}).Name
+    $svmPrimaryRootVolume = (Get-NcVol -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$True};Vserver=$myPrimaryVserver}).Name
+    $svmRootVolume = (Get-NcVol -VserverContext $myVserver -Controller $myController -Query @{VolumeStateAttributes=@{IsVserverRoot=$True};Vserver=$myVserver}).Name
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed to get RootVolume [$ErrorVar]" } 
-    if ($null -eq $RootVolume ) { Write-LogDebug "root volume not found for [$myVserver]" }
+    if ($null -eq $svmRootVolume ) { Write-LogDebug "root volume not found for [$myVserver]" }
     if($IsFlexgroup -eq $False){
         $FindVolume=$script:vol_junction | Where-Object {$_.Name -eq $myVolumeName}
     }else{
@@ -17504,7 +17688,7 @@ Function mount_volume (
     $ParentPath=$FindVolume.ParentPath
     $IsNested=$FindVolume.IsNested
     $PathLevel=$FindVolume.Level
-    Write-LogDebug "volume [$myVolumeName] Parent [$Parent] JunctionPath [$JunctionPath] Perm [$Permission] RootVol [$RootVolume] Level [$PathLevel] ParentPath [$ParentPath]"
+    Write-LogDebug "volume [$myVolumeName] Parent [$Parent] JunctionPath [$JunctionPath] Perm [$Permission] RootVol [$svmRootVolume] Level [$PathLevel] ParentPath [$ParentPath]"
     if($Global:PSTKCall -eq "Rest"){
         #! force ZAPI call due to burt in PSTK with 9.12.1
         $mountpath= (Get-NcVol -ZapiCall  -Name $myVolumeName -Vserver $myVserver -Controller $myController).VolumeIdAttributes.JunctionPath
@@ -17526,7 +17710,7 @@ Function mount_volume (
     try{
         Write-LogDebug "Now will mount volume [$myVolumeName]"
         $voltype="rw"
-        if($Parent -ne $RootVolume){
+        if($Parent -ne $svmRootVolume){
             if($Global:PSTKCall -eq "Rest"){
                 #! force ZAPI call due to burt in PSTK with 9.12.1
                 $volType= (Get-NcVol -ZapiCall  -Controller $myController -Vserver $myVserver -Volume $myVolumeName).VolumeIdAttributes.Type
@@ -17534,18 +17718,22 @@ Function mount_volume (
                 $volType= (Get-NcVol -Controller $myController -Vserver $myVserver -Volume $myVolumeName).VolumeIdAttributes.Type
             }
             if($volType -eq "dp" -and $Restore -eq $False){
-                Write-LogDebug "Need to break all associated SM relationship with [$Parent] before beeing able to create a directory inside this volume"
-                Write-LogDebug "Invoke-NcSnapmirrorQuiesce -DestinationVserver $myVserver -DestinationVolume $Parent -Controller $mySecondaryController"
-                $ret=Invoke-NcSnapmirrorQuiesce -DestinationVserver $myVserver -DestinationVolume $Parent -Controller $mySecondaryController -ErrorVariable ErrorVar -Confirm:$False
-                if($? -ne $True){$Return=$False; Throw "ERROR : Failed to quiesce destination relationship [${mySecondaryController}:${mySecondaryVserver}:${PrimaryVol}] reason [$ErrorVar]"}
-                $ret=wait_snapmirror_dr_status -DestinationVserver $myVserver -PrimaryVolumeName $Parent -Status "quiesced" -MirrorState "snapmirrored" -mySecondaryController $mySecondaryController
-                if($ret -eq $false){
-                    $Return=$False
-                    Throw "ERROR : Failed to quiesce a snapmirror relationship. Increase timeout?"
+                if($Parent -ne $svmPrimaryRootVolume){
+                    Write-LogDebug "Need to break all associated SM relationship with [$Parent] before beeing able to create a directory inside this volume"
+                    Write-LogDebug "Invoke-NcSnapmirrorQuiesce -DestinationVserver $myVserver -DestinationVolume $Parent -Controller $mySecondaryController"
+                    $ret=Invoke-NcSnapmirrorQuiesce -DestinationVserver $myVserver -DestinationVolume $Parent -Controller $mySecondaryController -ErrorVariable ErrorVar -Confirm:$False
+                    if($? -ne $True){$Return=$False; Throw "ERROR : Failed to quiesce destination relationship [${mySecondaryController}:${mySecondaryVserver}:${PrimaryVol}] reason [$ErrorVar]"}
+                    $ret=wait_snapmirror_dr_status -DestinationVserver $myVserver -PrimaryVolumeName $Parent -Status "quiesced" -MirrorState "snapmirrored" -mySecondaryController $mySecondaryController
+                    if($ret -eq $false){
+                        $Return=$False
+                        Throw "ERROR : Failed to quiesce a snapmirror relationship. Increase timeout?"
+                    }
+                    Write-LogDebug "Invoke-NcSnapmirrorBreak -Controller $myController -Confirm:$false -DestinationVserver $myVserver -DestinationVolume $Parent" 
+                    $out=Invoke-NcSnapmirrorBreak -Controller $myController -Confirm:$false -DestinationVserver $myVserver -DestinationVolume $Parent -ErrorVariable ErrorVar
+                    if($? -ne $True){throw "ERROR: Failed to break SM destination [$myVserver]:[$Parent] on [$myController] reason [$ErrorVar]"}
+                }else{
+                    Write-LogDebug "No need to break because Parent [$Parent] is the SVM Root Volume (/)"
                 }
-                Write-LogDebug "Invoke-NcSnapmirrorBreak -Controller $myController -Confirm:$false -DestinationVserver $myVserver -DestinationVolume $Parent" 
-                $out=Invoke-NcSnapmirrorBreak -Controller $myController -Confirm:$false -DestinationVserver $myVserver -DestinationVolume $Parent -ErrorVariable ErrorVar
-                if($? -ne $True){throw "ERROR: Failed to break SM destination [$myVserver]:[$Parent] on [$myController] reason [$ErrorVar]"}
             }
         }
         $CreatePath=(Split-Path -Path $JunctionPath).Replace('\','/')
@@ -17738,12 +17926,12 @@ Try {
     if($IsFlexgroup -eq $True){
         $SourceVolume=$PrimaryVolumeName
         $DestVolume=$($PrimaryVolumeName+"_dst")
-        Write-LogDebug "Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -SourceVserver $myPrimaryVserver -SourceVolume $SourceVolume -DestinationVolume $DestVolume -Controller $mySecondaryController"
-        $relationList=Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -SourceVserver $myPrimaryVserver -SourceVolume $SourceVolume -DestinationVolume $DestVolume -Controller $mySecondaryController  -ErrorVariable ErrorVar
+        Write-LogDebug "Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":"+$DestVolume) -SourceLocation $($myPrimaryVserver+":"+$SourceVolume) -Controller $mySecondaryController"
+        $relationList=Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":"+$DestVolume) -SourceLocation $($myPrimaryVserver+":"+$SourceVolume) -Controller $mySecondaryController  -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
     }else{
-        Write-LogDebug "Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryVolumeName -Controller $mySecondaryController"
-        $relationList=Get-NcSnapmirror -DestinationVserver $mySecondaryVserver -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryVolumeName -Controller $mySecondaryController  -ErrorVariable ErrorVar
+        Write-LogDebug "Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":"+$PrimaryVolumeName) -Controller $mySecondaryController"
+        $relationList=Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":"+$PrimaryVolumeName) -Controller $mySecondaryController  -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
     }
     foreach ( $relation in ( $relationList  | Skip-Null ) ) {
@@ -17781,13 +17969,25 @@ Try {
     if($IsFlexgroup -eq $True){
         $SourceVolume=$PrimaryVolumeName
         $DestVolume=$($PrimaryVolumeName+"_dst")
-        Write-LogDebug "Get-NcSnapmirrorDestination  -SourceVserver $myPrimaryVserver -DestinationVserver $mySecondaryVserver -SourceVolume $SourceVolume -DestinationVolume $DestVolume -VserverContext $myPrimaryVserver -Controller $myPrimaryController"
-        $relationList=Get-NcSnapmirrorDestination -SourceVserver $myPrimaryVserver -DestinationVserver $mySecondaryVserver -SourceVolume $SourceVolume -DestinationVolume $DestVolume -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
-        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
+        if($Global:PSTKCall -ne "Rest"){
+            Write-LogDebug "Get-NcSnapmirrorDestination  -SourceLocation $($myPrimaryVserver+":"+$SourceVolume) -DestinationLocation $($mySecondaryVserver+":"+$DestVolume) -Controller $myPrimaryController"
+            $relationList=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":"+$SourceVolume) -DestinationLocation $($mySecondaryVserver+":"+$DestVolume) -Controller $myPrimaryController  -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
+        }else{
+            Write-LogDebug "Get-NcSnapmirrorDestination  -SourceLocation $($myPrimaryVserver+":"+$SourceVolume) -DestinationLocation $($mySecondaryVserver+":"+$DestVolume) -Controller $myPrimaryController -ZapiCall"
+            $relationList=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":"+$SourceVolume) -DestinationLocation $($mySecondaryVserver+":"+$DestVolume) -Controller $myPrimaryController -ZapiCall -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
+        }
     }else{
-        Write-LogDebug "Get-NcSnapmirrorDestination  -SourceVserver $myPrimaryVserver -DestinationVserver $mySecondaryVserver -SourceVolume $PrimaryVolumeName -VserverContext $myPrimaryVserver -Controller $myPrimaryController"
-        $relationList=Get-NcSnapmirrorDestination  -SourceVserver $myPrimaryVserver -DestinationVserver $mySecondaryVserver -SourceVolume $PrimaryVolumeName -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
-        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
+        if($Global:PSTKCall -ne "Rest"){
+            Write-LogDebug "Get-NcSnapmirrorDestination  -SourceLocation $($myPrimaryVserver+":"+$PrimaryVolumeName) -DestinationLocation $($mySecondaryVserver+":*") -Controller $myPrimaryController"
+            $relationList=Get-NcSnapmirrorDestination  -SourceLocation $($myPrimaryVserver+":"+$PrimaryVolumeName) -DestinationLocation $($mySecondaryVserver+":*") -Controller $myPrimaryController  -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
+        }else{
+            Write-LogDebug "Get-NcSnapmirrorDestination  -SourceLocation $($myPrimaryVserver+":"+$PrimaryVolumeName) -DestinationLocation $($mySecondaryVserver+":*") -Controller $myPrimaryController -ZapiCall"
+            $relationList=Get-NcSnapmirrorDestination  -SourceLocation $($myPrimaryVserver+":"+$PrimaryVolumeName) -DestinationLocation $($mySecondaryVserver+":*") -Controller $myPrimaryController  -ErrorVariable ErrorVar -ZapiCall
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
+        }
     }
     foreach ( $relation in ( $relationList | Skip-Null ) ) {
             $MirrorState=$relation.MirrorState
@@ -17882,14 +18082,20 @@ Try {
         Write-LogDebug "end"
         return $Return
     }else{
-        Write-LogDebug "Get-NcSnapmirrorDestination  -SourceVserver $myVserver -VserverContext $myVserver -DestinationVserver $secondaryVserver -Controller $myController"
-        $relationlist=Get-NcSnapmirrorDestination  -SourceVserver $myVserver -VserverContext $myVserver -DestinationVserver $secondaryVserver -Controller $myController  -ErrorVariable ErrorVar
-        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" } 
-        if ( $relationlist -eq $null ) { 
+        if($Global:PSTKCall -ne "Rest"){
+            Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -DestinationLocation $($secondaryVserver+":*") -Controller $myController"
+            $relationList=Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -DestinationLocation $($secondaryVserver+":*") -Controller $myController  -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" } 
+        }else{
+            Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -DestinationLocation $($secondaryVserver+":*") -Controller $myController -ZapiCall"
+            $relationList=Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -DestinationLocation $($secondaryVserver+":*") -Controller $myController  -ErrorVariable ErrorVar -ZapiCall
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
+        }
+        if ( $null -eq $relationList ) { 
             Write-LogDebug "SnapMirror No Relations found"
             return $True
         }
-        foreach ( $relation in $relationlist ) {
+        foreach ( $relation in $relationList ) {
             $SourceVolume = $relation.SourceVolume
             $SourceVserver = $relation.SourceVserver
             $DestinationVolume = $relation.DestinationVolume
@@ -18008,8 +18214,13 @@ Try {
     Write-LogDebug "Get-NcVserverPeer -Controller $myPrimaryController -VserverContext $myPrimaryVserver -Query @{PeerCluster=$DestCluster}"
     $AllPeerList=Get-NcVserverPeer -Controller $myPrimaryController -VserverContext $myPrimaryVserver -Query @{PeerCluster=$DestCluster} -ErrorVariable ErrorVar 
     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserverPeer failed [$ErrorVar]" }
-	Write-LogDebug "Get-NcSnapmirrorDestination -SourceVserver $myPrimaryVserver -VserverContext $myPrimaryVserver -Controller $myPrimaryController -DestinationVserver $mySecondaryVserver -ErrorVariable ErrorVar"
-	$relationlist=Get-NcSnapmirrorDestination -SourceVserver $myPrimaryVserver -VserverContext $myPrimaryVserver -Controller $myPrimaryController -DestinationVserver $mySecondaryVserver -ErrorVariable ErrorVar
+    if($Global:PSTKCall -ne "Rest"){
+        Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -Controller $myPrimaryController -DestinationLocation $($mySecondaryVserver+":*") -ErrorVariable ErrorVar"
+        $relationlist=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -Controller $myPrimaryController -DestinationLocation $($mySecondaryVserver+":*") -ErrorVariable ErrorVar
+    }else{
+        Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -Controller $myPrimaryController -DestinationLocation $($mySecondaryVserver+":*") -ErrorVariable ErrorVar -ZapiCall"
+        $relationlist=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -Controller $myPrimaryController -DestinationLocation $($mySecondaryVserver+":*") -ErrorVariable ErrorVar -ZapiCall
+    }
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
 	foreach ( $relation in $relationlist ) {
 		$SourceVolume = $relation.SourceVolume
@@ -18189,8 +18400,8 @@ Function Purge_SelectVolumedb (
                 $out=Remove-Item ($SELECTVOL_DB_DST_FILE -replace "\\","/") -Confirm:$false -ErrorVariable ErrorVar    
             }
         }
-        Write-LogDebug "Get-NcSnapmirror -DestinationVserver $DestinationVserver -SourceVserver $SourceVserver -Controller $mySecondaryController"
-	    $PreviousRelationship=Get-NcSnapmirror -DestinationVserver $DestinationVserver -SourceVserver $SourceVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+        Write-LogDebug "Get-NcSnapmirror -DestinationLocation $($DestinationVserver+":*") -SourceLocation $($SourceVserver+":*") -Controller $mySecondaryController"
+	    $PreviousRelationship=Get-NcSnapmirror -DestinationLocation $($DestinationVserver+":*") -SourceLocation $($SourceVserver+":*") -Controller $mySecondaryController -ErrorVariable ErrorVar
 	    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
         if($Global:PSTKCall -eq "Rest"){
             Write-LogDebug "Get-NcVol -ZapiCall -Vserver $DestinationVserver -Controller $mySecondaryController -Query @{VolumeIdAttributes=@{StyleExtended=""flexvol|flexgroup""};VolumeStateAttributes=@{IsVserverRoot=$False}}"
@@ -19287,28 +19498,34 @@ Function save_vol_options_to_voldb (
     	}
     	$NcCluster = Get-NcCluster -Controller $myController
     	$SourceCluster = $NcCluster.ClusterName
-    	Write-LogDebug "Get-NcSnapmirrorDestination -SourceVserver $myVserver -VserverContext $myVserver -DestinationVserver $mySecondaryVserver -Controller $myController"
-    	$relationlist=Get-NcSnapmirrorDestination -SourceVserver $myVserver -VserverContext $myVserver -DestinationVserver $mySecondaryVserver -Controller $myController  -ErrorVariable ErrorVar
-    	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
+        if($Global:PSTKCall -ne "Rest"){
+            Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myController"
+            $relationlist=Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myController  -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
+        }else{
+            Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myController -ZapiCall"
+            $relationlist=Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myController  -ErrorVariable ErrorVar -ZapiCall
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }            
+        }
         #$count_delete_SRC=0
         #$count_delete_DST=0
     	foreach ( $relation in $relationlist ) {
-    		$SourceVolume = $relation.SourceVolume
-    		$SourceVserver = $relation.SourceVserver
-    		$DestinationVolume = $relation.DestinationVolume
-    		$DestinationVserver = $relation.DestinationVserver
-    		$DestinationLocation = $relation.DestinationLocation
-    		$RelationshipType = $relation.RelationshipType
-    		if ( ( $RelationshipType -eq "data_protection" -or $RelationshipType -eq "extended_data_protection" ) -and ( $SourceVserver -ne $DestinationVserver  )  ) 
+            $SourceVolume = $relation.SourceVolume
+            $SourceVserver = $relation.SourceVserver
+            $DestinationVolume = $relation.DestinationVolume
+            $DestinationVserver = $relation.DestinationVserver
+            $DestinationLocation = $relation.DestinationLocation
+            $RelationshipType = $relation.RelationshipType
+            if ( ( $RelationshipType -eq "data_protection" -or $RelationshipType -eq "extended_data_protection" ) -and ( $SourceVserver -ne $DestinationVserver  )  ) 
             {
-    			$NcVserverPeer=Get-NcVserverPeer -Controller $myController -VserverContext $SourceVserver -PeerVserver $DestinationVserver  -ErrorVariable ErrorVar 
-    			if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserverPeer failed [$ErrorVar]" } 
-    			$DestinationCluster=$NcVserverPeer.PeerCluster
-    			Write-LogDebug "[$SourceVserver] [$SourceVolume] -> [$DestinationCluster] [$DestinationVserver] [$DestinationVolume] [$RelationshipType]" ;
-    			$SVMTOOL_DB_SRC_CLUSTER=$Global:SVMTOOL_DB + '\' + $SourceCluster + '.cluster'
-    			$SVMTOOL_DB_SRC_VSERVER=$SVMTOOL_DB_SRC_CLUSTER + '\' +$SourceVserver + '.vserver'
-    			$SVMTOOL_DB_DST_CLUSTER=$Global:SVMTOOL_DB + '\' + $DestinationCluster + '.cluster'
-    			$SVMTOOL_DB_DST_VSERVER=$SVMTOOL_DB_DST_CLUSTER + '\' + $DestinationVserver + '.vserver'
+                $NcVserverPeer=Get-NcVserverPeer -Controller $myController -VserverContext $SourceVserver -PeerVserver $DestinationVserver  -ErrorVariable ErrorVar 
+                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserverPeer failed [$ErrorVar]" } 
+                $DestinationCluster=$NcVserverPeer.PeerCluster
+                Write-LogDebug "[$SourceVserver] [$SourceVolume] -> [$DestinationCluster] [$DestinationVserver] [$DestinationVolume] [$RelationshipType]" ;
+                $SVMTOOL_DB_SRC_CLUSTER=$Global:SVMTOOL_DB + '\' + $SourceCluster + '.cluster'
+                $SVMTOOL_DB_SRC_VSERVER=$SVMTOOL_DB_SRC_CLUSTER + '\' +$SourceVserver + '.vserver'
+                $SVMTOOL_DB_DST_CLUSTER=$Global:SVMTOOL_DB + '\' + $DestinationCluster + '.cluster'
+                $SVMTOOL_DB_DST_VSERVER=$SVMTOOL_DB_DST_CLUSTER + '\' + $DestinationVserver + '.vserver'
                 if(!$IsWindows){
                     $SVMTOOL_DB_SRC_CLUSTER=$SVMTOOL_DB_SRC_CLUSTER -Replace "\\","/"    
                     $SVMTOOL_DB_SRC_VSERVER=$SVMTOOL_DB_SRC_VSERVER -Replace "\\","/"    
@@ -19327,28 +19544,28 @@ Function save_vol_options_to_voldb (
                     $ErrorMessage = $_.Exception.Message
                     Write-LogDebug "cannot create [$SVMTOOL_DB_DST_VSERVER], reason [$ErrorMessage]"    
                 }
-    			$VOL_DB_SRC_FILE=$SVMTOOL_DB_SRC_VSERVER + '\volume.options'
-    			$VOL_DB_DST_FILE=$SVMTOOL_DB_DST_VSERVER + '\volume.options'
+                $VOL_DB_SRC_FILE=$SVMTOOL_DB_SRC_VSERVER + '\volume.options'
+                $VOL_DB_DST_FILE=$SVMTOOL_DB_DST_VSERVER + '\volume.options'
                 if(!$IsWindows){
                     $VOL_DB_SRC_FILE=$VOL_DB_SRC_FILE -Replace "\\","/"    
                     $VOL_DB_DST_FILE=$VOL_DB_DST_FILE -Replace "\\","/"     
                 }
      			# Create all missing Destination Volumes
                 Write-LogDebug "Get-NcVol -Name $SourceVolume -Controller $myController -Vserver $myVserver"
-    			$PrimaryVol = Get-NcVol -Name $SourceVolume -Controller $myController -Vserver $myVserver  -ErrorVariable ErrorVar 
-    			if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
-    			$PrimaryVolName=$PrimaryVol.Name
-    			$PrimaryVolStyle=$PrimaryVol.VolumeSecurityAttributes.Style
-    			$PrimaryVolExportPolicy=$PrimaryVol.VolumeExportAttributes.Policy
-    			$PrimaryVolType=$PrimaryVol.VolumeIdAttributes.Type
-    			$PrimaryVolLang=$PrimaryVol.VolumeLanguageAttributes.LanguageCode
-    			$PrimaryVolSize=$PrimaryVol.VolumeSpaceAttributes.Size
-    			$PrimaryVolIsSis=$PrimaryVol.VolumeSisAttributes.IsSisVolume
-    			$PrimaryVolSpaceGuarantee=$PrimaryVol.VolumeSpaceAttributes.SpaceGuarantee
-    			$PrimaryVolState=$PrimaryVol.State
-    			$PrimaryVolJunctionPath=$PrimaryVol.VolumeIdAttributes.JunctionPath
-    			$PrimaryVolIsInfiniteVolume=$PrimaryVol.IsInfiniteVolume
-    			$PrimaryVolSnapshotPolicy=$PrimaryVol.VolumeSnapshotAttributes.SnapshotPolicy
+                $PrimaryVol = Get-NcVol -Name $SourceVolume -Controller $myController -Vserver $myVserver  -ErrorVariable ErrorVar 
+                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
+                $PrimaryVolName=$PrimaryVol.Name
+                $PrimaryVolStyle=$PrimaryVol.VolumeSecurityAttributes.Style
+                $PrimaryVolExportPolicy=$PrimaryVol.VolumeExportAttributes.Policy
+                $PrimaryVolType=$PrimaryVol.VolumeIdAttributes.Type
+                $PrimaryVolLang=$PrimaryVol.VolumeLanguageAttributes.LanguageCode
+                $PrimaryVolSize=$PrimaryVol.VolumeSpaceAttributes.Size
+                $PrimaryVolIsSis=$PrimaryVol.VolumeSisAttributes.IsSisVolume
+                $PrimaryVolSpaceGuarantee=$PrimaryVol.VolumeSpaceAttributes.SpaceGuarantee
+                $PrimaryVolState=$PrimaryVol.State
+                $PrimaryVolJunctionPath=$PrimaryVol.VolumeIdAttributes.JunctionPath
+                $PrimaryVolIsInfiniteVolume=$PrimaryVol.IsInfiniteVolume
+                $PrimaryVolSnapshotPolicy=$PrimaryVol.VolumeSnapshotAttributes.SnapshotPolicy
                 $PrimarySisSchedule=""
                 $PrimarySisPolicy=""
                 $PrimarySisState=""
@@ -19924,32 +20141,38 @@ Function save_shareacl_options_to_shareacldb (
 {
     Try 
     {
-    	$Return = $True
+        $Return = $True
 
-    	Write-LogDebug "start"
-    	$NcCluster = Get-NcCluster -Controller $myPrimaryController
-    	$SourceCluster = $NcCluster.ClusterName
+        Write-LogDebug "start"
+        $NcCluster = Get-NcCluster -Controller $myPrimaryController
+        $SourceCluster = $NcCluster.ClusterName
 
-    	Write-LogDebug "Get-NcSnapmirrorDestination -SourceVserver $myPrimaryVserver -VserverContext $myPrimaryVserver -DestinationVserver $mySecondaryVserver -Controller $myPrimaryController"
-    	$relationlist=Get-NcSnapmirrorDestination -SourceVserver $myPrimaryVserver -VserverContext $myPrimaryVserver -DestinationVserver $mySecondaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar | sort-object -unique SourceVserver,DestinationVserver,RelationShipType
-    	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
+        if($Global:PSTKCall -ne "Rest"){
+            Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myPrimaryController"
+            $relationlist=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myPrimaryController  -ErrorVariable ErrorVar | sort-object -unique SourceVserver,DestinationVserver,RelationShipType
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
+        }else{
+            Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myPrimaryController -ZapiCall"
+            $relationlist=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myPrimaryController  -ErrorVariable ErrorVar -ZapiCall | sort-object -unique SourceVserver,DestinationVserver,RelationShipType
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }            
+        }
         #$count_delete_SRC=0
         #$count_delete_DST=0
-    	foreach ( $relation in $relationlist ){
-    		$SourceVserver = $relation.SourceVserver
-    		$DestinationVserver = $relation.DestinationVserver
-    		$RelationshipType = $relation.RelationshipType
-    		if ( ( $RelationshipType -eq "data_protection" -or $RelationshipType -eq "extended_data_protection" ) -and ( $SourceVserver -ne $DestinationVserver )  ) 
+        foreach ( $relation in $relationlist ){
+            $SourceVserver = $relation.SourceVserver
+            $DestinationVserver = $relation.DestinationVserver
+            $RelationshipType = $relation.RelationshipType
+            if ( ( $RelationshipType -eq "data_protection" -or $RelationshipType -eq "extended_data_protection" ) -and ( $SourceVserver -ne $DestinationVserver )  ) 
             {
-    			$NcVserverPeer=Get-NcVserverPeer -Controller $myPrimaryController -VserverContext $SourceVserver -PeerVserver $DestinationVserver  -ErrorVariable ErrorVar 
-    			if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserverPeer failed [$ErrorVar]" } 
-    			$DestinationCluster=$NcVserverPeer.PeerCluster
-    			$SVMTOOL_DB_SRC_CLUSTER=$Global:SVMTOOL_DB + '\' + $SourceCluster + '.cluster'
-    			$SVMTOOL_DB_SRC_VSERVER=$SVMTOOL_DB_SRC_CLUSTER + '\' +$SourceVserver + '.vserver'
-    			$SVMTOOL_DB_DST_CLUSTER=$Global:SVMTOOL_DB + '\' + $DestinationCluster + '.cluster'
-    			$SVMTOOL_DB_DST_VSERVER=$SVMTOOL_DB_DST_CLUSTER + '\' + $DestinationVserver + '.vserver'
-    			$SHAREACL_DB_SRC_FILE=$SVMTOOL_DB_SRC_VSERVER + '\shareacl.options'
-    			$SHAREACL_DB_DST_FILE=$SVMTOOL_DB_DST_VSERVER + '\shareacl.options'
+                $NcVserverPeer=Get-NcVserverPeer -Controller $myPrimaryController -VserverContext $SourceVserver -PeerVserver $DestinationVserver  -ErrorVariable ErrorVar 
+                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserverPeer failed [$ErrorVar]" } 
+                $DestinationCluster=$NcVserverPeer.PeerCluster
+                $SVMTOOL_DB_SRC_CLUSTER=$Global:SVMTOOL_DB + '\' + $SourceCluster + '.cluster'
+                $SVMTOOL_DB_SRC_VSERVER=$SVMTOOL_DB_SRC_CLUSTER + '\' +$SourceVserver + '.vserver'
+                $SVMTOOL_DB_DST_CLUSTER=$Global:SVMTOOL_DB + '\' + $DestinationCluster + '.cluster'
+                $SVMTOOL_DB_DST_VSERVER=$SVMTOOL_DB_DST_CLUSTER + '\' + $DestinationVserver + '.vserver'
+                $SHAREACL_DB_SRC_FILE=$SVMTOOL_DB_SRC_VSERVER + '\shareacl.options'
+                $SHAREACL_DB_DST_FILE=$SVMTOOL_DB_DST_VSERVER + '\shareacl.options'
                 if($PSVersionTable.PSVersion.Major -ge 7 -and !$IsWindows){
                     $SVMTOOL_DB_SRC_CLUSTER=$SVMTOOL_DB_SRC_CLUSTER -Replace "\\","/"
                     $SVMTOOL_DB_SRC_VSERVER=$SVMTOOL_DB_SRC_VSERVER -Replace "\\","/" 
