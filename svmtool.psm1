@@ -515,7 +515,10 @@ function New-SvmDr {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
-        [Int32]$Timeout = 60
+        [Int32]$Timeout = 60,
+
+        # If Present CIFS shares that are presents on Dest but not present on source, will be deleted on Dest
+        [switch]$DeleteDestShares
     )
 
     $CommandName = $PSCmdlet.MyInvocation.InvocationName;
@@ -923,7 +926,10 @@ function Update-SvmDr {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
-        [Int32]$Timeout = 60
+        [Int32]$Timeout = 60,
+
+        # If Present CIFS shares that are presents on Dest but not present on source, will be deleted on Dest
+        [switch]$DeleteDestShares
     )
 
 
@@ -1060,7 +1066,10 @@ function Invoke-SvmDrActivate {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
-        [Int32]$Timeout = 60
+        [Int32]$Timeout = 60,
+
+        # If Present CIFS shares that are presents on Dest but not present on source, will be deleted on Dest
+        [switch]$DeleteDestShares
     )
 
     $CommandName = $PSCmdlet.MyInvocation.InvocationName;
@@ -1947,7 +1956,10 @@ function Invoke-SvmDrMigrate {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
-        [Int32]$Timeout = 60
+        [Int32]$Timeout = 60,
+
+        # If Present CIFS shares that are presents on Dest but not present on source, will be deleted on Dest
+        [switch]$DeleteDestShares
     )
 
 

@@ -5445,7 +5445,7 @@ Try {
                     $PrimaryLunId =  $PrimaryLunMap.LunId
                     $SecondaryLun = Get-NcLun -Path $PrimaryLunPath -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcLun failed [$ErrorVar]" } 
-                    if ( $SecondaryLun -eq $null ) {
+                    if ( $null -eq $SecondaryLun ) {
                         Write-LogError "ERROR: The Lun [$PrimaryLunPath] doesn't exist on [$mySecondaryVserver] [$mySecondaryController]" 
                         Write-LogError "ERROR: Check your Snapmirror status and retry later" 
                         $Return = $False
@@ -12424,7 +12424,7 @@ Try {
             $diff=Compare-Object -ReferenceObject $SharesListSource -DifferenceObject $SharesListDest `
             -Property Acl,AttributeCacheTtl,Comment,DirUmask,FileUmask,ForceGroupForCreate,MaxConnectionPerShare,OfflineFilesMode,Path,ShareName,ShareProperties,SymlinkProperties,Volume,VscanFileopProfile `
             -SyncWindow 20000 -CaseSensitive -PassThru | Sort-Object -Property SideIndicator -Descending
-            $diff_text=$diff | Select-Object sideindicator,acl,volume,sharename,path,comment | Format-Table | Out-String
+            $diff_text=$diff | Select-Object sideindicator,ShareNameAcl,Volume,AttributeCacheTtl,Comment,DirUmask,FileUmask,ForceGroupForCreate,MaxConnectionPerShare,OfflineFilesMode,Path,ShareProperties,SymlinkProperties,VscanFileopProfile | Format-Table | Out-String
             if($null -ne $diff){Write-LogDebug "Check CIFS shares differences [$diff_text]"}
             else{Write-LogDebug "There is no CIFS shares differences"}
             
@@ -12433,7 +12433,7 @@ Try {
                 if($sharediff.SideIndicator -eq "=>"){
                     # delete share on dest only if not in c$,admin$,ipc$
                     $sharename=$sharediff.ShareName
-                    if($sharename -notin @("c$","admin$","ipc$","ONTAP_ADMIN$")){
+                    if($sharename -notin @("c$","admin$","ipc$","ONTAP_ADMIN$") -and $Global:DeleteDestShares -eq $True){
                         Write-LogDebug "Remove Share [$sharename]"
                         $ret=Remove-NcCifsShare -Name $sharename -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
                         if($? -ne $true){$Return=$False;Write-Error "ERROR: Failed to remove share [$sharename] reason [$ErrorVar]"}
@@ -12703,6 +12703,31 @@ $request=@"
                             } 
                         }else{
                             # ! need to switch to Direct REST request to include all ACL during the creation
+                            $CredSecondary=get_local_cDotcred($mySecondaryController)
+                            $CredPrimary=get_local_cDotcred($myPrimaryController)
+                            $url=$("https://"+$myPrimaryController.Name+"/api/protocols/cifs/shares?svm.name="+$myPrimaryVserver+"&fields=**,!volume.uuid,!_links&name="+$PrimaryShareName)
+                            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $CredPrimary -SkipCertificateCheck"
+                            $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $CredPrimary -SkipCertificateCheck -ErrorVariable ErrorVar
+                            if($? -ne $True){
+                                Write-LogError "ERROR: Unable to get cifs share [$PrimaryShareName] details from source. Reason [$ErrorVar]" 
+                                continue
+                            }elseif($ret.num_records -eq 1){
+                                $PrimaryShareDetails=$ret.records[0]
+                            }else{
+                                Write-LogError "ERROR failed to get cifs share [$PrimaryShareName] details from source"
+                                continue
+                            }
+                            $url=$("https://"+$mySecondaryController.Name+"/api/protocols/cifs/shares?return_records=true")
+                            $DestinatonShareDetails=$PrimaryShareDetails | Select-Object -ExcludeProperty svm,volume
+                            $DestinatonShareDetails | Add-Member -MemberType NoteProperty -name "svm" -value @{"name"=$mySecondaryVserver}
+                            $body=$DestinatonShareDetails | ConvertTo-Json
+                            Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
+                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                            if($? -eq $True -and $ret.num_records -eq 1){
+                                Write-Log "[$workOn] Share [$PrimaryShareName] created successfully"
+                            }else{
+                                Write-LogError "ERROR [$workOn] Failed to create share [$PrimaryShareName] reason [$ErrorVar]"
+                            }
                             # Write-LogDebug "Add-NcCifsShare -Name  $PrimaryShareName -Path $PrimaryPath -DisablePathValidation `
                             # -ShareProperties $PrimarySharePropertiesList -SymlinkProperties $PrimarySymlinkPropertiesList -Comment $PrimaryComment `
                             # -OfflineFilesMode $PrimaryOfflineFilesMode -VscanProfile $PrimaryVscanFileopProfile `
@@ -12721,7 +12746,7 @@ $request=@"
                         # for that kind of non-data share share-properties and symlinkProperties are not modifiable
                         # so exclude them from the Set-NcCifsShare
                         if($PrimaryShareName -eq "ipc$"){
-                            Write-LogDebug "Ignoring modification on CIFS share [$PrimaryShareName]"
+                            Write-Log "[$workOn] Ignoring modification on CIFS share [$PrimaryShareName]"
                             continue
                         }
                         Write-Log "[$workOn] Modify share [$PrimaryShareName]"

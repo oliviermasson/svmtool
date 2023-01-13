@@ -204,7 +204,7 @@
 	Optional argument
 	Allow to forcibly update SnapShot Policy on destination volume, based on source Snapshot Policy
 	Warning: If Source & Destination volume have different number of snapshot (XDP relationship)
-			 This could cause the deletion of snapshot on destination
+    This could cause the deletion of snapshot on destination
 .PARAMETER AlwaysChooseDataAggr
     Optional argument used to always ask to choose a Data Aggregate to store each Data volume
     Used with ConfigureDR only
@@ -310,6 +310,8 @@
     And if no TieringPolicy is defined on source volume then we will use auto as default TieringPolicy for secondary volumes
 .PARAMETER UseCifsDeleteMethod
     Force to use CIFS delete method, instead of modify existing CIFS server
+.PARAMETER DeleteDestShares
+    If Present CIFS shares that are presents on Dest but not present on source, will be deleted on Dest
 .INPUTS
     None. You cannot pipe objects to this script
 .OUTPUTS
@@ -486,17 +488,17 @@
 		- 0.0.5 : 	Bugfixes, advancements and colorcoding
 		- 0.0.6 : 	Change behaviour when SVM has no LIF, nor Data volume
 		- 0.0.7 : 	Add ForceUpdateSnapPolicy to not update snapshot policy on destination volumes by default
-				  	Add EXAMPLE for ShowDR, DeleteSource, Migrate, ...
-    	- 0.0.8 : 	Add CloneDR option to create Cloned SVM from Destination Vserver
+                    Add EXAMPLE for ShowDR, DeleteSource, Migrate, ...
+        - 0.0.8 : 	Add CloneDR option to create Cloned SVM from Destination Vserver
 					Add DeleteCloneDR option to remove a previously Cloned Vserver          
-    	- 0.0.9 : 	Added symlinks and noninteractive mode
-              		Bugfixes (cifs groups & users)
-              		Added default usercredentials for noninteractive mode
-              		Added smart resource selections (with regex and defaults) for noninteractive mode
-              		Minor typos
-              		Remove Restamp_msid option
-				    Add ForceRestart optional parameter to forcibly restart a stopped Vserver during ReActivate step
-    	- 0.1.0 : 	Adding log4net logging and WFA logging integration, setup can now run in noninteractive mode
+        - 0.0.9 : 	Added symlinks and noninteractive mode
+                    Bugfixes (cifs groups & users)
+                    Added default usercredentials for noninteractive mode
+                    Added smart resource selections (with regex and defaults) for noninteractive mode
+                    Minor typos
+                    Remove Restamp_msid option
+                    Add ForceRestart optional parameter to forcibly restart a stopped Vserver during ReActivate step
+        - 0.1.0 : 	Adding log4net logging and WFA logging integration, setup can now run in noninteractive mode
 		- 0.1.1 : 	Bugfixes, added new cmdlet wrapper with official verbs
 		- 0.1.2 :	Bugfixes, Add FabricPool support on destination
 		- 0.1.3 : 	Fix create CIFS share during Restore
@@ -1112,7 +1114,13 @@ Param (
     [Parameter(Mandatory = $false, ParameterSetName = 'Restore')]
     [Parameter(Mandatory = $false, ParameterSetName = 'ReActivate')]
     [Parameter(Mandatory = $false, ParameterSetName = 'RestoreObject')]
-    [pscredential]$DefaultChapCredentials = $null
+    [pscredential]$DefaultChapCredentials = $null,
+
+    [Parameter(Mandatory = $false, ParameterSetName = 'ConfigureDR')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'UpdateDR')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'Migrate')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'ActivateDR')]
+    [switch]$DeleteDestShares 
 )
 
 #############################################################################################
@@ -1184,6 +1192,11 @@ if($DeleteSource.IsPresent){
     $Global:DeleteSource=$true
 }else{
     $Global:DeleteSource=$False
+}
+if($DeleteDestShares.IsPresent){
+    $Global:DeleteDestShares=$True
+}else{
+    $Global:DeleteDestShares=$False
 }
 # Force to use CIFS modify method, instead of delete/recreate when CIFS server name need to be changed
 $Global:UseCifsDeleteMethod=$UseCifsDeleteMethod
@@ -2507,6 +2520,7 @@ Write-LogDebug "OPTION ForceUpdateSnapPolicy        [$Global:ForceUpdateSnapPoli
 Write-LogDebug "OPTION AlwaysChooseDataAggr         [$Global:AlwaysChooseDataAggr]"
 Write-LogDebug "OPTION SelectVolume                 [$Global:SelectVolume]"
 Write-LogDebug "OPTION IgnoreQtreeExportPolicy      [$Global:IgnoreQtreeExportPolicy]"
+Write-LogDebug "OPTION DeleteDestShares             [$Global:DeleteDestShares]"
 ####################################################################################################
 
 if ( $ShowDR ) {
