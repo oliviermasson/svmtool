@@ -5359,7 +5359,7 @@ Try {
 
     $Return = $True
     Write-Log "[$workOn] Check LUN Mapping"
-    Write-LogDebug "[$myPrimaryVserver]: start"
+    Write-LogDebug "[$workOn]: start"
     if($Backup -eq $True){Write-LogDebug "run in Backup mode [$myPrimaryVserver]"}
     if($Restore -eq $True){Write-LogDebug "run in Restore mode [$myPrimaryVserver]"}
 
@@ -5382,14 +5382,14 @@ Try {
             return $False  
         }else{
             $VolList=$Selected.volumes
-            Write-LogDebug "Get-NcLun -Volume $VolList -VserverContext $myPrimaryVserver -Controller $myPrimaryController"
-            $PrimaryLunList=Get-NcLun -Volume $VolList -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
+            Write-LogDebug "Get-NcLun -Volume $VolList -Vserver $myPrimaryVserver -Controller $myPrimaryController"
+            $PrimaryLunList=Get-NcLun -Volume $VolList -Vserver $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
         }    
     }else{
         if($Restore -eq $False){
-            Write-LogDebug "Get-NcLun -VserverContext $myPrimaryVserver -Controller $myPrimaryController"
-            $PrimaryLunList = Get-NcLun -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
+            Write-LogDebug "Get-NcLun -Vserver $myPrimaryVserver -Controller $myPrimaryController"
+            $PrimaryLunList = Get-NcLun -Vserver $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcLun failed [$ErrorVar]" } 
         }else{
             if(Test-Path $($Global:JsonPath+"Get-NcLun.json")){
@@ -5402,7 +5402,7 @@ Try {
         }
         if($Backup -eq $True){
             $PrimaryLunList | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcLun.json") -Encoding ASCII -Width 65535
-            if( ($ret=get-item $($Global:JsonPath+"Get-NcLun.json") -ErrorAction SilentlyContinue) -ne $null ){
+            if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcLun.json") -ErrorAction SilentlyContinue) ){
                 Write-LogDebug "$($Global:JsonPath+"Get-NcLun.json") saved successfully"
             }else{
                 Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcLun.json")"
@@ -5415,7 +5415,8 @@ Try {
 		if ( $PrimaryLun.Mapped -eq $True ) {
             if($Restore -eq $False){
                 $PrimaryLunPath = $PrimaryLun.Path
-                $PrimaryLunMapList = Get-NcLunMap -Path $PrimaryLunPath -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
+                Write-LogDebug "Get-NcLunMap -Path $PrimaryLunPath -Vserver $myPrimaryVserver -Controller $myPrimaryController"
+                $PrimaryLunMapList = Get-NcLunMap -Path $PrimaryLunPath -Vserver $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcLunMap failed [$ErrorVar]" } 
             }else{
                 $PrimaryLunPath_string=$PrimaryLunPath -replace "/","@"
@@ -5431,7 +5432,7 @@ Try {
                 if($PrimaryLunPath.length -gt 0){
                     $PrimaryLunPath_string=$PrimaryLunPath -replace "/","@"
                     $PrimaryLunMapList | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcLunMap_"+$PrimaryLunPath_string+".json") -Encoding ASCII -Width 65535
-                    if( ($ret=get-item $($Global:JsonPath+"Get-NcLunMap_"+$PrimaryLunPath_string+".json") -ErrorAction SilentlyContinue) -ne $null ){
+                    if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcLunMap_"+$PrimaryLunPath_string+".json") -ErrorAction SilentlyContinue) ){
                         Write-LogDebug "$($Global:JsonPath+"Get-NcLunMap_"+$PrimaryLunPath_string+".json") saved successfully"
                     }else{
                         Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcLunMap_"+$PrimaryLunPath_string+".json")"
@@ -5443,7 +5444,8 @@ Try {
                 foreach ( $PrimaryLunMap in ( $PrimaryLunMapList | Skip-Null )  ) {
                     $PrimaryInitiatorGroup =  $PrimaryLunMap.InitiatorGroup
                     $PrimaryLunId =  $PrimaryLunMap.LunId
-                    $SecondaryLun = Get-NcLun -Path $PrimaryLunPath -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                    Write-LogDebug "Get-NcLun -Path $PrimaryLunPath -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+                    $SecondaryLun = Get-NcLun -Path $PrimaryLunPath -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcLun failed [$ErrorVar]" } 
                     if ( $null -eq $SecondaryLun ) {
                         Write-LogError "ERROR: The Lun [$PrimaryLunPath] doesn't exist on [$mySecondaryVserver] [$mySecondaryController]" 
@@ -5453,13 +5455,19 @@ Try {
                         $Query=Get-NcLunMap -Template -Controller $mySecondaryController
                         $Query.InitiatorGroup =  $PrimaryLunMap.InitiatorGroup
                         $Query.Path = $PrimaryLunPath
+                        Write-LogDebug "Get-NcLunMap -Query $Query -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
                         $SecondaryLunMap = Get-NcLunMap -Query $Query -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcLunMap failed [$ErrorVar]" } 
                         if ( $null -eq $SecondaryLunMap ) {
                             Write-Log "[$workOn] Map Lun [$PrimaryLunPath] [$workOn] [$mySecondaryController] on [$PrimaryInitiatorGroup]"
-                            Write-LogDebug "Add-NcLunMap -Path $PrimaryLunPath -InitiatorGroup $PrimaryInitiatorGroup -Id $PrimaryLunId -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                            $out = Add-NcLunMap -Path $PrimaryLunPath -InitiatorGroup $PrimaryInitiatorGroup -Id $PrimaryLunId -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcLunMap failed [$ErrorVar]" }
+                            Write-LogDebug "Add-NcLunMap -Path $PrimaryLunPath -InitiatorGroup $PrimaryInitiatorGroup -Id $PrimaryLunId -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+                            $out = Add-NcLunMap -Path $PrimaryLunPath -InitiatorGroup $PrimaryInitiatorGroup -Id $PrimaryLunId -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ErrorAction SilentlyContinue
+                            if ( $? -ne $True ) { 
+                                # if($ErrorVar -notmatch "has no LIFs configured with iSCSI"){
+                                    Write-LogError "ERROR: Add-NcLunMap failed [$ErrorVar]"
+                                    # $Return=$False
+                                # }
+                            }
 
                         } else {
                             Write-Log "[$workOn] Lun [$PrimaryLunPath] [$workOn] [$mySecondaryController] already mapped on [$PrimaryInitiatorGroup]"
@@ -5471,18 +5479,20 @@ Try {
 	}
     # Check if LUN need to be unmapped
     if($Backup -eq $False){
-        $SecondaryLunList = Get-NcLun -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+        Write-LogDebug "Get-NcLun -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+        $SecondaryLunList = Get-NcLun -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcLun failed [$ErrorVar]" } 
         foreach ( $SecondaryLun in ( $SecondaryLunList | Skip-Null  ) ) {
             if ( $SecondaryLun.Mapped -eq $True ) {
                 $SecondaryLunPath = $SecondaryLun.Path
-                $SecondaryLunMapList = Get-NcLunMap -Path $SecondaryLunPath -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                Write-LogDebug "Get-NcLunMap -Path $SecondaryLunPath -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+                $SecondaryLunMapList = Get-NcLunMap -Path $SecondaryLunPath -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcLunMap failed [$ErrorVar]" } 
                 foreach ( $SecondaryLunMap in ( $SecondaryLunMapList | Skip-Null )  ) {
                     $SecondaryInitiatorGroup =  $SecondaryLunMap.InitiatorGroup
                     $PrimaryLun = $PrimaryLunList | where-object {$_.Path -eq $SecondaryLunPath}
-                    #$PrimaryLun = Get-NcLun -Path $SecondaryLunPath -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
-                    if ( $PrimaryLun -eq $null ) {
+                    #$PrimaryLun = Get-NcLun -Path $SecondaryLunPath -Vserver $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
+                    if ( $null -eq $PrimaryLun ) {
                         Write-LogError "ERROR: The PRIMARY   Lun [$SecondaryLunPath] Not exist [$myPrimaryVserver] [$myPrimaryController]" 
                         Write-LogError "ERROR: The SECONDARY Lun [$SecondaryLunPath] exist     [$mySecondaryVserver] [$mySecondaryController]" 
                         $Return = $False
@@ -5491,12 +5501,12 @@ Try {
                         #$Query.InitiatorGroup =  $SecondaryLunMap.InitiatorGroup
                         #$Query.Path = $SecondaryLunPath
                         $PrimaryLunMap = $PrimaryLunMapList | where-object {$_.InitiatorGroup -eq $SecondaryLunMap.InitiatorGroup -and $_.Path -eq $SecondaryLunPath}
-                        #$PrimaryLunMap = Get-NcLunMap -Query $Query -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
+                        #$PrimaryLunMap = Get-NcLunMap -Query $Query -Vserver $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
                         #if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcLunMap failed [$ErrorVar]" } 
                         if ( $null -eq $PrimaryLunMap ) {
                             # Unmap the Lun from this igroup
-                            Write-LogDebug "Remove-NcLunMap -Path $SecondaryLunPath -InitiatorGroup $SecondaryInitiatorGroup  -VserverContext $mySecondaryVserver -Controller $mySecondaryController -confirm:$False"
-                            $out = Remove-NcLunMap -Path $SecondaryLunPath -InitiatorGroup $SecondaryInitiatorGroup  -VserverContext $mySecondaryVserver -Controller $mySecondaryController -confirm:$False 
+                            Write-LogDebug "Remove-NcLunMap -Path $SecondaryLunPath -InitiatorGroup $SecondaryInitiatorGroup  -Vserver $mySecondaryVserver -Controller $mySecondaryController -confirm:$False"
+                            $out = Remove-NcLunMap -Path $SecondaryLunPath -InitiatorGroup $SecondaryInitiatorGroup  -Vserver $mySecondaryVserver -Controller $mySecondaryController -confirm:$False 
                             if ( $? -ne $True ) {
                                 Write-LogError "ERROR: Failed to unmap LUNs [$PrimaryLunPath] from [$SecondaryInitiatorGroup]" 
                                 $Return = $False
@@ -5582,7 +5592,7 @@ Function set_serial_lundr (
                 $PrimaryLunSerialNumber = $PrimaryLun.SerialNumber
                 $SecondaryLun = Get-NcLun -Path $PrimaryLunPath -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcLun failed [$ErrorVar]" } 
-                if ( $SecondaryLun -eq $null ) 
+                if ( $null -eq $SecondaryLun ) 
                 {
                     Write-LogError "ERROR: The Lun [$PrimaryLunPath] doesn't exist on [$mySecondaryVserver] [$mySecondaryController]" 
                     Write-LogError "ERROR: Check your Snapmirror status and retry later" 
@@ -5625,7 +5635,7 @@ Function set_serial_lundr (
                     $PrimaryLunSerialNumber = $PrimaryLun.SerialNumber
                     $SecondaryLun = Get-NcLun -Path $PrimaryLunPath -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcLun failed [$ErrorVar]" } 
-                    if ( $SecondaryLun -eq $null ) 
+                    if ( $null -eq $SecondaryLun ) 
                     {
                         Write-LogError "ERROR: The Lun [$PrimaryLunPath] doesn't exist on [$mySecondaryVserver] [$mySecondaryController]" 
                         Write-LogError "ERROR: Check your Snapmirror status and retry later" 
@@ -10004,7 +10014,7 @@ Try {
     }
     if($Backup -eq $True){
         $PrimaryCifsSymlinks | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcCifsSymlink.json") -Encoding ASCII -Width 65535
-        if( ($ret=get-item $($Global:JsonPath+"Get-NcCifsSymlink.json") -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcCifsSymlink.json") -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$($Global:JsonPath+"Get-NcCifsSymlink.json") saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcCifsSymlink.json")"
@@ -10037,7 +10047,7 @@ Try {
             Write-LogDebug "Get-NcCifsSymlink -VserverContext $mySecondaryVserver -Controller $mySecondaryController -UnixPath $PrimaryUnixPath"
             $SecondarySymlink=Get-NcCifsSymlink -VserverContext $mySecondaryVserver -Controller $mySecondaryController -UnixPath $PrimaryUnixPath -ErrorVariable ErrorVar
             if($? -ne $True){$Return=$False;Throw "ERROR: Failed to get Cifs Symlink [$PrimaryUnixPath] on [$mySecondaryVserver] reason [$ErrorVar]"}
-            if($SecondarySymlink -eq $null){
+            if($null -eq $SecondarySymlink){
                 Write-Log "[$workOn] Create New Symlink CIFS Path [$PrimaryCifsPath] Unix Path [$PrimaryUnixPath] Share [$PrimaryShareName] for CIFS Server [$PrimaryCifsServer]"
                 Write-LogDebug "Add-NcCifsSymlink -CifsPath $PrimaryCifsPath -CifsServer $PrimaryCifsServer -HomeDirectory:$PrimaryHomeDirectory -Locality $PrimaryLocality -ShareName $PrimaryShareName -UnixPath $PrimaryUnixPath  -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
                 $out=Add-NcCifsSymlink -CifsPath $PrimaryCifsPath -CifsServer $PrimaryCifsServer -HomeDirectory:$PrimaryHomeDirectory -Locality $PrimaryLocality -ShareName $PrimaryShareName -UnixPath $PrimaryUnixPath  -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
@@ -14090,6 +14100,8 @@ Try {
     if ( ( $ret=create_update_qospolicy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: create_update_qospolicy_dr" ; $Return = $False }
 	if ( ( $ret=create_snapmirror_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn -DDR $DDR -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all snapmirror relations " ; $Return = $False }
     if ( ( $ret=create_update_snap_policy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) {Write-LogError "ERROR: create_update_snap_policy_dr"}
+    if ( ( $ret=map_lundr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to map all LUNs " ; $Return = $False }
+    if ( ( $ret=set_serial_lundr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-Log "ERROR: Failed to change LUN serial Numbers" ; $Return = $False} 
     <# if($Backup -eq $False -and $Restore -eq $False){
         $ASK_WAIT=Read-HostOptions -question "[$mySecondaryVserver] Do you want to wait the end of snapmirror transfers and mount all volumes and map LUNs on [$mySecondaryVserver] now ?" -options "y/n" -default "y"
     }else{
@@ -14135,8 +14147,7 @@ Try {
             if ( ( $ret=create_update_CIFS_shares_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: create_update_CIFS_share" ; $Return = $False }
             if ( ( $ret=create_update_cifs_symlink_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all cifs symlinks" ; $Return = $False }
         }
-		if ( ( $ret=map_lundr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to map all LUNs " ; $Return = $False }
-        if ( ( $ret=set_serial_lundr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-Log "ERROR: Failed to change LUN serial Numbers" ; $Return = $False} 
+		
         <# if($Global:SecondaryCifsLifCreated){
             Write-Log "[$workOn] Removing Temporary LIF"
             Write-LogDebug "Get-NcNetInterface -Vserver $mySecondaryVserver -Controller $mySecondaryController | Where-Object {$_.InterfaceName -match `"^tmp_lif_to_join_in_ad_`"}"
