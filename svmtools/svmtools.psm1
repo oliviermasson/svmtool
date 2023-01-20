@@ -18407,7 +18407,26 @@ Try {
                     $SoftDiskLimit = $quota.SoftDiskLimit
                     $SoftFileLimit = $quota.SoftFileLimit
                     $Threshold = $quota.Threshold
-                    $Policy = $quota.Policy
+                    if($Global:PSTKCall -ne "Rest"){
+                        $Policy = $quota.Policy
+                    }else{
+                        # * In REST there is no quota policy scope, all quota are by default associated to the one and only quota policy rule that is activated on SVM
+                        # ! but REST return all rule event the ones that are part of a non-activated policy
+                        # ! so filter through private cli
+                        # $Policy="activated"
+                        $Credential=get_local_cDotcred($myPrimaryController)
+                        $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/volume/quota/policy/rule?vserver="+$Vserver+"&fields=vserver,type,policy-name,volume,target,qtree,user-mapping,disk-limit,file-limit,threshold,soft-disk-limit,soft-file-limit&volume="+$Volume+`
+                        "type="+$QuotaType+"&disk-limit="+$DiskLimit+"&target="+$QuotaTarget+"&file-limit="+$FileLimit+"&qtree="+$Qtree+"&soft-disk-limit="+$SoftDiskLimit+"&soft-file-limit="+$SoftFileLimit)
+                        Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential"
+                        $QuotaPolicy=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                        if($? -ne $True){
+                            Write-LogError "ERROR: Unable to get quota policy rule details. Reason [$ErrorVar]"
+                            Write-LogDebug "[$workOn]: end"
+                            return $False
+                        }elseif($QuotaPolicy.num_records -gt 0){
+                            $Policy=$PolicyName.records[0].policy_name
+                        }
+                    }
                     if ( $QuotaError ) {
                         $Detail=$QuotaError.Detail
                         $Errno=$QuotaError.Errno
@@ -21241,7 +21260,6 @@ Try {
         $FileLimit = $quota.FileLimit
         $Threshold = $quota.Threshold
         $NcController = $quota.NcController
-        $Policy = $quota.Policy
         $QuotaError = $quota.QuotaError
         $QuotaTarget = $quota.QuotaTarget
         $QuotaType = $quota.QuotaType
@@ -21250,6 +21268,25 @@ Try {
         $Volume = $quota.Volume
         $Qtree = $quota.Qtree
         $Vserver = $quota.Vserver
+        if($Global:PSTKCall -ne "Rest"){
+            $Policy = $quota.Policy
+        }else{
+            # * In REST there is no quota policy scope, all quota are by default associated to the one and only quota policy rule that is activated on SVM
+            # ! but REST return all rule event the ones that are part of a non-activated policy
+            # ! so filter through private cli
+            # $Policy="activated"
+            $Credential=get_local_cDotcred($myController)
+            $url=$("https://"+$myController.Name+"/api/private/cli/volume/quota/policy/rule?vserver="+$myVserver+"&fields=vserver,type,policy-name,volume,target,qtree,user-mapping,disk-limit,file-limit,threshold,soft-disk-limit,soft-file-limit&volume="+$Volume+`
+            "type="+$QuotaType+"&disk-limit="+$DiskLimit+"&target="+$QuotaTarget+"&file-limit="+$FileLimit+"&qtree="+$Qtree+"&soft-disk-limit="+$SoftDiskLimit+"&soft-file-limit="+$SoftFileLimit)
+            $QuotaPolicy=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+            if($? -ne $True){
+                Write-LogError "ERROR: Unable to get quota policy rule details. Reason [$ErrorVar]"
+                Write-LogDebug "[$workOn]: end"
+                return $False
+            }elseif($QuotaPolicy.num_records -gt 0){
+                $Policy=$PolicyName.records[0].policy_name
+            }
+        }
         Write-LogDebug "[$Vserver] [$volume] [$Qtree] [$QuotaType] [$QuotaTarget] [$DiskLimit] [$FileLimit] [$SoftDiskLimit] [$SoftFileLimit] [$Threshold] [$Policy]"
         if ( $VolQuotaStatus.Status -ne 'on' ) {
             if ( $Global:CorrectQuotaError -and ($Global:IgnoreQuotaOff -eq $False ) ) {
