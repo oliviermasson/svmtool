@@ -1022,6 +1022,34 @@ Param (
 
     [Parameter(Mandatory = $false, ParameterSetName = 'Setup')]
     [Parameter(Mandatory = $false, ParameterSetName = 'ConfigureDR')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'UpdateDR')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'ShowDR')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'ActivateDR')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'DeleteDR')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'CloneDR')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'SplitCloneDR')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'DeleteCloneDR')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'RemoveDRConf')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'MirrorSchedule')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'ResyncReverse')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'UpdateReverse')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'MirrorScheduleReverse')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'ReActivate')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'CleanReverse')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'Resync')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'DeleteSource')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'Migrate')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'CreateQuotaDR')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'ReCreateQuota')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'InternalTest')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'Backup')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'Restore')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'RestoreObject')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'Version')]
+    [switch]$ForceZapi,  
+
+    [Parameter(Mandatory = $false, ParameterSetName = 'Setup')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'ConfigureDR')]
     [Parameter(Mandatory = $false, ParameterSetName = 'ActivateDR')]
     [Parameter(Mandatory = $false, ParameterSetName = 'DeleteDR')]
     [Parameter(Mandatory = $false, ParameterSetName = 'MirrorSchedule')]
@@ -1382,6 +1410,15 @@ if(($module.Version.Major -ge 9) -and ($module.Version.Minor -ge 11))
     # With PSTK core currently need to check if cmdlt was executed with REST or ZAPI call
     # for this we will look in the logfile created by natoolkit
     $Global:PSTKCall="Rest"
+}
+if($ForceZapi.IsPresent){
+    if(($module.Version.Major -ge 9) -and ($module.Version.Minor -ge 11))
+    {
+        Write-Host -f red "ZAPI call enforced"
+        $Global:PSTKCall="ZapiEnforced"
+    }else{
+        $Global:PSTKCall="Zapi"
+    }
 }
 #Write-LogDebug "Running PSTK in $Global:PSTKCall mode"
 $PSTKVersion=Get-NaToolkitVersion

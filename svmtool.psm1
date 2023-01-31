@@ -159,6 +159,7 @@ function New-SvmDrConfiguration {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
 
         [Int32]$Timeout = 60
 
@@ -515,6 +516,7 @@ function New-SvmDr {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60,
 
         # If Present CIFS shares that are presents on Dest but not present on source, will be deleted on Dest
@@ -696,6 +698,7 @@ function Show-SvmDr {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -926,6 +929,7 @@ function Update-SvmDr {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60,
 
         # If Present CIFS shares that are presents on Dest but not present on source, will be deleted on Dest
@@ -984,6 +988,7 @@ function Remove-SvmDr {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -1066,6 +1071,7 @@ function Invoke-SvmDrActivate {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60,
 
         # If Present CIFS shares that are presents on Dest but not present on source, will be deleted on Dest
@@ -1137,6 +1143,7 @@ function Invoke-SvmDrResync {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -1210,6 +1217,7 @@ function Invoke-SvmDrResyncReverse {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -1404,6 +1412,7 @@ function Update-SvmDrReverse {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -1509,6 +1518,7 @@ function Invoke-SvmDrRecoverFromDr {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -1556,6 +1566,7 @@ function Remove-SvmDrConfiguration {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -1592,6 +1603,8 @@ function Remove-SvmDrInstance {
         # Loglevel of the logfile output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
         [string]$LogLevelLogFile = "Debug",
+
+        [switch]$ForceZapi,
 
         # Enables OnCommand Workflow Automation (WFA) Integration
         [switch]$WfaIntegration
@@ -1650,6 +1663,7 @@ function Set-SvmDrSchedule {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -1705,6 +1719,7 @@ function Set-SvmDrScheduleReverse {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -1956,6 +1971,7 @@ function Invoke-SvmDrMigrate {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60,
 
         # If Present CIFS shares that are presents on Dest but not present on source, will be deleted on Dest
@@ -2035,6 +2051,7 @@ function Remove-SvmDrSource {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -2097,6 +2114,7 @@ function Set-SvmDrQuota {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -2161,6 +2179,7 @@ function Set-SvmDrQuotaReverse {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -2222,6 +2241,7 @@ function Test-SvmDrConnection {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -2273,6 +2293,7 @@ function Clear-SvmDrReverse {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -2378,6 +2399,7 @@ function Backup-SvmDr {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -2614,6 +2636,7 @@ function New-SvmDrClone {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -2683,6 +2706,7 @@ function Remove-SvmDrClone {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -2821,6 +2845,7 @@ function Restore-ObjectSvmDr {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -2951,6 +2976,7 @@ function Restore-SvmDr {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -3010,8 +3036,12 @@ function Show-SvmDrVersion {
         # Loglevel of the logfile output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
         [string]$LogLevelLogFile = "Debug"
+
     )
 
+    $CommandName = $PSCmdlet.MyInvocation.InvocationName;
+    $ParameterList = (Get-Command -Name $CommandName).Parameters;
+
     $scriptPath = "$PSScriptRoot\svmtool.ps1"
-    Invoke-Expression "& `"$scriptPath`" -Version"
+    Invoke-Expression -Command "& `"$scriptPath`" -Version" 
 }
