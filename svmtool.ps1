@@ -1332,7 +1332,7 @@ $Global:MasterLog = get_logger -name "logonly"
 
 if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){
     $masterEventViewerAppender = create_eventviewer_appender -name "eventviewer" -applicationname "svmtool"
-    }
+}
 
 $consoleAppender = create_console_appender -name "console" -threshold $LogLevelConsole
 # initialize console
@@ -1388,15 +1388,14 @@ if($null -eq $module){
         if ($null -ne $module) {
             if($PSTKalpha.IsPresent){
                 Write-Log "Import PSTK Core Alpha"
-                $module = Import-Module DataONTAP -MinimumVersion 9.11.1.2111
+                $module = Import-Module NetApp.ONTAP -MinimumVersion 9.12.1.2302 -PassThru
                 $Global:PSTKCall="Rest"
             }else{
                 Write-Log "Import PSTK Core Standard"
-                $module = Import-Module NetApp.ONTAP -RequiredVersion 9.10.1.2111
+                $module = Import-Module NetApp.ONTAP -PassThru
                 # workaround for BURT 1385162
                 #$DataONTAP_SkipEmsReport = $null
                 #$DataONTAP_SkipUsageReport = $true 
-                $Global:PSTKCall="Zapi"
             }
         }else{
             Write-Error "ERROR: Firstly you must install PSTK module on your host"
@@ -1404,12 +1403,11 @@ if($null -eq $module){
         }
     }
 }
-$Global:PSTKCall="Zapi"
-if(($module.Version.Major -ge 9) -and ($module.Version.Minor -ge 11))
-{
-    # With PSTK core currently need to check if cmdlt was executed with REST or ZAPI call
-    # for this we will look in the logfile created by natoolkit
+
+if($module.Version.Major -ge 9 -and $module.Version.Minor -ge 11){
     $Global:PSTKCall="Rest"
+}else{
+    $Global:PSTKCall="Zapi"
 }
 if($ForceZapi.IsPresent){
     if(($module.Version.Major -ge 9) -and ($module.Version.Minor -ge 11))

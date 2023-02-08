@@ -16226,7 +16226,7 @@ Function Is_One_LIF_Ready (
     [string] $myVserver,
     [NetApp.Ontapi.Filer.C.NcController] $myController    
 ) {
-    $out=Get-NcNetInterface -VserverContext $myVserver -Query @{OpStatus="up";Vserver=$myVserver} -Controller $myController -ErrorVariable ErrorVar | Select-Object InterfaceName
+    $out=Get-NcNetInterface -Query @{OpStatus="up";Vserver=$myVserver} -Controller $myController -ErrorVariable ErrorVar | Select-Object InterfaceName
     if( ($out | Measure-Object).Count -gt 0){
         return $True
     }else{
@@ -18808,9 +18808,9 @@ Try {
     Write-Log "[$mySecondaryVserver] Save Quota rules"
 	Write-LogDebug "Start"
 	if ( ( svmdr_db_check -myController $myPrimaryController -myVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver) -eq $false ) {
-        	Write-LogError "ERROR: Failed to access quotadb" 
-		return $False
-  	}
+            Write-LogError "ERROR: Failed to access quotadb" 
+        return $False
+    }
 
 	$NcCluster = Get-NcCluster -Controller $myPrimaryController
 	$SourceCluster = $NcCluster.ClusterName
@@ -18830,6 +18830,7 @@ Try {
         $relationlist=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -Controller $myPrimaryController -DestinationLocation $($mySecondaryVserver+":*") -ErrorVariable ErrorVar -ZapiCall
     }
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
+    $QuotaErrorCaptured=@()
 	foreach ( $relation in $relationlist ) {
 		$SourceVserver = $relation.SourceVserver
 		$DestinationVserver = $relation.DestinationVserver
@@ -18868,12 +18869,18 @@ Try {
                         $Policy = $quota.Policy
                     }else{
                         # * In REST there is no quota policy scope, all quota are by default associated to the one and only quota policy rule that is activated on SVM
-                        # ! but REST return all rule event the ones that are part of a non-activated policy
-                        # ! so filter through private cli
+                        # ! but REST return all rule even the ones that are part of a non-activated policy
+                        # ! so filter through private cli is mandatory
                         # $Policy="activated"
                         $Credential=get_local_cDotcred($myPrimaryController)
+                        if($null -ne $DiskLimit){$BytesDiskLimit=$DiskLimit*1024}else{$BytesDiskLimit="-"}
+                        if($null -eq $FileLimit){$FileLimit="-"}
+                        if($null -ne $SoftDiskLimit){$BytesSoftDiskLimit=$SoftDiskLimit*1024}else{$BytesSoftDiskLimit="-"}
+                        if($null -eq $SoftFileLimit){$SoftFileLimit="-"}
+                        if($null -eq $QuotaTarget -or $QuotaTarget.length -eq 0){$QuotaTarget="*"}
+                        if($null -eq $Qtree -or $Qtree.length -eq 0){$Qtree="`"`""}
                         $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/volume/quota/policy/rule?vserver="+$Vserver+"&fields=vserver,type,policy-name,volume,target,qtree,user-mapping,disk-limit,file-limit,threshold,soft-disk-limit,soft-file-limit&volume="+$Volume+`
-                        "type="+$QuotaType+"&disk-limit="+$DiskLimit+"&target="+$QuotaTarget+"&file-limit="+$FileLimit+"&qtree="+$Qtree+"&soft-disk-limit="+$SoftDiskLimit+"&soft-file-limit="+$SoftFileLimit)
+                            "&type="+$QuotaType+"&disk-limit="+$BytesDiskLimit+"&target="+$QuotaTarget+"&file-limit="+$FileLimit+"&qtree="+$Qtree+"&soft-disk-limit="+$BytesSoftDiskLimit+"&soft-file-limit="+$SoftFileLimit)
                         Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential"
                         $QuotaPolicy=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                         if($? -ne $True){
@@ -18881,17 +18888,40 @@ Try {
                             Write-LogDebug "[$workOn]: end"
                             return $False
                         }elseif($QuotaPolicy.num_records -gt 0){
-                            $Policy=$PolicyName.records[0].policy_name
+                            $Policy=$QuotaPolicy.records[0].policy_name
+                        }
+                        $query=@{vserver=$Vserver;volume=$Volume} | ConvertTo-Json
+                        Write-LogDebug "Invoke-NcCli -Command 'volume quota show' -Query $query -Controller $myPrimaryController -Fields 'state,scan-status,logging,sub-status,last-error,errors'"
+                        $ret=Invoke-NcCli -Command "volume quota show" -Query $query -Controller $myPrimaryController -Fields "state,scan-status,logging,sub-status,last-error,errors"
+                        $DetailQuota=$ret.Value | ConvertFrom-Json
+                        if($null -ne $DetailQuota.errors){
+                            $QuotaError=$DetailQuota.errors
+                        }else{
+                            $QuotaError=$null
                         }
                     }
                     if ( $QuotaError ) {
-                        $Detail=$QuotaError.Detail
-                        $Errno=$QuotaError.Errno
-                        $Reason=$QuotaError.Reason
-                        $QUOTA_DB_DST_FILE=$SVMTOOL_DB_DST_VSERVER + '\quotarules.' + $Policy + '.err'
-                        $QUOTA_DB_SRC_FILE=$SVMTOOL_DB_SRC_VSERVER + '\quotarules.' + $Policy + '.err'
-                        Write-LogError  "ERROR: Quota: [$Vserver] [$Volume] [$Qtree] [$QuotaTarget]: Error [$Errno] [$Detail] [$Reason]" 
-                        $Return = $False
+                        if(-not $QuotaErrorCaptured.Contains($Policy)){
+                            if($Global:PSTKCall -eq "Zapi"){
+                                $Detail=$QuotaError.Detail
+                                $Errno=$QuotaError.Errno
+                                $Reason=$QuotaError.Reason
+                                Write-LogError  "ERROR: Quota: [$Vserver] [$Volume] [$Qtree] [$QuotaTarget] [$Policy]: Error [$Errno] [$Detail] [$Reason]" 
+                            }else{
+                                foreach($errorreason in $QuotaError.split("`n") | Skip-Null ){
+                                    if($errorreason.length -gt 0){
+                                        Write-LogError  "ERROR: Quota: [$Vserver] [$Volume] [$Qtree] [$QuotaTarget] [$Policy]: Error [$errorreason]" 
+                                    }
+                                }
+                            }
+                        
+                            $QUOTA_DB_DST_FILE=$SVMTOOL_DB_DST_VSERVER + '\quotarules.' + $Policy + '.err'
+                            $QUOTA_DB_SRC_FILE=$SVMTOOL_DB_SRC_VSERVER + '\quotarules.' + $Policy + '.err'
+
+                            $QuotaErrorCaptured+=$Policy
+                        }
+                        
+                        #$Return = $False
                     } else {
                         #
                         $QUOTA_DB_DST_FILE=$SVMTOOL_DB_DST_VSERVER + '\quotarules.' + $Policy
@@ -18910,9 +18940,9 @@ Try {
                 }
             }
         }
- 	}
-  	Write-LogDebug "end"
-  	Return $Return
+    }
+    Write-LogDebug "end"
+    Return $Return
 }
 Catch {
     Error_Handling $_ $myPrimaryVserver
@@ -20179,9 +20209,8 @@ Function save_vol_options_to_voldb (
                     $VOL_DB_DST_FILE=$VOL_DB_DST_FILE -Replace "\\","/"     
                 }
                 # Create all missing Destination Volumes
-                # ! Still a burt with get-ncvol and flexgroup and ontap 9.12.1RC1
-                Write-LogDebug "Get-NcVol -Name $SourceVolume -Controller $myController -Vserver $myVserver -ZapiCall"
-                $PrimaryVol = Get-NcVol -Name $SourceVolume -Controller $myController -Vserver $myVserver  -ErrorVariable ErrorVar -ZapiCall
+                Write-LogDebug "Get-NcVol -Name $SourceVolume -Controller $myController -Vserver $myVserver"
+                $PrimaryVol = Get-NcVol -Name $SourceVolume -Controller $myController -Vserver $myVserver  -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
                 $PrimaryVolName=$PrimaryVol.Name
                 $PrimaryVolStyle=$PrimaryVol.VolumeSecurityAttributes.Style
