@@ -4166,13 +4166,22 @@ Function create_update_qospolicy_dr(
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
                 }else{
                     $PrimaryCredential = get_local_cDotcred($myPrimaryController)
-                    $url=$("https://"+$myPrimaryController.Name+"/api/storage/volumes?svm.name="+$myPrimaryVserver+"&qos.policy.name=!-&fields=qos.policy.*")
+                    if($Global:SelectVolume -eq $True)
+                    {
+                        $VolListRest=$Selected.volumes -join ","
+                    }else{
+                        $VolListRest="*"
+                    }
+                    $url=$("https://"+$myPrimaryController.Name+"/api/storage/volumes?svm.name="+$myPrimaryVserver+"&name="+$VolListRest+"&qos.policy.name=!-&fields=qos.policy.*")
                     Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck"
                     $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: Unable to get policy admin owner. Reason [$ErrorVar]" 
-                    }else{
+                        $PrimaryVolWithQosList=$null
+                    }elseif($ret.num_records -ge 1){
                         $PrimaryVolWithQosList=$ret.records
+                    }else{
+                        $PrimaryVolWithQosList=$null
                     }
                 }
                 foreach ( $PrimaryVolWithQos in ( $PrimaryVolWithQosList | Skip-Null ) ) {
@@ -5722,8 +5731,8 @@ Try {
             return $False  
         }else{
             $VolList=$Selected.volumes
-            Write-LogDebug "Get-NcLun -Volume $VolList -Vserver $myPrimaryVserver -Controller $myPrimaryController"
-            $PrimaryLunList=Get-NcLun -Volume $VolList -Vserver $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
+            Write-LogDebug "Get-NcLun -Volume $VolList -VserverContext $myPrimaryVserver -Controller $myPrimaryController"
+            $PrimaryLunList=Get-NcLun -Volume $VolList -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
         }    
     }else{
@@ -5907,8 +5916,8 @@ Function set_serial_lundr (
                 return $False  
             }else{
                 $VolList=$Selected.volumes
-                Write-LogDebug "Get-NcLun -Volume $VolList -Vserver $myPrimaryVserver -Controller $myPrimaryController"
-                $PrimaryLunList=Get-NcLun -Volume $VolList -Vserver $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
+                Write-LogDebug "Get-NcLun -Volume $VolList -VserverContext $myPrimaryVserver -Controller $myPrimaryController"
+                $PrimaryLunList=Get-NcLun -Volume $VolList -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
             }    
         }else{
@@ -6530,8 +6539,8 @@ Try {
             Write-LogDebug "end with error"
             return $False  
         }else{
-            Write-LogDebug "Get-NcVol -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Query `@`{Name=`($Selected.volumes -join `",`"`)`;VolumeIdAttributes=`@`{StyleExtended=`"flexvol|flexgroup`"}} -ZapiCall"
-            $PrimaryVolList= Get-NcVol -VserverContext $myPrimaryVserver -Query @{Name=$($Selected.volumes -join ",");VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -Controller $myPrimaryController -ErrorVariable ErrorVar -ZapiCall
+            Write-LogDebug "Get-NcVol -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Query `@`{Name=`($Selected.volumes) -join `",`"}"
+            $PrimaryVolList= Get-NcVol -VserverContext $myPrimaryVserver -Query @{Name=$($Selected.volumes) -join ","} -Controller $myPrimaryController -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
         }    
     }else{
@@ -7720,7 +7729,7 @@ Try {
                             #Write-LogDebug "wait_snapmirror_dr_status -DestinationVserver $mySecondaryVserver -PrimaryVolume $PrimaryFlexgroupMasterName -SecondaryVolumeName $SecondaryFlexgroupMasterName -Status idle -MirrorState uninitialized -mySecondaryController $mySecondaryController" 
                             #$ret=wait_snapmirror_dr_status -DestinationVserver $mySecondaryVserver -PrimaryVolume $PrimaryFlexgroupMasterName -SecondaryVolumeName $SecondaryFlexgroupMasterName -Status "idle" -MirrorState "uninitialized" -mySecondaryController $mySecondaryController
                             
-                            if($ProtectJob.JobCompletion -ne "success"){
+                            if($ProtectJob.JobCompletion -ne "success" -and $ProtectJob.JobCompletion -ne "running"){
                                 $reason=$($ProtectJobDetail.JobState+":"+$ProtectJobDetail.JobCompletion)
                                 Write-LogError "[$mySecondaryVserver] Protect Flexgroup [$SecondaryFlexgroupMasterName] not completed [$reason]"
                             }
@@ -8349,20 +8358,29 @@ Try {
     foreach($vol in ($Script:vol_junction | Sort-Object -Property Level) ) {
         $volume=$vol.Name
         Write-LogDebug "mount_voldr [$volume]"
-        $JunctionPath=$vol.JunctionPath
-        $JunctionParent=$vol.JunctionParent
-        if($Selected.count -ge 1){
-            if( ($volume -notin $Selected) -or ( ($JunctionParent -notin $Selected) -and ($JunctionParent -ne $SVMRootVolume) ) ){
-                Write-LogDebug "Ignore volume [$volume] because it's not a Selected volume or because his Junction Parent [$JunctionParent] is not a Selected volume"
-                $Selected.Remove($volume)
-                continue
-            }
-        }
         if($vol.IsFlexgroup -eq $True){
             $DestVolume=$($volume+"_dst")
         }else{
             $DestVolume=$volume
         }
+        $JunctionPath=$vol.JunctionPath
+        $JunctionParent=$vol.JunctionParent
+        if($Selected.count -ge 1){
+            if($DestVolume -in $Selected){
+                if($vol.Level -gt 2){
+                    if( ( ($JunctionParent -notin $Selected) -and ($JunctionParent -ne $SVMRootVolume) ) ){
+                        Write-LogDebug "Ignore volume [$DestVolume] because his Junction Parent [$JunctionParent] is not a Selected volume"
+                        $Selected.Remove($DestVolume)
+                        continue
+                    }
+                }
+            }else{
+                Write-LogDebug "Ignore volume [$DestVolume] because it's not a Selected volume"
+                $Selected.Remove($DestVolume)
+                continue
+            }
+        }
+        
         $retry = $True ; $count = 0 
         while ( ( $retry -eq $True ) -and ( $count -lt $MOUNT_RETRY_COUNT ) ) {
             $count++
@@ -9179,8 +9197,8 @@ Try {
             return $False  
         }else{
             $VolList=$Selected.volumes
-            Write-LogDebug "Get-NcVol -Name $VolList -Vserver $myPrimaryVserver -Controller $myPrimaryController"
-            $PrimaryVolList= Get-NcVol -Name $VolList -Vserver $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
+            Write-LogDebug "Get-NcVol -Name $VolList -VserverContext $myPrimaryVserver -Controller $myPrimaryController"
+            $PrimaryVolList= Get-NcVol -Name $VolList -VserverContext $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
         }    
     }else{
@@ -11146,6 +11164,7 @@ Try {
             }else{
                 $VolList=$Selected.volumes
                 Write-LogDebug "Get Qtree only for selected volumes [$VolList]"
+                Write-LogDebug "Get-NcQtree -Volume $VolList -VserverContext $myPrimaryVserver -Controller $myPrimaryController"
                 $PrimaryQtrees=Get-NcQtree -Volume $VolList -VserverContext $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar    
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcQtree failed [$ErrorVar]" }
             }
@@ -12881,13 +12900,16 @@ Try {
                 Write-LogDebug "Filter source CIFS share from selected volume available on Destination"
                 $SelectedVolumes=Get-Content $SELECTVOL_DB_DST_FILE 
                 if($SelectedVolumes.count -ge 1){
-                    $SVMRootVolume = (Get-NcVserver -Controller $mySecondaryController -Vserver $mySecondaryVserver -ErrorVariable ErrorVar).RootVolume
+                    $SVMRootVolume = (Get-NcVol -Vservercontext $mySecondaryVserver -Controller $mySecondaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$True}}).Name
                     $SelectedVolumes+=$SVMRootVolume
-                    $SharesListSource=$SharesListSource | Where-Object {$_.Volume -in $SelectedVolumes}
+                    $SharesListSource=$SharesListSource | Where-Object {$_.Volume -in $SelectedVolumes -or $_.ShareName -in ("c$","ipc$","ONTAP_ADMIN$")}
                 }
             }
             $SharesListSource=$SharesListSource | sort-object
             $SharesListDest=$SharesListDest | sort-object
+            if(($null -eq $SharesListSource) -or ($null -eq $SharesListDest)){
+                Write-Log ""
+            }
             $diff=Compare-Object -ReferenceObject $SharesListSource -DifferenceObject $SharesListDest `
             -Property Acl,AttributeCacheTtl,Comment,DirUmask,FileUmask,ForceGroupForCreate,MaxConnectionPerShare,OfflineFilesMode,Path,ShareName,ShareProperties,SymlinkProperties,Volume,VscanFileopProfile `
             -SyncWindow 20000 -CaseSensitive -PassThru | Sort-Object -Property SideIndicator -Descending
@@ -13617,6 +13639,18 @@ Function show_vserver_dr (
             $PrimaryNameServerSwitch=$PrimaryVserver.NameServerSwitch
             $PrimaryComment=$PrimaryVserver.Comment
             $PrimaryRootVolumeAggregate=$PrimaryVserver.RootVolumeAggregate
+            if($Global:PSTKCall -eq "Rest"){
+                $query=@{vserver=$myPrimaryVserver} | ConvertTo-Json
+                $details=Invoke-NcCli -Command "vserver show" -Query $query -Controller $myPrimaryController -Fields "rootvolume,rootvolume-security-style"
+                if($? -ne $True){Write-LogError "Failed to get rootvolume infos"}
+                $DetailsRootVol=$details.Value | ConvertFrom-Json
+                if($null -ne $DetailsRootVol.rootvolume){
+                    $PrimaryRootVolume = $DetailsRootVol.rootvolume
+                }
+                if($null -ne $DetailsRootVol.rootvolume_security_style){
+                    $PrimaryRootVolumeSecurityStyle = $DetailsRootVol.rootvolume_security_style
+                }
+            }
 
             Format-ColorBrackets "PRIMARY SVM      :"
             Format-ColorBrackets "------------------"
@@ -13743,6 +13777,18 @@ Function show_vserver_dr (
             $SecondaryNameServerSwitch=$SecondaryVserver.NameServerSwitch
             $SecondaryComment=$SecondaryVserver.Comment 
             $SecondaryRootVolumeAggregate=$SecondaryVserver.RootVolumeAggregate
+            if($Global:PSTKCall -eq "Rest"){
+                $query=@{vserver=$mySecondaryVserver} | ConvertTo-Json
+                $details=Invoke-NcCli -Command "vserver show" -Query $query -Controller $mySecondaryController -Fields "rootvolume,rootvolume-security-style"
+                if($? -ne $True){Write-LogError "Failed to get rootvolume infos"}
+                $DetailsRootVol=$details.Value | ConvertFrom-Json
+                if($null -ne $DetailsRootVol.rootvolume){
+                    $SecondaryRootVolume = $DetailsRootVol.rootvolume
+                }
+                if($null -ne $DetailsRootVol.rootvolume_security_style){
+                    $SecondaryRootVolumeSecurityStyle = $DetailsRootVol.rootvolume_security_style
+                }
+            }
 
             Format-ColorBrackets "SECONDARY SVM (DR)   :"
             Format-ColorBrackets "----------------------"
@@ -13860,18 +13906,18 @@ Function show_vserver_dr (
                     return $False  
                 }else{
                     $VolList=$Selected.volumes
-                    Write-LogDebug "Get-NcVol -Name $VolList -Vserver $myPrimaryVserver -Controller $myPrimaryController"
-                    $PrimaryVolList= Get-NcVol -Name $VolList -Vserver $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
+                    Write-LogDebug "Get-NcVol -Name $VolList -VserverContext $myPrimaryVserver -Controller $myPrimaryController"
+                    $PrimaryVolList= Get-NcVol -Name $VolList -VserverContext $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
                 }    
             }else{
-                if($Global:PSTKCall -match "Rest|ZapiEnforced"){
+                if($Global:PSTKCall -eq "ZapiEnforced"){
                     Write-LogDebug "Get-NcVol -ZapiCall -Vserver $myPrimaryVserver -Controller $myPrimaryController -Query @{Vserver=$myPrimaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended=""flexvol|flexgroup""}}"
                     $PrimaryVolList = Get-NcVol -ZapiCall  -Controller $myPrimaryController -Query @{Vserver=$myPrimaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -ErrorVariable ErrorVar
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }  
                 }else{
-                    Write-LogDebug "Get-NcVol -Vserver $myPrimaryVserver -Controller $myPrimaryController -Query @{Vserver=$myPrimaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended=""flexvol|flexgroup""}}"
-                    $PrimaryVolList = Get-NcVol  -Controller $myPrimaryController -Query @{Vserver=$myPrimaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -ErrorVariable ErrorVar
+                    Write-LogDebug "Get-NcVol -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended=""flexvol|flexgroup""}}"
+                    $PrimaryVolList = Get-NcVol -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -ErrorVariable ErrorVar
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
                 }
             }
@@ -13951,12 +13997,12 @@ Function show_vserver_dr (
         } 
         elseif ( $null -ne $SecondaryVserver ) 
         {
-            if($Global:PSTKCall -match "Rest|ZapiEnforced"){
+            if($Global:PSTKCall -eq "ZapiEnforced"){
                 Write-LogDebug "Get-NcVol -ZapiCall -Controller $mySecondaryController -Vserver $mySecondaryVserver -Query @{VolumeIdAttributes=@{StyleExtended=""flexvol|flexgroup""};Vserver=$mySecondaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False}}"
                 $SecondaryVolList = Get-NcVol -ZapiCall  -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"};Vserver=$mySecondaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False}} -ErrorVariable ErrorVar  
             }else{
-                Write-LogDebug "Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Query @{VolumeIdAttributes=@{StyleExtended=""flexvol|flexgroup""};Vserver=$mySecondaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False}}"
-                $SecondaryVolList = Get-NcVol -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"};Vserver=$mySecondaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False}} -ErrorVariable ErrorVar   
+                Write-LogDebug "Get-NcVol -Controller $mySecondaryController -VserverContext $mySecondaryVserver -Query @{VolumeIdAttributes=@{StyleExtended=""flexvol|flexgroup""};VolumeStateAttributes=@{IsVserverRoot=$False}}"
+                $SecondaryVolList = Get-NcVol -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"};VolumeStateAttributes=@{IsVserverRoot=$False}} -ErrorVariable ErrorVar   
             }
             foreach ($SecondaryVol in ( $SecondaryVolList | Skip-Null | ? { $_.VolumeStateAttributes.IsVserverRoot -ne $True  } ) ) {
                 Write-LogDebug "SecondaryVol [$SecondaryVol]"
@@ -14004,6 +14050,8 @@ Function show_vserver_dr (
                 $RelationHealth=$relation.IsHealthy
                 $RelationType=$relation.RelationshipType
                 $RelationPolicy=$relation.Policy
+                $SourceVolume=$SourceLocation.split(":")[-1]
+                $DestinationVolume=$DestinationLocation.split(":")[-1]
                 if ($RelationType -eq "extended_data_protection") {
                     $Type="XDP"
                 }else{
@@ -14016,7 +14064,23 @@ Function show_vserver_dr (
                 }
                 $LagTime=$relation.LagTime
                 $SmSchedule=$relation.Schedule
-                $LagTimeDate=(Get-Date).AddSeconds(-$LagTime)
+                if($Global:PSTKCall -eq "Rest"){
+                    $Credential=get_local_cDotcred($mySecondaryController)
+                    $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/snapmirror?source-path="+$SourceLocation+"&destination-path="+$DestinationLocation+"&fields=state,status,type,schedule")
+                    Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+                    $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                    if($? -ne $True){
+                        Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
+                    }elseif($ret.num_records -gt 0){
+                        $Type=$ret.records[0].type
+                        $MirrorState=$ret.records[0].status
+                    }else{
+                        $Type=$null
+                    }
+                    $LagTimeDate=$LagTime -replace "PT",""
+                }else{
+                    $LagTimeDate=(Get-Date).AddSeconds(-$LagTime)
+                }
                 $tmp_str = ""  
                 if ( $Lag ) { $tmp_str = $tmp_str + "[$LagTimeDate]"  }
                 if ( $Schedule ) { $tmp_str = $tmp_str + "[$SmSchedule]"  }
@@ -18285,8 +18349,7 @@ Function mount_volume (
     $IsNested=$FindVolume.IsNested
     $PathLevel=$FindVolume.Level
     Write-LogDebug "volume [$myVolumeName] Parent [$Parent] JunctionPath [$JunctionPath] Perm [$Permission] RootVol [$svmRootVolume] Level [$PathLevel] ParentPath [$ParentPath]"
-    if($Global:PSTKCall -match "Rest|ZapiEnforced"){
-        #! force ZAPI call due to burt in PSTK with 9.12.1
+    if($Global:PSTKCall -eq "ZapiEnforced"){
         $mountpath= (Get-NcVol -ZapiCall  -Name $myVolumeName -Vserver $myVserver -Controller $myController).VolumeIdAttributes.JunctionPath
     }else{
         $mountpath= (Get-NcVol -Name $myVolumeName -Vserver $myVserver -Controller $myController).VolumeIdAttributes.JunctionPath
@@ -18538,6 +18601,8 @@ Try {
             $DestinationLocation=$relation.DestinationLocation
             $SourceVolume=$SourceLocation.split(":")[-1]
             $DestinationVolume=$DestinationLocation.split(":")[-1]
+            $SourceVserver=$relation.SourceLocation.split(":")[0]
+            $DestinationVserver=$relation.DestinationLocation.split(":")[0]
             $MirrorState=$relation.MirrorState  
             Write-Log "[$mySecondaryVserver] Remove snapmirror relation for volume [$SourceLocation] --> [$DestinationLocation]"
             if ( $MirrorState -eq 'snapmirrored' ) {
@@ -18583,8 +18648,8 @@ Try {
                     $Return = $True 
                 }
             }
-            Write-LogDebug "Remove-NcSnapmirror -SourceLocation $SourceLocation -DestinationLocation $DestinationLocation -Controller $mySecondaryController -Confirm:$False"
-            $out = Remove-NcSnapmirror -SourceLocation $SourceLocation -DestinationLocation $DestinationLocation -Controller $mySecondaryController  -ErrorVariable ErrorVar -Confirm:$False
+            Write-LogDebug "Remove-NcSnapmirror -SourceVserver $SourceVserver -SourceVolume $SourceVolume -DestinationVserver $DestinationVserver -DestinationVolume $DestinationVolume -Controller $mySecondaryController -Confirm:$False"
+            $out = Remove-NcSnapmirror -SourceVserver $SourceVserver -SourceVolume $SourceVolume -DestinationVserver $DestinationVserver -DestinationVolume $DestinationVolume -Controller $mySecondaryController  -ErrorVariable ErrorVar -Confirm:$False
             if ( $? -ne $True ) {
                 Write-LogError "ERROR: Unable to remove relation [$SourceLocation] --> [$DestinationLocation]" 
                 $Return = $True 
@@ -18599,9 +18664,23 @@ Try {
             $relationList=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":"+$SourceVolume) -DestinationLocation $($mySecondaryVserver+":"+$DestVolume) -Controller $myPrimaryController  -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
         }else{
-            Write-LogDebug "Get-NcSnapmirrorDestination  -SourceLocation $($myPrimaryVserver+":"+$SourceVolume) -DestinationLocation $($mySecondaryVserver+":"+$DestVolume) -Controller $myPrimaryController -ZapiCall"
-            $relationList=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":"+$SourceVolume) -DestinationLocation $($mySecondaryVserver+":"+$DestVolume) -Controller $myPrimaryController -ZapiCall -ErrorVariable ErrorVar
-            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
+            # ! Private CLI REST request necessary to get correct relationship-status
+            $Credential = get_local_cDotcred($myPrimaryController)
+            $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/snapmirror/list-destination?source-path="+$($myPrimaryVserver+":"+$SourceVolume)+"&destination-path="+$($mySecondaryVserver+":"+$DestVolume)+"&fields=relationship_id,type,status,policy-type")
+            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+            $SnapmirrorRelationshipStatus=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+            if($? -ne $True){
+                Write-LogError "ERROR: Unable to get snapmirror relationship status. Reason [$ErrorVar]"
+                Write-LogDebug "[$workOn]: end"
+                return $False
+            }elseif($SnapmirrorRelationshipStatus.num_records -gt 0){
+                $relationList=$SnapmirrorRelationshipStatus
+            }else{
+                $relationList=$null
+            }
+            # Write-LogDebug "Get-NcSnapmirrorDestination  -SourceLocation $($myPrimaryVserver+":"+$SourceVolume) -DestinationLocation $($mySecondaryVserver+":"+$DestVolume) -Controller $myPrimaryController -ZapiCall"
+            # $relationList=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":"+$SourceVolume) -DestinationLocation $($mySecondaryVserver+":"+$DestVolume) -Controller $myPrimaryController -ZapiCall -ErrorVariable ErrorVar
+            # if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
         }
     }else{
         if($Global:PSTKCall -eq "Zapi"){
@@ -18609,19 +18688,39 @@ Try {
             $relationList=Get-NcSnapmirrorDestination  -SourceLocation $($myPrimaryVserver+":"+$PrimaryVolumeName) -DestinationLocation $($mySecondaryVserver+":*") -Controller $myPrimaryController  -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
         }else{
-            Write-LogDebug "Get-NcSnapmirrorDestination  -SourceLocation $($myPrimaryVserver+":"+$PrimaryVolumeName) -DestinationLocation $($mySecondaryVserver+":*") -Controller $myPrimaryController -ZapiCall"
-            $relationList=Get-NcSnapmirrorDestination  -SourceLocation $($myPrimaryVserver+":"+$PrimaryVolumeName) -DestinationLocation $($mySecondaryVserver+":*") -Controller $myPrimaryController  -ErrorVariable ErrorVar -ZapiCall
-            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
+            # ! Private CLI REST request necessary to get correct relationship-status
+            $Credential = get_local_cDotcred($myPrimaryController)
+            $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/snapmirror/list-destination?source-path="+$($myPrimaryVserver+":"+$PrimaryVolumeName)+"&destination-path="+$($mySecondaryVserver+":"+$PrimaryVolumeName)+"&fields=relationship_id,type,status,policy-type")
+            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+            $SnapmirrorRelationshipStatus=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+            if($? -ne $True){
+                Write-LogError "ERROR: Unable to get snapmirror relationship status. Reason [$ErrorVar]"
+                Write-LogDebug "[$workOn]: end"
+                return $False
+            }elseif($SnapmirrorRelationshipStatus.num_records -gt 0){
+                $relationList=$SnapmirrorRelationshipStatus
+            }else{
+                $relationList=$null
+            }
+            # Write-LogDebug "Get-NcSnapmirrorDestination  -SourceLocation $($myPrimaryVserver+":"+$PrimaryVolumeName) -DestinationLocation $($mySecondaryVserver+":*") -Controller $myPrimaryController -ZapiCall"
+            # $relationList=Get-NcSnapmirrorDestination  -SourceLocation $($myPrimaryVserver+":"+$PrimaryVolumeName) -DestinationLocation $($mySecondaryVserver+":*") -Controller $myPrimaryController  -ErrorVariable ErrorVar -ZapiCall
+            # if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
         }
     }
     foreach ( $relation in ( $relationList | Skip-Null ) ) {
-            $MirrorState=$relation.MirrorState
             $SourceVolume=$relation.SourceVolume
             $DestinationVolume=$relation.DestinationVolume
             $SourceLocation=$relation.SourceLocation
             $DestinationLocation=$relation.DestinationLocation
             $RelationshipId=$relation.RelationshipId
-            
+            if($PSTKCall -eq "Rest"){
+                $SourceLocation=$relation.source_path
+                $DestinationLocation=$relation.destination_path
+                $SourceVolume=$relation.source_volume
+                $DestinationVolume=$relation.destination_volume
+                $SourceVserver=$relation.source_vserver
+                $DestinationVserver=$relation.destination_vserver
+            }
             Write-Log "[$mySecondaryVserver] Release Relationship [$SourceLocation] --> [$DestinationLocation]"
             Write-LogDebug "Invoke-NcSnapmirrorRelease -DestinationCluster  $mySecondaryCluster -DestinationVserver $mySecondaryVserver -DestinationVolume $DestinationVolume -SourceCluster  $myPrimaryCluster -SourceVserver $myPrimaryVserver -SourceVolume $SourceVolume  -RelationshipId $RelationshipId -Controller $myPrimaryController -Confirm:$False"
             $out = Invoke-NcSnapmirrorRelease -DestinationCluster  $mySecondaryCluster -DestinationVserver $mySecondaryVserver -DestinationVolume $DestinationVolume -SourceCluster  $myPrimaryCluster -SourceVserver $myPrimaryVserver -SourceVolume $SourceVolume  -RelationshipId $RelationshipId -Controller $myPrimaryController  -ErrorVariable ErrorVar -Confirm:$False
@@ -21780,6 +21879,7 @@ Try {
             $Credential=get_local_cDotcred($myController)
             $url=$("https://"+$myController.Name+"/api/private/cli/volume/quota/policy/rule?vserver="+$myVserver+"&fields=vserver,type,policy-name,volume,target,qtree,user-mapping,disk-limit,file-limit,threshold,soft-disk-limit,soft-file-limit&volume="+$Volume+`
             "type="+$QuotaType+"&disk-limit="+$DiskLimit+"&target="+$QuotaTarget+"&file-limit="+$FileLimit+"&qtree="+$Qtree+"&soft-disk-limit="+$SoftDiskLimit+"&soft-file-limit="+$SoftFileLimit)
+            Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
             $QuotaPolicy=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: Unable to get quota policy rule details. Reason [$ErrorVar]"
