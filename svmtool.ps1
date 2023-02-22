@@ -2780,7 +2780,7 @@ if ($Migrate) {
     if ($ASK_WAIT -eq 'y') {
         Write-LogDebug "Clients ready to migrate. User choose to continue migration procedure"
         Write-Log "[$VserverDR] Run last UpdateDR" -firstValueIsSpecial
-        if ( ( $ret = create_update_cron_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl ) -ne $True ) {
+        if ( ( $ret = create_update_cron_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR -Backup $False -Restore $False) -ne $True ) {
             Write-LogError "ERROR: create_update_cron_dr"
         }
         if ( ( $ret = create_update_snap_policy_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR) -ne $True ) {
@@ -3061,6 +3061,8 @@ if ( $UpdateDR ) {
             Write-LogDebug "XDPPolicy [$XDPPolicy] does not exist on [$SECONDARY_CLUSTER]. Will not change XDPPolicy"
             Write-LogWarn "XDPPolicy [$XDPPolicy] does not exist on [$SECONDARY_CLUSTER]. Will not change XDPPolicy"
             $Global:XDPPolicy = ""
+        }else{
+            $Global:XDPPolicy=$XDPPolicy
         }
     }
     if ( $MirrorSchedule -ne "" -and $MirrorSchedule -ne "none") {
@@ -3069,6 +3071,8 @@ if ( $UpdateDR ) {
             Write-LogDebug "MirrorSchedule [$MirrorSchedule] does not exist on [$SECONDARY_CLUSTER]. Will use no schedule"
             Write-LogWarn "MirrorSchedule [$MirrorSchedule] does not exist on [$SECONDARY_CLUSTER]. Will use no schedule"
             $Global:MirrorSchedule = "none"
+        }else{
+            $Global:MirrorSchedule = $MirrorSchedule
         }
     } 
     # default to hourly
@@ -3083,7 +3087,7 @@ if ( $UpdateDR ) {
     # Write-LogError "ERROR: analyse_junction_path" 
     # clean_and_exit 1
     # }
-    if ( ( $ret = create_update_cron_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl ) -ne $True ) {
+    if ( ( $ret = create_update_cron_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR -Backup $False -Restore $False) -ne $True ) {
         Write-LogError "ERROR: create_update_cron_dr"
     }
     if ( ( $ret = create_update_snap_policy_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR) -ne $True ) {
@@ -3612,7 +3616,7 @@ if ( $UpdateReverse ) {
         Write-LogError "ERROR: save_vol_options_to_voldb failed"
         clean_and_exit 1
     }
-    if ( ( $ret = create_update_cron_dr -myPrimaryController $NcSecondaryCtrl -mySecondaryController $NcPrimaryCtrl ) -ne $True ) {
+    if ( ( $ret = create_update_cron_dr -myPrimaryController $NcSecondaryCtrl -mySecondaryController $NcPrimaryCtrl -myPrimaryVserver $VserverDR -mySecondaryVserver $Vserver -Backup $False -Restore $False) -ne $True ) {
         Write-LogError "ERROR: create_update_cron_dr"
     }
     if ( ( $ret = create_update_snap_policy_dr -myPrimaryController $NcSecondaryCtrl -mySecondaryController $NcPrimaryCtrl -myPrimaryVserver $VserverDR -mySecondaryVserver $Vserver) -ne $True ) {
