@@ -14,6 +14,10 @@ So SVMTOOL is now compatible under Windows, Linux and MacOS.
 
 To execute SVMTOOL under Linux or MacOS you must install the last PSTK v9.9.1 which compatible with Powershell Core.
 
+Currently do not use PSTK greater than v9.8 or v9.10
+
+Above that, it will try to make REST call and smvtool is not yet fully transitioned to be able to make a REST call.
+Stay tuned
 
 
 
