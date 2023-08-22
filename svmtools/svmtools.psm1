@@ -15590,8 +15590,8 @@ Try {
 		}
 	}
 
-	Write-LogDebug "Get-NcSnapmirror -SourceLocation $($myPrimaryVserver+":*") -DestinationLcation $($mySecondaryVserver+":*") -Controller $mySecondaryController"
-	$relationList = Get-NcSnapmirror -SourceLocation $($myPrimaryVserver+":*") -DestinationLcation $($mySecondaryVserver+":*") -Controller $mySecondaryController  -ErrorVariable ErrorVar
+	Write-LogDebug "Get-NcSnapmirror -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $mySecondaryController"
+	$relationList = Get-NcSnapmirror -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $mySecondaryController  -ErrorVariable ErrorVar
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
 	foreach ( $relation in ( $relationList | Skip-Null ) ) {
 		$MirrorState=$relation.MirrorState
@@ -15601,8 +15601,12 @@ Try {
 		$DestinationVolume=$DestinationLocation.split(":")[-1]
 		$RelationshipStatus=$relation.RelationshipStatus
 		$LastTransferEndTimestamp=$relation.LastTransferEndTimestamp
-		$LAG = get-lag ($LastTransferEndTimestamp)
-		Write-Log "[$mySecondaryVserver] Status relation [$SourceLocation] [$DestinationLocation]:[$RelationshipStatus] [$MirrorState] Lag: [$LAG]"
+        if($Global:PSTKCall -ne "Rest"){
+		    $LAG = get-lag ($LastTransferEndTimestamp)
+        }else{
+            $LAG=([System.Xml.XmlConvert]::ToTimeSpan($relation.LagTime)).TotalSeconds 
+        }
+		Write-Log "[$mySecondaryVserver] Status relation [$SourceLocation] [$DestinationLocation]:[$RelationshipStatus] [$MirrorState] Lag: [$LAG] seconds"
 	}
     Write-LogDebug "end"
 	return $Return 
