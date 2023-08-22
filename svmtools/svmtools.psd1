@@ -92,13 +92,14 @@
 #           Correct how to test if SVM source is alive to be compatible with and without Powershell Core
 #   1.4.2   Detect when service-policy should be used instead of firewall-policy if ONTAP 9.6 or greater
 #   1.5.0   Complete rewrite of Migrate, ActivateDR and ReActivateDR
+#   1.6.0   REST Transition
 @{
 
     # Script module or binary module file associated with this manifest.
     RootModule        = '.\svmtools.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.5.0'
+    ModuleVersion     = '1.6.0'
 
     # Supported PSEditions
     # CompatiblePSEditions = @()

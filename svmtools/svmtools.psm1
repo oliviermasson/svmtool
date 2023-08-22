@@ -88,10 +88,10 @@ function add_appender($loggerinstance,$appender){
 #############################################################################################
 function create_rolling_log_appender($name,$file,$Threshold="Info"){
     $rlf = new-object log4net.Appender.RollingFileAppender
-    $rlf.MaximumFileSize = "50MB"
+    $rlf.MaximumFileSize = "5MB"
     $rlf.Name = $name
     $rlf.File = $file
-    $rlf.RollingStyle = "Size"
+    $rlf.RollingStyle = "Once"
     $rlf.StaticLogFileName = $true
     $rlf.MaxSizeRollBackups = "20"
     $rlf.Layout = new-object log4net.Layout.PatternLayout("[%date{yyyy-MM-dd HH:mm:ss.fff}] [%level] %message%n")
@@ -1083,16 +1083,21 @@ Try {
 	#	throw "ERROR: ICMP Test-Connection [$myController] failed [$ErrorVar]"
 	#}
 	$Global:TimeoutMilliSeconds = $myTimeout * 1000
-
-	if ( $HTTP ) {
-		Write-LogDebug "Connect-NcController $myController -Credential $myCred -HTTP -Timeout $Global:TimeoutMilliSeconds"
-		$NcController =  Connect-NcController $myController -Credential $myCred -HTTP -Timeout $Global:TimeoutMilliSeconds  -ErrorVariable ErrorVar
-	} else {
-		Write-LogDebug "Connect-NcController $myController -Credential $myCred -HTTPS -Timeout $Global:TimeoutMilliSeconds"
-		$NcController =  Connect-NcController $myController -Credential $myCred -HTTPS -Timeout $Global:TimeoutMilliSeconds  -ErrorVariable ErrorVar
-	}
-	if ( $? -ne $True ) { throw "ERROR: Connect-NcController failed [$ErrorVar]" }
-	return $NcController 
+    
+    if ($Global:PSTKCall -ne "Rest") {
+        if ( $HTTP ) {
+            Write-LogDebug "Connect-NcController $myController -Credential $myCred -HTTP -Timeout $Global:TimeoutMilliSeconds"
+            $NcController =  Connect-NcController $myController -Credential $myCred -HTTP -Timeout $Global:TimeoutMilliSeconds  -ErrorVariable ErrorVar
+        } else {
+            Write-LogDebug "Connect-NcController $myController -Credential $myCred -HTTPS -Timeout $Global:TimeoutMilliSeconds"
+            $NcController =  Connect-NcController $myController -Credential $myCred -HTTPS -Timeout $Global:TimeoutMilliSeconds  -ErrorVariable ErrorVar
+        }
+    }else{
+        Write-LogDebug "Connect-NcController $myController -Credential $myCred -Timeout $Global:TimeoutMilliSeconds"
+        $NcController =  Connect-NcController $myController -Credential $myCred -Timeout $Global:TimeoutMilliSeconds  -ErrorVariable ErrorVar
+    }
+    if ( $? -ne $True ) { throw "ERROR: Connect-NcController failed [$ErrorVar]" }
+        return $NcController
 }
 
 Catch {
@@ -6136,7 +6141,12 @@ Try {
     if($Restore -eq $True){Write-LogDebug "run in Restore mode [$myPrimaryVserver]"}
 
     if ($Restore -eq $False){
-        $PrimaryVserver = Get-NcVserver -Controller $myPrimaryController -Name $myPrimaryVserver  -ErrorVariable ErrorVar 
+        Write-LogDebug "Get-NcVserver $myPrimaryVserver to retreive list of allowed protocols"
+        if($Global:PSTKCall -ne "Rest"){
+            $PrimaryVserver = Get-NcVserver -Controller $myPrimaryController -Name $myPrimaryVserver  -ErrorVariable ErrorVar 
+        }else{
+            $PrimaryVserver = Get-NcVserver -Controller $myPrimaryController -Name $myPrimaryVserver  -ErrorVariable ErrorVar -ONTAPI
+        }
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed for $myPrimaryVserver [$ErrorVar]" }
         if ( $null -eq $PrimaryVserver ) { $Return = $False ; throw "ERROR: Get-NcVserver failed for $myPrimaryVserver [$ErrorVar]" }
     }else{
@@ -6150,7 +6160,12 @@ Try {
     }
 
     if ($Backup -eq $False){
-        $SecondaryVserver = Get-NcVserver -Controller $mySecondaryController -Name $mySecondaryVserver  -ErrorVariable ErrorVar 
+        Write-LogDebug "Get-NcVserver $mySecondaryVserver to retreive list of allowed protocols"
+        if($Global:PSTKCall -ne "Rest"){
+            $SecondaryVserver = Get-NcVserver -Controller $mySecondaryController -Name $mySecondaryVserver  -ErrorVariable ErrorVar 
+        }else{
+            $SecondaryVserver = Get-NcVserver -Controller $mySecondaryController -Name $mySecondaryVserver  -ErrorVariable ErrorVar -ONTAPI
+        }
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed for $mySecondaryVserver [$ErrorVar]" }
         if ( $null -eq $SecondaryVserver ) { $Return = $False ; throw "ERROR: Get-NcVserver failed for $mySecondaryVserver [$ErrorVar]" }
 
@@ -6165,26 +6180,58 @@ Try {
 
         # Check AllowedProtocols
         Write-LogDebug "Check AllowedProtocols"
-        if($Global:PSTKCall -eq "Zapi"){
-            $tmpStrDiff1 = "" ; $tmpStrDiff2 = "" 
-            foreach ( $Protocol in ( $PrimaryAllowedProtocols | Skip-Null ) ) {
-                $tmpStrDiff1 += $Protocol
-            }
-            foreach ( $Protocol in ( $SecondaryAllowedProtocols | Skip-Null ) ) {
-                $tmpStrDiff2 += $Protocol
-            }
-            if ( $tmpStrDiff1 -ne $tmpStrDiff2 ) {
-                Write-LogWarn "Vserver Protocols difference: [$myPrimaryVserver] [$PrimaryAllowedProtocols] [$mySecondaryVserver] [$SecondaryAllowedProtocols] "
+        
+        $tmpStrDiff1 = "" ; $tmpStrDiff2 = "" 
+        foreach ( $Protocol in ( $PrimaryAllowedProtocols | Skip-Null ) ) {
+            $tmpStrDiff1 += $Protocol
+        }
+        foreach ( $Protocol in ( $SecondaryAllowedProtocols | Skip-Null ) ) {
+            $tmpStrDiff2 += $Protocol
+        }
+        if ( $tmpStrDiff1 -ne $tmpStrDiff2 ) {
+            Write-LogWarn "Vserver Protocols difference: [$myPrimaryVserver] [$PrimaryAllowedProtocols] [$mySecondaryVserver] [$SecondaryAllowedProtocols] "
+            if($Global:PSTKCall -ne "Rest"){
                 Write-LogDebug "Set-NcVserver -AllowedProtocols $PrimaryAllowedProtocols -Name $mySecondaryVserver -Controller $mySecondaryController"
                 $out=Set-NcVserver -AllowedProtocols $PrimaryAllowedProtocols -Name $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcVserver failed [$ErrorVar]" }
-            }
+            }else{
+                <# # REST does not support -AllowedProtocols parameter, need to address this by direct REST method
+                $CredSecondary=get_local_cDotcred($mySecondaryController)
+                $url=$("https://"+$mySecondaryController.Name+"/api/svm/svms?name="+$mySecondaryVserver)
+                Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $CredSecondary -SkipCertificateCheck"
+                $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $CredSecondary -SkipCertificateCheck -ErrorVariable ErrorVar
+                if($? -ne $True){
+                    Write-LogError "ERROR: Unable to get svm [$mySecondaryVserver] from [$mySecondaryController]" 
+                    return $False
+                }elseif($ret.num_records -eq 1){
+                    $svmUUID=$ret.records.uuid
+                }else{
+                    Write-LogError "ERROR: Unable to get svm [$mySecondaryVserver] from [$mySecondaryController]"
+                    return $False
+                }
+                $url=$("https://"+$mySecondaryController.Name+"/api/svm/svms/"+$svmUUID+"?fields=nfs,cifs,fcp,nvme,s3,iscsi,ndmp")
+                Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $CredSecondary -SkipCertificateCheck"
+                $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $CredSecondary -SkipCertificateCheck -ErrorVariable ErrorVar
+                if($? -ne $True){
+                    Write-LogError "ERROR: Unable to get svm protocols [fbody$mySecondaryVserver] from [$mySecondaryController]" 
+                    return $False
+                }elseif($ret.num_records -eq 1){
 
-            # Check and Update Vserver Parameters
-            if ( $SecondaryRootVolumeSecurityStyle -ne $SecondaryRootVolumeSecurityStyle ) {
-                Write-LogWarn "Not same RootVolumeSecuirtyStyle: [$myPrimaryVserver] [$SecondaryRootVolumeSecurityStyle] [$mySecondaryVserver] [$SecondaryRootVolumeSecurityStyle]"
+                }else{
+                    Write-LogError "ERROR: Unable to get svm protocols [$mySecondaryVserver] from [$mySecondaryController]"
+                    return $False
+                } #>
+                Write-LogDebug "set_vserver_protocols_with_rest -myVserver $mySecondaryVserver -allowedProtocols $PrimaryAllowedProtocols -myController $mySecondaryController"
+                $out=set_vserver_protocols_with_rest -myVserver $mySecondaryVserver -allowedProtocols $PrimaryAllowedProtocols -myController $mySecondaryController
+                if( $out -ne $True ) { $Return = $False ; throw "ERROR: set_vserver_protocols_with_rest failed" }
             }
         }
+
+        # Check and Update Vserver Parameters
+        if ( $SecondaryRootVolumeSecurityStyle -ne $SecondaryRootVolumeSecurityStyle ) {
+            Write-LogWarn "Not same RootVolumeSecurityStyle: [$myPrimaryVserver] [$PrimaryRootVolumeSecurityStyle] vs [$mySecondaryVserver] [$SecondaryRootVolumeSecurityStyle]"
+        }
+        
         if ( $PrimaryLanguage -ne $SecondaryLanguage  ) {
             Write-LogWarn "Vserver Language difference: [$myPrimaryVserver] [$PrimaryLanguage] [$mySecondaryVserver] [$SecondaryLanguage] " 
             Write-LogDebug "Set-NcVserver -Language $PrimaryLanguage -Name $mySecondaryVserver -Controller $mySecondaryController"
@@ -8589,14 +8636,14 @@ Try {
 	Write-LogDebug "start"
 	$PrimaryPeer=Get-NcClusterPeer -Name $mySecondaryCluster -Controller $myPrimaryController  -ErrorVariable ErrorVar
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcClusterPeer failed [$ErrorVar]" } 
-	if ( $PrimaryPeer -eq $null ) {
+	if ( $null -eq $PrimaryPeer ) {
 		Write-LogError "ERROR: No Cluster Peer available from cluster [$myPrimaryController] to cluster [$mySecondaryController]" 
 		Write-LogError "ERROR: Please check your cluster peer before using SVMDR " 
 		clean_and_exit 2
 	}		
 	$SecondaryPeer=Get-NcClusterPeer -Name $myPrimaryCluster -Controller $mySecondaryController  -ErrorVariable ErrorVar	
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcClusterPeer failed [$ErrorVar]" } 
-	if ( $SecondaryPeer -eq $null ) {
+	if ( $null -eq $SecondaryPeer ) {
 		Write-LogError "ERROR: No Cluster Peer available from cluster [$mySecondaryController] to cluster [$myPrimaryController]" 
 		Write-LogError "ERROR: Please check your cluster peer before using SVMDR " 
 		clean_and_exit 2
@@ -8608,7 +8655,7 @@ Try {
 	Write-LogDebug "PrimaryAvailability  [$PrimaryAvailability] "
 	Write-LogDebug "SecondaryAvailability [$SecondaryAvailability] "
 
-	if ( ( $PrimaryAvailability -ne 'available' ) -or ( $SecondaryAvailability  -ne 'available' ) ) {
+	if ( ( $PrimaryAvailability -notmatch "available|partial" ) -or ( $SecondaryAvailability  -notmatch "available|partial" ) ) {
 		Write-LogError "ERROR: Peer relation error between Clusters [$myPrimaryController] and [$mySecondaryController] " 
 		Write-LogError "ERROR: Please check your cluster peer before using SVMDR "
 		clean_and_exit 1
@@ -8886,12 +8933,10 @@ Function set_snapmirror_schedule_dr(
         $relationList = Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":*") -Controller $mySecondaryController  -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
         foreach ( $relation in ( $relationList | Skip-Null ) ) {
-            $MirrorState=$relation.MirrorState
-            $SourceVolume=$relation.SourceVolume
-            $DestinationVolume=$relation.DestinationVolume
             $SourceLocation=$relation.SourceLocation
+            $SourceVolume=$SourceLocation.split(':')[-1]
             $DestinationLocation=$relation.DestinationLocation
-            $RelationshipStatus=$relation.RelationshipStatus
+            $DestinationVolume=$DestinationLocation.split(':')[-1]
             $CurrentSchedule=$relation.Schedule
             if($CurrentSchedule -ne $mySchedule){
                 $message=[string]::Format("{0,-10} Set schedule {1,-15} on {2,-35} --> {3,-35}",`
@@ -8944,12 +8989,28 @@ Try {
             $relationList = Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":*") -Controller $mySecondaryController  -ErrorVariable ErrorVar
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
 	foreach ( $relation in ( $relationList | Skip-Null ) ) {
-		$MirrorState=$relation.MirrorState
-		$SourceVolume=$relation.SourceVolume
-		$DestinationVolume=$relation.DestinationVolume
-		$SourceLocation=$relation.SourceLocation
+        $SourceLocation=$relation.SourceLocation
 		$DestinationLocation=$relation.DestinationLocation
-		$RelationshipStatus=$relation.RelationshipStatus
+		$SourceVolume=$SourceLocation.split(':')[-1]
+		$DestinationVolume=$DestinationLocation.split(':')[-1]
+        if($Global:PSTKCall -ne "Rest"){
+		    $MirrorState=$relation.MirrorState
+		    $RelationshipStatus=$relation.RelationshipStatus
+        }else{
+            # ! Private CLI REST request necessary to get correct relationship-status
+            $SecondaryCredential = get_local_cDotcred($mySecondaryController)
+            $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/snapmirror?source-path="+$SourceLocation+"&destination-path="+$DestinationLocation+"&fields=state,status")
+            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
+            $SnapmirrorRelationshipStatus=Invoke-RestMethod -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+            if($? -ne $True){
+                Write-LogError "ERROR: Unable to get snapmirror relationship status. Reason [$ErrorVar]"
+                Write-LogDebug "[$workOn]: end"
+                return $False
+            }elseif($SnapmirrorRelationshipStatus.num_records -gt 0){
+                $MirrorState=$SnapmirrorRelationshipStatus.records[0].state
+                $RelationshipStatus=$SnapmirrorRelationshipStatus.records[0].status
+            }
+        }
 		if ( ( $MirrorState -match "broken-off|broken_off" ) -and ( $RelationshipStatus -eq "idle" ) ) {
 			Write-LogDebug "Relation [$SourceLocation] --> [$DestinationLocation] is [$MirrorState] [$RelationshipStatus] "
 		} else {
@@ -9740,12 +9801,26 @@ Try {
         $relationList = Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":*") -Controller $mySecondaryController  -ErrorVariable ErrorVar
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
 	foreach ( $relation in ( $relationList  | Skip-Null ) ) {
-			$MirrorState=$relation.MirrorState
-			$SourceVolume=$relation.SourceVolume
-			$DestinationVolume=$relation.DestinationVolume
 			$SourceLocation=$relation.SourceLocation
+            $SourceVolume=$SourceLocation.split(':')[-1]
 			$DestinationLocation=$relation.DestinationLocation
-			$MirrorState=$relation.MirrorState	
+            $DestinationVolume=$DestinationLocation.split(':')[-1]
+			$MirrorState=$relation.$MirrorState
+            if($Global:PSTKCall -eq "Rest"){
+                # ! Private CLI REST request necessary to get correct relationship-status
+                $SecondaryCredential = get_local_cDotcred($mySecondaryController)
+                $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/snapmirror?source-path="+$SourceLocation+"&destination-path="+$DestinationLocation+"&fields=state,status")
+                Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
+                $SnapmirrorRelationshipStatus=Invoke-RestMethod -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+                if($? -ne $True){
+                    Write-LogError "ERROR: Unable to get snapmirror relationship status. Reason [$ErrorVar]"
+                    Write-LogDebug "[$workOn]: end"
+                    return $False
+                }elseif($SnapmirrorRelationshipStatus.num_records -gt 0){
+                    $MirrorState=$SnapmirrorRelationshipStatus.records[0].state
+                    $RelationshipStatus=$SnapmirrorRelationshipStatus.records[0].status
+                }
+            }
 			Write-Log "[$mySecondaryVserver] remove snapmirror relation for volume [$SourceLocation] --> [$DestinationLocation]"
 			if ( $MirrorState -eq 'snapmirrored' ) {
                 Write-LogDebug "Invoke-NcSnapmirrorQuiesce -DestinationCluster $mySecondaryCluster -DestinationVserver $mySecondaryVserver -DestinationVolume  $DestinationVolume -SourceCluster $myPrimaryCluster -SourceVserver $myPrimaryVserver  -SourceVolume $SourceVolume  -Controller  $mySecondaryController -Confirm:$False"
@@ -9777,21 +9852,15 @@ Try {
 	}
 	
     if($NoRelease -eq $False){
-        if($Global:PTSKCall -ne "Rest"){
-            Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -VserverContext $myPrimaryVserver -Controller $myPrimaryController"
-            $relationList=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
-            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
-        }else{
-            Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -VserverContext $myPrimaryVserver -Controller $myPrimaryController -ZapiCall"
-            $relationList=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -VserverContext $myPrimaryVserver -Controller $myPrimaryController -ZapiCall -ErrorVariable ErrorVar
-            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
-        }
-	    foreach ( $relation in ( $relationList | Skip-Null ) ) {
+        Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -VserverContext $myPrimaryVserver -Controller $myPrimaryController"
+        $relationList=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
+        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
+        foreach ( $relation in ( $relationList | Skip-Null ) ) {
             $MirrorState=$relation.MirrorState
-            $SourceVolume=$relation.SourceVolume
-            $DestinationVolume=$relation.DestinationVolume
             $SourceLocation=$relation.SourceLocation
+            $SourceVolume=$SourceLocation.split(':')[-1]
             $DestinationLocation=$relation.DestinationLocation
+            $DestinationVolume=$DestinationLocation.split(':')[-1]
             $RelationshipId=$relation.RelationshipId
             $RelationshipGroupType=$relation.RelationshipGroupType
             <# if( ( $RelationshipGroupType -eq "flexgroup" ) -and ( $Global:Run_Mode -ne "DeleteDR" ) ){
@@ -12238,7 +12307,13 @@ Try {
                     $InterfaceMasterCurrentPort=$InterfaceMaster.CurrentPort
                     if ($SecondaryCifsLifCustomVlan) {
                         Write-Log "[$workOn] a custom vlan has been provided for the temp cifs lif [$SecondaryCifsLifCustomVlan]"
-                        $SecondaryCifsLifCustomVlanPort = Get-NcNetPortVlan -VlanId $SecondaryCifsLifCustomVlan -Node $InterfaceMasterCurrentNode -Controller $mySecondaryController
+                        if($Global:PSTKCall -ne "Rest"){
+                            Write-LogDebug "Get-NcNetPortVlan -VlanId $SecondaryCifsLifCustomVlan -Node $InterfaceMasterCurrentNode -Controller $mySecondaryController"
+                            $SecondaryCifsLifCustomVlanPort = Get-NcNetPortVlan -VlanId $SecondaryCifsLifCustomVlan -Node $InterfaceMasterCurrentNode -Controller $mySecondaryController -ErrorVariable ErrorVar
+                        }else{
+                            Write-LogDebug "Get-NcNetPortVlan -VlanId $SecondaryCifsLifCustomVlan -Node $InterfaceMasterCurrentNode -Controller $mySecondaryController -ONTAPI"
+                            $SecondaryCifsLifCustomVlanPort = Get-NcNetPortVlan -VlanId $SecondaryCifsLifCustomVlan -Node $InterfaceMasterCurrentNode -Controller $mySecondaryController -ONTAPI -ErrorVariable ErrorVar
+                        }
                         if ( $? -ne $True ) {
                             $Return = $False ; throw "ERROR: Get-NcNetPortVlan failed [$ErrorVar]" 
                         }
@@ -13219,7 +13294,7 @@ $request=@"
                                 }
                             } 
                         }else{
-                            # ! need to switch to Direct REST request to include all ACL during the creation
+                            # ! need to switch to Direct REST request to include all ACL during the creation of a CIFS share
                             $CredSecondary=get_local_cDotcred($mySecondaryController)
                             $CredPrimary=get_local_cDotcred($myPrimaryController)
                             $url=$("https://"+$myPrimaryController.Name+"/api/protocols/cifs/shares?svm.name="+$myPrimaryVserver+"&fields=**,!volume.uuid,!_links&name="+$PrimaryShareName)
@@ -13235,9 +13310,10 @@ $request=@"
                                 continue
                             }
                             $url=$("https://"+$mySecondaryController.Name+"/api/protocols/cifs/shares?return_records=true")
-                            $DestinatonShareDetails=$PrimaryShareDetails | Select-Object -ExcludeProperty svm,volume
-                            $DestinatonShareDetails | Add-Member -MemberType NoteProperty -name "svm" -value @{"name"=$mySecondaryVserver}
-                            $body=$DestinatonShareDetails | ConvertTo-Json
+                            $DestinationShareDetails=$PrimaryShareDetails | Select-Object -ExcludeProperty svm,volume,browsable,show_previous_versions
+                            $DestinationShareDetails | Add-Member -MemberType NoteProperty -name "svm" -value @{"name"=$mySecondaryVserver}
+                            #$DestinationShareDetails=$DestinationShareDetails | Select-Object -Property * -ExcludeProperty browsable,show_previous_version
+                            $body=$DestinationShareDetails | ConvertTo-Json
                             Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
                             $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
                             if($? -eq $True -and $ret.num_records -eq 1){
@@ -13648,12 +13724,14 @@ Function show_vserver_dr (
             $mySecondaryCluster = (Get-NcCluster -Controller $mySecondaryController  -ErrorVariable ErrorVar).ClusterName
             $SecondaryVserver = Get-NcVserver -Controller $mySecondaryController -Name $mySecondaryVserver  -ErrorVariable ErrorVar 
         }
-        if ( $null -eq $PrimaryVserver ) 
-        {
+        if ( $null -eq $PrimaryVserver ) {
             Write-LogError "ERROR: vserver [$myPrimaryVserver] does not exist on Primary Cluster [$myPrimaryController]. Create it or use another Instance in opposite direction"
-        } 
-        else  
-        {
+            clean_and_exit 1
+        }elseif ($PrimaryVserver.OperationalState -eq "stopped") {
+            Write-LogError "ERROR: vserverDR [$myPrimaryVserver] is in stopped state. Please restart it before running svmtool"
+            clean_and_exit 1
+        }
+        else {
             if( (Is_SelectVolumedb $myPrimaryController $mySecondaryController $myPrimaryVserver $mySecondaryVserver) -eq $True ){
                 $SelectVolumeConf=$True    
             }else{
@@ -13764,14 +13842,14 @@ Function show_vserver_dr (
                 {
                     $CIFSSTATUS= '[up] ['+$CifServerName+'] ['+$CifServerDomain+'] ['+$CifServerOU+']'
                     Format-ColorBrackets -ForceColor Green "CIFS Services          : $CIFSSTATUS"
-                    $NumberOfPrimaryCifsShares = (Get-NcCifsShare -CifsServer $CifsServerName -VserverContext $myPrimaryVserver -Controller $myPrimaryController).count
+                    $NumberOfPrimaryCifsShares = (Get-NcCifsShare -CifsServer $CifsServerName -VserverContext $myPrimaryVserver -Controller $myPrimaryController | Where-Object { $_.ShareName -ne "ONTAP_ADMIN$" }).count
                     Format-ColorBrackets -ForceColor Green "CIFS Shares            : [$NumberOfPrimaryCifsShares]"
                 } 
                 else 
                 {
                     $CIFSSTATUS= '[down] ['+$CifServerName+'] ['+$CifServerDomain+'] ['+$CifServerOU+']'
                     Format-ColorBrackets -ForceColor Red "CIFS Services          : $CIFSSTATUS"
-                    $NumberOfPrimaryCifsShares = (Get-NcCifsShare -CifsServer $CifsServerName -VserverContext $myPrimaryVserver -Controller $myPrimaryController).count
+                    $NumberOfPrimaryCifsShares = (Get-NcCifsShare -CifsServer $CifsServerName -VserverContext $myPrimaryVserver -Controller $myPrimaryController | Where-Object { $_.ShareName -ne "ONTAP_ADMIN$" }).count
                     Format-ColorBrackets -ForceColor Red "CIFS Shares            : [$NumberOfPrimaryCifsShares]"
                 }
             }
@@ -13795,13 +13873,15 @@ Function show_vserver_dr (
             Write-Log ""
         }
 
-        if ( $null -eq $SecondaryVserver ) 
-        {
+        if ( $null -eq $SecondaryVserver ) {
             Write-LogError "ERROR: vserverDR [$mySecondaryVserver] does not exist on Destination Cluster [$mySecondaryController]. Create it with New-SvmDr"
             clean_and_exit 1
+        }
+        elseif ( $SecondaryVserver.OperationalState -eq "stopped" ) {
+            Write-LogError "ERROR: vserverDR [$mySecondaryVserver] is in stopped state. Please restart it before running svmtool"
+            clean_and_exit 1
         } 
-        else 
-        {
+        else {
             $SecondaryRootVolume = $SecondaryVserver.RootVolume
             $SecondaryRootVolumeSecurityStyle = $SecondaryVserver.RootVolumeSecurityStyle
             $SecondaryLanguage = $SecondaryVserver.Language
@@ -13891,11 +13971,12 @@ Function show_vserver_dr (
             $CifServerOU=$CifService.OrganizationalUnit
             if ( $null -eq $CifService ) {
                 Format-ColorBrackets "CIFS Services          : [no]"
-            } else {
+            } 
+            else {
                 if ( $CifService.AdministrativeStatus -eq 'up' ) {
                     $CIFSSTATUS= '[up] ['+$CifServerName+'] ['+$CifServerDomain+'] ['+$CifServerOU+']'
                     Format-ColorBrackets -ForceColor Green "CIFS Services          : $CIFSSTATUS"
-                    $NumberOfSecondaryCifsShares = (Get-NcCifsShare -CifsServer $CifsServerName -VserverContext $mySecondaryVserver -Controller $mySecondaryController).count
+                    $NumberOfSecondaryCifsShares = (Get-NcCifsShare -CifsServer $CifsServerName -VserverContext $mySecondaryVserver -Controller $mySecondaryController | Where-Object { $_.ShareName -ne "ONTAP_ADMIN$" }).count
                     if( ( $PrimaryCifsExists -eq $True ) -and ( $NumberOfPrimaryCifsShares -ne $NumberOfSecondaryCifsShares ) ){
                         Format-ColorBrackets -ForceColor Red "CIFS Shares            : [$NumberOfSecondaryCifsShares]"
                     }else{
@@ -13904,7 +13985,7 @@ Function show_vserver_dr (
                 } else {
                     $CIFSSTATUS= '[down] ['+$CifServerName+'] ['+$CifServerDomain+'] ['+$CifServerOU+']'
                     Format-ColorBrackets -ForceColor Red "CIFS Services          : $CIFSSTATUS"
-                    $NumberOfSecondaryCifsShares = (Get-NcCifsShare -CifsServer $CifsServerName -VserverContext $mySecondaryVserver -Controller $mySecondaryController).count
+                    $NumberOfSecondaryCifsShares = (Get-NcCifsShare -CifsServer $CifsServerName -VserverContext $mySecondaryVserver -Controller $mySecondaryController | Where-Object { $_.ShareName -ne "ONTAP_ADMIN$" }).count
                     Format-ColorBrackets -ForceColor Red "CIFS Shares            : [$NumberOfSecondaryCifsShares]"
                 }
             }
@@ -14081,8 +14162,6 @@ Function show_vserver_dr (
             Format-ColorBrackets  "---------------------"
             foreach ( $relation in ( $relationList | Skip-Null ) ) {
                 $MirrorState=$relation.MirrorState
-                $SourceVolume=$relation.SourceVolume
-                $DestinationVolume=$relation.DestinationVolume
                 $SourceLocation=$relation.SourceLocation
                 $DestinationLocation=$relation.DestinationLocation
                 $RelationshipStatus=$relation.RelationshipStatus
@@ -14169,10 +14248,10 @@ Function show_vserver_dr (
             Format-ColorBrackets  "-------------------------------"
             foreach ( $relation in ( $relationList | Skip-Null ) ) {
                 $MirrorState=$relation.MirrorState
-                $SourceVolume=$relation.SourceVolume
-                $DestinationVolume=$relation.DestinationVolume
                 $SourceLocation=$relation.SourceLocation
+                $SourceVolume=$SourceLocation.split(':')[-1]
                 $DestinationLocation=$relation.DestinationLocation
+                $DestinationVolume=$DestinationLocation.split(':')[-1]
                 $RelationshipStatus=$relation.RelationshipStatus
                 $RelationType=$relation.RelationshipType
                 $RelationPolicy=$relation.Policy
@@ -14189,7 +14268,24 @@ Function show_vserver_dr (
                 $ReverseRelationHealth=$relation.IsHealthy
                 $SmSchedule=$relation.Schedule
                 $LagTime =$relation.LagTime
-                $LagTimeDate=(Get-Date).AddSeconds(-$LagTime)
+                if($Global:PSTKCall -eq "Rest"){
+                    $Credential=get_local_cDotcred($myPrimaryController)
+                    $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/snapmirror?source-path="+$SourceLocation+"&destination-path="+$DestinationLocation+"&fields=state,status,type,schedule")
+                    Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+                    $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                    if($? -ne $True){
+                        Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
+                    }elseif($ret.num_records -gt 0){
+                        $Type=$ret.records[0].type
+                        $MirrorState=$ret.records[0].status
+                        $SmSchedule=$ret.records[0].schedule
+                    }else{
+                        $Type=$null
+                    }
+                    $LagTimeDate=$LagTime -replace "PT",""
+                }else{
+                    $LagTimeDate=(Get-Date).AddSeconds(-$LagTime)
+                }
                 $tmp_str = ""  
                 if ( $Lag ) { $tmp_str = $tmp_str + "[$LagTimeDate]"  }
                 if ( $Schedule ) { $tmp_str = $tmp_str + "[$SmSchedule]"  }
@@ -14236,7 +14332,12 @@ Function show_vserver_dr (
             Write-LogDebug "No Vserver Clone from [$VserverDR] found on Cluster [$SECONDARY_CLUSTER]" 
         }
         foreach ($CloneVserver in $CloneVserverList){
-            $myClone=Get-NcVserver -Name $CloneVserver -Controller $mySecondaryController
+            Write-LogDebug "Force Get-NcVserver $CloneVserver to use ZAPI only"
+            if($Global:PSTKCall -ne "Rest"){
+                $myClone=Get-NcVserver -Name $CloneVserver -Controller $mySecondaryController
+            }else{
+                $myClone=Get-NcVserver -Name $CloneVserver -Controller $mySecondaryController -ONTAPI
+            }
             display_clone_vserver -myController $mySecondaryController -myVserver $myClone
         }
         return $Return
@@ -14348,8 +14449,13 @@ Try {
             clean_and_exit 1
         }
     }
-    Write-LogDebug "Set-NcVserver -Name $mySecondaryVserver -AllowedProtocols $PrimaryAllowedProtocols -Controller $mySecondaryController"
-    $NewVserver=Set-NcVserver -AllowedProtocols $PrimaryAllowedProtocols -Name $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+    if($Global:PSTKCall -ne "Rest"){
+        Write-LogDebug "Set-NcVserver -Name $mySecondaryVserver -AllowedProtocols $PrimaryAllowedProtocols -Controller $mySecondaryController"
+        $NewVserver=Set-NcVserver -AllowedProtocols $PrimaryAllowedProtocols -Name $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+    }else{
+        Write-LogDebug "set_vserver_protocols_with_rest -myVserver $mySecondaryVserver -allowedProtocols $PrimaryAllowedProtocols -myController $mySecondaryController"
+        $NewVserver=set_vserver_protocols_with_rest -myVserver $mySecondaryVserver -allowedProtocols $PrimaryAllowedProtocols -myController $mySecondaryController
+    }
     if ( $? -ne $True ) {
         Write-LogError "ERROR: Failed to modify vserver $mySecondaryVserver on $mySecondaryController"  
         Write-LogError "ERROR: exit" 
@@ -14426,6 +14532,72 @@ Try {
 }
 }
 
+############################################################################################
+# Set vserver allowed protocols with REST API
+Function set_vserver_protocols_with_rest (  
+    [string]$myVserver,
+    [string[]]$allowedProtocols,
+    [NetApp.Ontapi.Filer.C.NcController]$myController
+    ){
+
+    # 1) get SVM UUID
+    $myCred=get_local_cDotcred($myController)
+    $url=$("https://"+$myController.Name+"/api/svm/svms?name="+$myVserver)
+    Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $myCred -SkipCertificateCheck"
+    $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $myCred -SkipCertificateCheck -ErrorVariable ErrorVar
+    if($? -ne $True){
+        Write-LogError "ERROR: Unable to get svm [$myVserver] from [$myController]" 
+        return $False
+    }elseif($ret.num_records -eq 1){
+        $svmUUID=$ret.records.uuid
+    }else{
+        Write-LogError "ERROR: Unable to get svm [$myVserver] from [$myController]"
+        return $False
+    }
+    # 2) Path SVM UUID with generated json body for all allowed protocols
+    $body=@{}
+    #$body=$allowedProtocols | ConvertTo-Json
+    foreach ( $protocol in $allowedProtocols ){
+        $body[$protocol]=@{allowed=$True}
+    }
+    $body=$body | ConvertTo-Json
+    $url=$("https://"+$myController.Name+"/api/svm/svms/"+$svmUUID)
+    Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $myCred -SkipCertificateCheck"
+    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $myCred -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+    if($? -ne $True){
+        Write-LogError "ERROR: Unable to get svm protocols [$myVserver] from [$myController]" 
+        return $False
+    }
+    # 3) Wait Job end
+    $JobUuid=$ret.job.uuid
+    $StartTime=Get-date
+    $Timeout=$False
+    $JobDone=$False
+    While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+        $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
+        if($JobDetail.JobCompletion -eq "success"){
+            $JobDone=$True
+            break
+        }else{
+            $JobStatus=$JobDetail.JobState
+            Write-LogDebug "[$workOn] Update Vserver allowed-protocols job status [$JobStatus]"
+            if($JobStatus -eq "failure"){
+                $JobCompletion=$JobDetail.JobCompletion
+                Write-LogError "[$workOn] Update Vserver allowed-protocols failed [$JobCompletion]"
+                break
+            }
+        }
+        $CurrentTime=Get-date
+        $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+        if($TimeSpend -gt 10){
+            Write-LogWarn "[$workOn] Update Vserver allowed-protocols job take too much time. Check in Ontap its status"
+            $Timeout=$True
+        }
+    }
+    return $True
+
+}
+
 #############################################################################################
 Function create_vserver_dr (
     [NetApp.Ontapi.Filer.C.NcController]$myPrimaryController,
@@ -14473,16 +14645,16 @@ Try {
             }
         }else{
             $PrimaryCredential = get_local_cDotcred($myPrimaryController)
-            $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/vserver?vserver="+$myPrimaryVserver+"&fields=rootvolume,aggregate,rootvolume_security_style")
+            $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/vserver?vserver="+$myPrimaryVserver+"&fields=rootvolume,aggregate,rootvolume_security_style,allowed_protocols")
             Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck"
             $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: Unable to get svm rootvolume name. Reason [$ErrorVar]" 
             }else{
-                $PrimaryRootVolume=$ret.records[0].rootvolume
-                $PrimaryVserver.RootVolume=$PrimaryRootVolume
-                $PrimaryRootVolumeAggr = $ret.records[0].aggregate
-                $PrimaryRootVolumeSecurityStyle = $ret.records[0].rootvolume_security_style
+                $PrimaryVserver.RootVolume=$ret.records[0].rootvolume
+                $PrimaryVserver.RootVolumeAggregate=$ret.records[0].aggregate
+                $PrimaryVserver.RootVolumeSecurityStyle=$ret.records[0].rootvolume_security_style
+                $PrimaryVserver.AllowedProtocols=$ret.records[0].allowed_protocols
             }
         }
     }
@@ -14507,19 +14679,30 @@ Try {
     }
 
     if($Backup -eq $False){
-        if($Global:PSTKCall -ne "Rest"){
-            $PrimaryRootVolume = $PrimaryVserver.RootVolume
-            $PrimaryRootVolumeAggr = (get-ncvol -Vserver $myPrimaryVserver -Controller $myPrimaryController -Name $PrimaryRootVolume).Aggregate
-            $PrimaryRootVolumeSecurityStyle = $PrimaryVserver.RootVolumeSecurityStyle
-        }
+        $PrimaryRootVolume = $PrimaryVserver.RootVolume
+        $PrimaryRootVolumeAggr = $PrimaryVserver.RootVolumeAggregate
+        $PrimaryRootVolumeSecurityStyle = $PrimaryVserver.RootVolumeSecurityStyle
         $PrimaryLanguage = $PrimaryVserver.Language
         $PrimaryIPSpace = $PrimaryVserver.Ipspace
         $PrimaryAllowedProtocols=$PrimaryVserver.AllowedProtocols
         $PrimaryComment=$PrimaryVserver.Comment
         $SecondaryVserver = Get-NcVserver -Controller $mySecondaryController -Name $mySecondaryVserver  -ErrorVariable ErrorVar 
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" }
-        if ( $null -ne $SecondaryVserver ) 
-        {
+        if($Global:PSTKCall -eq "Rest"){
+            $SecondaryCredential = get_local_cDotcred($mySecondaryController)
+            $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/vserver?vserver="+$mySecondaryVserver+"&fields=rootvolume,aggregate,rootvolume_security_style,allowed_protocols")
+            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
+            $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+            if($? -ne $True){
+                Write-LogError "ERROR: Unable to get svm rootvolume name. Reason [$ErrorVar]" 
+            }else{
+                $SecondaryVserver.RootVolume=$ret.records[0].rootvolume
+                $SecondaryVserver.RootVolumeAggregate=$ret.records[0].aggregate
+                $SecondaryVserver.RootVolumeSecurityStyle=$ret.records[0].rootvolume_security_style
+                $SecondaryVserver.AllowedProtocols=$ret.records[0].allowed_protocols
+            }
+        }
+        if ( $null -ne $SecondaryVserver ) {
             Write-Log "[$mySecondaryVserver] Already exists on $mySecondaryController"
             # $SecondaryRootVolume = $SecondaryVserver.RootVolume
             # $SecondaryRootVolumeSecurityStyle = $SecondaryVserver.RootVolumeSecurityStyle
@@ -14529,9 +14712,7 @@ Try {
             $SecondaryNameServerSwitch=$SecondaryVserver.NameServerSwitch
             $SecondaryComment=$SecondaryVserver.Comment	
             $SecondaryRootVolumeAggregate=$SecondaryVserver.RootVolumeAggregate
-        } 
-        else 
-        {
+        }else {
             Write-Log "[$workOn] Create new vserver"
             $Question = "[$workOn] Please Select root aggregate on Cluster [$MySecondaryController]:"
 
@@ -14571,8 +14752,7 @@ Try {
                     clean_and_exit 1
                 }
             }else{ # Rest Mode
-                # * Set-NcVserver does not support -RootVolume -RootVolumeAggregate -RootVolumeSecurityStyle argument
-                # TODO will need to check if an automaticaly created rootvolume name will not impact junction path volume, by example
+                # * Set-NcVserver does not support -RootVolume -RootVolumeAggregate -RootVolumeSecurityStyle and allowed_protocols arguments
                 Write-Log "[$workOn] Create DR Vserver [$PrimaryLanguage] [$mySecondaryController] [$RootAggr]"
                 Write-LogDebug "New-NcVserver -Name $mySecondaryVserver -Comment $SecondaryComment -Language $PrimaryLanguage -NameServerSwitch file -Ipspace $PrimaryIPSpace -Controller $mySecondaryController"
                 $NewVserver=New-NcVserver -Name $mySecondaryVserver -Comment $SecondaryComment -Language $PrimaryLanguage -NameServerSwitch files -Ipspace $PrimaryIPSpace -Controller $mySecondaryController -ErrorVariable ErrorVar
@@ -14582,14 +14762,16 @@ Try {
                     clean_and_exit 1
                 }    
                 $SecondaryCredential = get_local_cDotcred($mySecondaryController)
-                $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/vserver?vserver="+$mySecondaryVserver+"&fields=rootvolume,aggregate,rootvolume_security_style")
+                $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/vserver?vserver="+$mySecondaryVserver+"&fields=rootvolume,aggregate,rootvolume_security_style,allowed_protocols")
                 Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
                 $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
                 if($? -ne $True){
                     Write-LogError "ERROR: Unable to get svm rootvolume name. Reason [$ErrorVar]" 
                 }else{
-                    $SecondaryRootVolume=$ret.records[0].rootvolume
-                    $SecondaryRootVolumeSecurityStyle = $ret.records[0].rootvolume_security_style
+                    $SecondaryVserver.RootVolume=$ret.records[0].rootvolume
+                    $SecondaryVserver.RootVolumeSecurityStyle = $ret.records[0].rootvolume_security_style
+                    $SecondaryVserver.RootVolumeAggregate = $ret.records[0].aggregate
+                    $SecondaryVserver.AllowedProtocols = $ret.records[0].allowed_protocols
                 } 
 
             } 
@@ -14601,10 +14783,8 @@ Try {
                 Write-LogError "ERROR: exit" 
                 clean_and_exit 1
             } else {
-                if($Global:PSTKCall -ne "Rest"){
-                    $SecondaryRootVolume = $SecondaryVserver.RootVolume
-                    $SecondaryRootVolumeSecurityStyle = $SecondaryVserver.RootVolumeSecurityStyle
-                }
+                $SecondaryRootVolume = $SecondaryVserver.RootVolume
+                $SecondaryRootVolumeSecurityStyle = $SecondaryVserver.RootVolumeSecurityStyle
                 $SecondaryLanguage = $SecondaryVserver.Language
                 $SecondaryAllowedProtocols=$SecondaryVserver.AllowedProtocols
                 $SecondaryNameMappingSwitch=$SecondaryVserver.NameMappingSwitch
@@ -15415,10 +15595,10 @@ Try {
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
 	foreach ( $relation in ( $relationList | Skip-Null ) ) {
 		$MirrorState=$relation.MirrorState
-		$SourceVolume=$relation.SourceVolume
-		$DestinationVolume=$relation.DestinationVolume
 		$SourceLocation=$relation.SourceLocation
 		$DestinationLocation=$relation.DestinationLocation
+        $SourceVolume=$SourceLocation.split(":")[-1]
+		$DestinationVolume=$DestinationLocation.split(":")[-1]
 		$RelationshipStatus=$relation.RelationshipStatus
 		$LastTransferEndTimestamp=$relation.LastTransferEndTimestamp
 		$LAG = get-lag ($LastTransferEndTimestamp)
@@ -16385,12 +16565,22 @@ try{
                     $InterfaceMasterCurrentPort=$InterfaceMaster.CurrentPort
                     if ($SecondaryCifsLifCustomVlan) {
                         Write-Log "[$workOn] a custom vlan has been provided for the temp cifs lif [$SecondaryCifsLifCustomVlan]"
-                        $SecondaryCifsLifCustomVlanPort = Get-NcNetPortVlan -VlanId $SecondaryCifsLifCustomVlan -Node $InterfaceMasterCurrentNode -Controller $mySecondaryController
+                        if($Global:PSTKCall -ne "Rest"){
+                            Write-LogDebug("Get-NcNetPortVlan -VlanId $SecondaryCifsLifCustomVlan -Node $InterfaceMasterCurrentNode -Controller $mySecondaryController")
+                            $SecondaryCifsLifCustomVlanPort = Get-NcNetPortVlan -VlanId $SecondaryCifsLifCustomVlan -Node $InterfaceMasterCurrentNode -Controller $mySecondaryController -ErrorVariable ErrorVar
+                        }else{
+                            Write-LogDebug("Get-NcNetPortVlan -VlanId $SecondaryCifsLifCustomVlan -Node $InterfaceMasterCurrentNode -Controller $mySecondaryController -ONTAPI")
+                            $SecondaryCifsLifCustomVlanPort = Get-NcNetPortVlan -VlanId $SecondaryCifsLifCustomVlan -Node $InterfaceMasterCurrentNode -Controller $mySecondaryController -ONTAPI -ErrorVariable ErrorVar
+                        }
                         if ( $? -ne $True ) {
                             $Return = $False ; throw "ERROR: Get-NcNetPortVlan failed [$ErrorVar]" 
                         }
                         Write-Log ("[$workOn] Custom vlan found [{0}], using this port instead of the temp cifs lif" -f $SecondaryCifsLifCustomVlanPort.InterfaceName)
-                        $InterfaceMasterCurrentPort = $SecondaryCifsLifCustomVlanPort.InterfaceName
+                        if ($SecondaryCifsLifCustomVlanPort.count -gt 1){
+                            $InterfaceMasterCurrentPort = $SecondaryCifsLifCustomVlanPort.InterfaceName[0]
+                        }else{
+                            $InterfaceMasterCurrentPort = $SecondaryCifsLifCustomVlanPort.InterfaceName
+                        }
                     }                    
                     $InterfaceMasterDataProtocols=$InterfaceMaster.DataProtocols
                     $InterfaceMasterDnsDomainName=$InterfaceMaster.DnsDomainName
@@ -18634,9 +18824,6 @@ Try {
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
     }
     foreach ( $relation in ( $relationList  | Skip-Null ) ) {
-            $MirrorState=$relation.MirrorState
-            $SourceVolume=$relation.SourceVolume
-            $DestinationVolume=$relation.DestinationVolume
             $SourceLocation=$relation.SourceLocation
             $DestinationLocation=$relation.DestinationLocation
             $SourceVolume=$SourceLocation.split(":")[-1]
@@ -18748,19 +18935,11 @@ Try {
         }
     }
     foreach ( $relation in ( $relationList | Skip-Null ) ) {
-            $SourceVolume=$relation.SourceVolume
-            $DestinationVolume=$relation.DestinationVolume
             $SourceLocation=$relation.SourceLocation
             $DestinationLocation=$relation.DestinationLocation
+            $SourceVolume=$SourceLocation.split(':')[-1]
+            $DestinationVolume=$DestinationLocation.split(':')[-1]
             $RelationshipId=$relation.RelationshipId
-            if($PSTKCall -eq "Rest"){
-                $SourceLocation=$relation.source_path
-                $DestinationLocation=$relation.destination_path
-                $SourceVolume=$relation.source_volume
-                $DestinationVolume=$relation.destination_volume
-                $SourceVserver=$relation.source_vserver
-                $DestinationVserver=$relation.destination_vserver
-            }
             Write-Log "[$mySecondaryVserver] Release Relationship [$SourceLocation] --> [$DestinationLocation]"
             Write-LogDebug "Invoke-NcSnapmirrorRelease -DestinationCluster  $mySecondaryCluster -DestinationVserver $mySecondaryVserver -DestinationVolume $DestinationVolume -SourceCluster  $myPrimaryCluster -SourceVserver $myPrimaryVserver -SourceVolume $SourceVolume  -RelationshipId $RelationshipId -Controller $myPrimaryController -Confirm:$False"
             $out = Invoke-NcSnapmirrorRelease -DestinationCluster  $mySecondaryCluster -DestinationVserver $mySecondaryVserver -DestinationVolume $DestinationVolume -SourceCluster  $myPrimaryCluster -SourceVserver $myPrimaryVserver -SourceVolume $SourceVolume  -RelationshipId $RelationshipId -Controller $myPrimaryController  -ErrorVariable ErrorVar -Confirm:$False
@@ -19236,7 +19415,7 @@ Function Purge_SelectVolumedb (
         }
         if($null -eq $ExistingVolumesOnDest){
             if($null -ne $PreviousRelationship){
-                $PreviousRelationship=$PreviousRelationship.SourceVolume
+                $PreviousRelationship=$PreviousRelationship.SourceLocation.split(':')[-1]
                 Write-LogDebug "PreviousRelationship [$PreviousRelationship]"
                 Write-LogDebug "end"
                 return $PreviousRelationship
@@ -20327,11 +20506,12 @@ Function save_vol_options_to_voldb (
         #$count_delete_SRC=0
         #$count_delete_DST=0
         foreach ( $relation in $relationlist ) {
-            $SourceVolume = $relation.SourceVolume
-            $SourceVserver = $relation.SourceVserver
-            $DestinationVolume = $relation.DestinationVolume
-            $DestinationVserver = $relation.DestinationVserver
+            $SourceLocation = $relation.SourceLocation
             $DestinationLocation = $relation.DestinationLocation
+            $SourceVolume = $SourceLocation.split(':')[-1]
+            $SourceVserver = $SourceLocation.split(':')[0]
+            $DestinationVolume = $DestinationLocation.split(':')[-1]
+            $DestinationVserver = $DestinationLocation.split(':')[0]
             $RelationshipType = $relation.RelationshipType
             if ( ( $RelationshipType -eq "data_protection" -or $RelationshipType -eq "extended_data_protection" ) -and ( $SourceVserver -ne $DestinationVserver  )  ) 
             {
@@ -20981,8 +21161,10 @@ Function save_shareacl_options_to_shareacldb (
         #$count_delete_SRC=0
         #$count_delete_DST=0
         foreach ( $relation in $relationlist ){
-            $SourceVserver = $relation.SourceVserver
-            $DestinationVserver = $relation.DestinationVserver
+            $SourceLocation=$relation.SourceLocation
+            $DestinationLocation=$relation.DestinationLocation
+            $SourceVserver = $SourceLocation.split(':')[0]
+            $DestinationVserver = $DestinationLocation.split(':')[0]
             $RelationshipType = $relation.RelationshipType
             if ( ( $RelationshipType -eq "data_protection" -or $RelationshipType -eq "extended_data_protection" ) -and ( $SourceVserver -ne $DestinationVserver )  ) 
             {

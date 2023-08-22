@@ -1483,8 +1483,8 @@ if ( $Version ) {
     else {
         $ModuleVersion = $ModuleVersion.ToString()	
     }
-    Write-Log "[svmtool] Release [$RELEASE]"
-    Write-Log "[Script] Version [$SCRIPT_RELEASE]"
+    Write-Log "[svmtool] Release [$Global:RELEASE]"
+    Write-Log "[Script] Version [$Global:SCRIPT_RELEASE]"
     if ($null -ne $ModuleVersion) {
         Write-Log "[Module svmtool] Version [$ModuleVersion]"
     }
