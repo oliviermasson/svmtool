@@ -4268,6 +4268,7 @@ Function create_update_qospolicy_dr(
                                     qos=@{policy=@{name=$QosPolicyGroupName}}
                                 } | ConvertTo-Json
                                 $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$SecondaryVolUuid)
+                                Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
                                 $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
                                 if($? -ne $True){
                                     Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
@@ -4348,6 +4349,7 @@ Function create_update_qospolicy_dr(
                                         qos=@{policy=@{name=$($PrimaryQOSPolicy+"_"+$mySecondaryVserver)}}
                                     } | ConvertTo-Json
                                     $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$SecondaryVolUuid)
+                                    Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
                                     $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
                                     if($? -ne $True){
                                         Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
@@ -6532,6 +6534,7 @@ Try {
                     nas=@{export_policy=@{name=$PrimaryRootVolExportPolicy}}
                 } | ConvertTo-Json
                 $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$SecondaryVolUuid)
+                Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
                 $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
                 if($? -ne $True){
                     Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
@@ -6750,6 +6753,7 @@ Try {
                                 nas=@{export_policy=@{name=$PrimaryVolExportPolicy}}
                             } | ConvertTo-Json
                             $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$SecondaryVolUuid)
+                            Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
                             $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
                             if($? -ne $True){
                                 Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
@@ -6830,6 +6834,7 @@ Try {
                             space=@{snapshot=@{reserve_percent=$PrimaryVolExportPolicy}}
                         } | ConvertTo-Json
                         $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$SecondaryVolUuid)
+                        Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
                         $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
                         if($? -ne $True){
                             Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
@@ -8897,7 +8902,7 @@ Try {
 
 	$Peer = Get-NcVserverPeer -Vserver $mySecondaryVserver  -PeerVserver $myPrimaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar	
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserverPeer failed [$ErrorVar]" }
-	if ( $Peer -ne $null ) {
+	if ( $null -ne $Peer ) {
 		Write-LogDebug "Remove-NcVserverPeer -Vserver $mySecondaryVserver -PeerVserver $myPrimaryVserver  -Controller $mySecondaryController -Confirm:$False"
 		Remove-NcVserverPeer -Vserver $mySecondaryVserver -PeerVserver $myPrimaryVserver  -Controller $mySecondaryController  -ErrorVariable ErrorVar -Confirm:$False
 		if ( $? -ne $True ) { $Return  = $False;  throw "ERROR: Remove-NcVserverPeer failed [$ErrorVar]"
@@ -15370,9 +15375,9 @@ Function remove_vserver_dr (
 Try {
     Write-LogDebug "start"	
 	$Return = $true
-	$out = Get-NcVserver  -Name $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
+	$Vserver = Get-NcVserver  -Name $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" }
-	if ( $null -eq $out ) {
+	if ( $null -eq $Vserver ) {
 		Write-LogWarn "Vserver [$mySecondaryVserver] does not exist" 
 		Write-LogWarn "exit"
 		return $true
@@ -15417,12 +15422,64 @@ Try {
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsServer failed [$ErrorVar]" }
 	if ( $null -ne $myCifsServer ) { 
 		$out=Stop-NcCifsServer -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -Confirm:$False
-		$out=Remove-NcCifsServer -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -Confirm:$False
-		if ( $? -ne $True ) {
-			Write-LogError "ERROR: Unable to Remove Service CIFS" 
-			return $false
-		}
+        if($Global:PSTKCall -ne "Rest"){
+            $out=Remove-NcCifsServer -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -Confirm:$False
+            if ( $? -ne $True ) {
+                Write-LogError "ERROR: Unable to Remove Service CIFS" 
+                return $false
+            }
+        }else{
+            $CredSecondary=get_local_cDotcred($mySecondaryController)
+            $ADCred = get_local_cred -myCredential $myCifsServer.Domain -Adcred
+            $body=@{
+                ad_domain=@{
+                    password=[Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($ADcred.Password))
+                    user=$ADcred.UserName}
+            } | ConvertTo-Json
+            $VserverUUID=$Vserver.Uuid
+            $url=$("https://"+$mySecondaryController.Name+"/api/protocols/cifs/services/"+$VserverUUID+"?force=true")
+            Write-LogDebug "Invoke-RestMethod -Method delete -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck   (body is hidden)"
+            $ret=Invoke-RestMethod -Method 'delete' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+            if($? -ne $True){
+                Write-LogError "ERROR: delete request [$url] reason [$ErrorVar]"
+            }
+            $JobUuid=$ret.job.uuid
+            $StartTime=Get-date
+            $Timeout=$False
+            $JobDone=$False
+            While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+                $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
+                if($JobDetail.JobCompletion -eq "success"){
+                    $JobDone=$True
+                    break
+                }else{
+                    $JobStatus=$JobDetail.JobState
+                    Write-LogDebug "[$workOn] Update Vol job status [$JobStatus]"
+                    if($JobStatus -eq "failure"){
+                        $JobCompletion=$JobDetail.JobCompletion
+                        Write-LogError "[$workOn] Vol creation failed [$JobCompletion]"
+                        break
+                    }
+                }
+                $CurrentTime=Get-date
+                $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+                if($TimeSpend -gt 10){
+                    Write-LogWarn "[$workOn] Update Vol job take too much time. Check in Ontap its status"
+                    $Timeout=$True
+                }
+            }
+        }
 	}
+
+    $iscsiSecurity = Get-NcIscsiInitiatorAuth -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcIscsiInitiatorAuth failed [$ErrorVar]" }
+    foreach($SecuritySetting in $iscsiSecurity){
+        if($SecuritySetting.AuthType -ne "none"){
+            Write-LogDebug "Remove-NcIscsiInitiatorAuth -Initiator $($SecuritySetting.Initiator) -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False"
+            $out = Remove-NcIscsiInitiatorAuth -Initiator $SecuritySetting.Initiator -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Remove-NcIscsiInitiatorAuth failed [$ErrorVar]" }
+        }
+    }
 
 	$out = Get-NcVserver  -Name $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" }
@@ -15441,7 +15498,7 @@ Try {
 		$out=Remove-NcVserver -Name $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar  -confirm:$False
 		if ( $? -ne $True ) {
 			Write-LogError "ERROR: Unable to Remove  vserver [$mySecondaryVserver] reason [$ErrorVar]" 
-			return $false
+			return $False
 		}
     }
     Write-log "[$mySecondaryVserver] Vserver Removed"
@@ -22603,6 +22660,7 @@ Function create_update_servicepolicy_dr(
                 #}
                 
                 $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/network/interface/service-policy?vserver="+$mySecondaryVserver+"&policy="+$PolicyName+"&fields=service_allowed_addresses")
+                Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $CredSecondary -SkipCertificateCheck"
                 $DetailedSecondaryService=Invoke-RestMethod -Method 'get' -Uri $url -Credential $CredSecondary -SkipCertificateCheck -ErrorVariable ErrorVar
                 if($? -ne $True){
                     Write-LogError "ERROR: Unable to get service-allowed-addresses. Reason [$ErrorVar]"
@@ -22615,6 +22673,7 @@ Function create_update_servicepolicy_dr(
                     Write-Log "Create missing Policy [$PolicyName] on secondary Vserver [$mySecondaryVserver]"
                     Write-LogDebug "New-NcNetServicePolicy -Name $PolicyName -Scope $PolicyScope -IpSpaceName $PolicyIpSpace -Services $PolicyServices -Vserver $mySecondaryVserver -Controller $mySecondaryController"
                     $ret=New-NcNetServicePolicy -Name $PolicyName -Scope $PolicyScope -IpSpaceName $PolicyIpSpace -Services $PolicyServices -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                    Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $cred -SkipCertificateCheck"
                     $DetailedSecondaryService=Invoke-RestMethod -Method 'get' -Uri $url -Credential $cred -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: Unable to get service-allowed-addresses. Reason [$ErrorVar]"
@@ -22654,6 +22713,7 @@ Function create_update_servicepolicy_dr(
                                 service=$Name
                                 allowed_addresses=$Addresses
                             } | ConvertTo-Json
+                            Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
                             $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
                             if($? -ne $True){
                                 Write-LogError "ERROR: Unable to modify a service [$Name] for policy [$PolicyName]. Reason [$ErrorVar]"
@@ -22675,6 +22735,7 @@ Function create_update_servicepolicy_dr(
                             service=$Name
                             #allowed_addresses=$Addresses
                         } | ConvertTo-Json
+                        Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
                         $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
                         if($? -ne $True){
                             Write-LogError "ERROR: Unable to add a service [$Name] for policy [$PolicyName]. Reason [$ErrorVar]"
@@ -22690,6 +22751,7 @@ Function create_update_servicepolicy_dr(
                             service=$Name
                             allowed_addresses=$Addresses
                         } | ConvertTo-Json
+                        Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
                         $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
                         if($? -ne $True){
                             Write-LogError "ERROR: Unable to modify a service [$Name] for policy [$PolicyName]. Reason [$ErrorVar]"

@@ -1391,11 +1391,33 @@ if($null -eq $module){
                 $module = Import-Module NetApp.ONTAP -MinimumVersion 9.12.1.2302 -PassThru
                 $Global:PSTKCall="Rest"
             }else{
-                Write-Log "Import PSTK Core Standard"
-                $module = Import-Module NetApp.ONTAP -PassThru
+                
+                # if several module available, will import the latest version
+                if($module.count -gt 1){
+                    $index=0
+                    $indexModule=0
+                    $moduleVersion=$module[0].Version
+                    for($index=1;$index -lt $module.count;$index++){
+                        if($module[$index].Version.Major -ge $moduleVersion.Major){
+                            if($module[$index].Version.Minor -ge $moduleVersion.Minor){
+                                if($module[$index].Version.Build -ge $moduleVersion.Build){
+                                    if($module[$index].Version.Revision -gt $moduleVersion.Revision){
+                                        $moduleVersion=$module[$index].Version
+                                        $indexModule=$index
+                                        Write-LogDebug "Find greater version [$($module[$index].Version)] at index [$index]"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Write-LogDebug "will import module version [$($module[$indexModule].Version)]"
+                    $module = Import-Module $module[$indexModule].Path -PassThru
+                }else{
+                    $module = Import-Module NetApp.ONTAP -PassThru
                 # workaround for BURT 1385162
                 #$DataONTAP_SkipEmsReport = $null
                 #$DataONTAP_SkipUsageReport = $true 
+                }
             }
         }else{
             Write-Error "ERROR: Firstly you must install PSTK module on your host"
@@ -1467,6 +1489,8 @@ if ( $Help ) {
 }
 ####################################################################################################
 
+$CLI=$Global:MyInvocation.MyCommand.ScriptBlock
+
 if ( $Version ) {
     $ModulesVersion = (Get-Module -Name svmtools).Version
     $ModulesVersion = $ModulesVersion.ToString()
@@ -1489,10 +1513,13 @@ if ( $Version ) {
         Write-Log "[Module svmtool] Version [$ModuleVersion]"
     }
     Write-Log "[Module svmtools] Version [$ModulesVersion]"
+    Write-LogDebug "PSVersionTable      [$PSVersionDetail]"
+    Write-LogDebug "PSTK Version        [$PSTKVersion]"
+    Write-LogDebug "PSTK Call           [$Global:PSTKCall]"   
+    Write-LogDebug "CLI                 [$CLI]"
     Clean_and_exit 0 
 }
 
-$CLI=$Global:MyInvocation.MyCommand.ScriptBlock
 
 Write-LogDebug "BASEDIR             [$BASEDIR]"
 Write-LogDebug "CONFDIR             [$Global:CONFDIR]"
