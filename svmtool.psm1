@@ -170,6 +170,7 @@ function New-SvmDrConfiguration {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "Setup"
 }
+
 <#
 .Synopsis
     Initialize a new relationship between 2 vservers.
@@ -528,6 +529,7 @@ function New-SvmDr {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "ConfigureDR"
 }
+
 <#
 .Synopsis
     Shows all registered relationships
@@ -599,6 +601,7 @@ function Show-SvmDrConfiguration {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "ListInstance"
 }
+
 <#
 .Synopsis
     Shows a vserver relationship
@@ -708,6 +711,7 @@ function Show-SvmDr {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "ShowDR"
 }
+
 <#
 .Synopsis
     Updates relationships between 2 vservers.
@@ -942,6 +946,7 @@ function Update-SvmDr {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "UpdateDR"
 }
+
 <#
 .Synopsis
     Removes the relationships between 2 vservers.
@@ -998,6 +1003,7 @@ function Remove-SvmDr {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "DeleteDR"
 }
+
 <#
 .Synopsis
     Activates Svm Dr
@@ -1083,6 +1089,7 @@ function Invoke-SvmDrActivate {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "ActivateDR"
 }
+
 <#
 .Synopsis
     Resyncs Svm Dr relations
@@ -1152,6 +1159,7 @@ function Invoke-SvmDrResync {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "Resync"
 }
+
 <#
 .Synopsis
     Resyncs Svm Dr relations in the opposite direction
@@ -1226,6 +1234,7 @@ function Invoke-SvmDrResyncReverse {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "ResyncReverse"
 }
+
 <#
 .Synopsis
     Updates relationships between 2 vservers in the opposite direction.
@@ -1421,6 +1430,7 @@ function Update-SvmDrReverse {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "UpdateReverse"
 }
+
 <#
 .Synopsis
     Re-establishes the orginal Svm Dr Relation
@@ -1527,6 +1537,7 @@ function Invoke-SvmDrRecoverFromDr {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "ReActivate"
 }
+
 <#
 .Synopsis
     Removes the relationship-configuration-file between 2 vservers
@@ -1575,6 +1586,7 @@ function Remove-SvmDrConfiguration {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "RemoveDRConf"
 }
+
 <#
 .Synopsis
     Removes Instance configuration between two Clusters
@@ -1615,6 +1627,7 @@ function Remove-SvmDrInstance {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Add "-RemoveInstance $Instance" -Drop "Instance"
 }
+
 <#
 .Synopsis
     Applies a snapmirror schedule on all snapmirror relations
@@ -1672,6 +1685,7 @@ function Set-SvmDrSchedule {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList)
 }
+
 <#
 .Synopsis
     Applies a snapmirror schedule on all reversed snapmirror relations
@@ -1728,6 +1742,7 @@ function Set-SvmDrScheduleReverse {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList)
 }
+
 <#
 .Synopsis
     Migrates the source svm to the desination svm
@@ -1984,6 +1999,7 @@ function Invoke-SvmDrMigrate {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "Migrate"
 }
+
 <#
 .Synopsis
     Removes a source vserver
@@ -2060,6 +2076,7 @@ function Remove-SvmDrSource {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "DeleteSource"
 }
+
 <#
 .Synopsis
     Restores quota's on the destination
@@ -2124,6 +2141,7 @@ function Set-SvmDrQuota {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "CreateQuotaDR"
 }
+
 <#
 .Synopsis
     Restores quota's in the reverse direction (destination -> source)
@@ -2189,6 +2207,7 @@ function Set-SvmDrQuotaReverse {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "ReCreateQuota"
 }
+
 <#
 .Synopsis
     Makes some internal tests
@@ -2251,6 +2270,7 @@ function Test-SvmDrConnection {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "InternalTest"
 }
+
 <#
 .Synopsis
     Removes all broken Reverse SnapMirror relations (after DR test or crash)
@@ -2303,12 +2323,13 @@ function Clear-SvmDrReverse {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "CleanReverse"
 }
+
 <#
 .Synopsis
     Backs up Cluster and Vserver information to Json-files
 .DESCRIPTION
 	Backs up Cluster and Vserver information to Json-files.
-    The vserver is optional, if not provided, the full cluster is backed up.
+    The vserver is optional, if not provided, all SVM of corresponding cluster are backed up.
 .NOTES
     The backup process is ran in a runspace (parallel execution)
     Console logging wil not work in an Powershell ISE host
@@ -2723,6 +2744,10 @@ function Remove-SvmDrClone {
 .DESCRIPTION
 	Restores Cluster and Vserver information from previously created Json-files
     The vserver is optional, if not provided all vservers will be restored
+.PARAMETER Objects
+    List of object currently available that can be restored independantly
+    [Lifs, Volumes, NFS Exports, CifsServer, NetBios, CIFS Shares, Symlinks, Quotas, Users]
+
 .NOTES
     
     RestoreObject can be used to restore on source a list of mandatory CIFS Server, CIFS shares, volumes or Lifs
@@ -2731,7 +2756,7 @@ function Remove-SvmDrClone {
 
 .EXAMPLE 
 
-    Restore-ObjectSvmDr -Cluster r2d2 -Vserver PSLAB -Objects Shares -Destination c3po -Vserver cifs
+    Restore-ObjectSvmDr -Cluster r2d2 -Vserver PSLAB -Objects Shares,Symlinks -Destination c3po -Vserver cifs
 
 #>
 function Restore-ObjectSvmDr {
@@ -2819,7 +2844,7 @@ function Restore-ObjectSvmDr {
         # Can be used during ConfigureDR, UpdateDR, CloneDR, Restore, UpdateReverse, Migrate, ReActivate and RestoreObject
         [pscredential]$DefaultChapCredentials,
 
-        <# # Optional, when the vserver dr is created, all lifs are taken offline (duplicate ip conflicts)
+        # Optional, when the vserver dr is created, all lifs are taken offline (duplicate ip conflicts)
         # Hence if the vserver needs to be joined in AD, there is no lif available
         # By passing an temporary ip-address and in combination with parameter "SecondaryCifsLifMaster"
         # A temporary lif will be created to join the vserver dr in AD
@@ -2830,7 +2855,19 @@ function Restore-ObjectSvmDr {
         # So we will clone the lif that is passed in this parameter (using same port and options)
         # Use this in combination with parameter "TemporarySecondaryCifsIp"
         # A temporary lif will be created to join the vserver dr in AD
-        [string]$SecondaryCifsLifMaster, #>
+        [string]$SecondaryCifsLifMaster,
+
+        # Optional, when the vserver is restored, all lifs are taken offline (duplicate ip conflicts)
+        # Hence if the vserver needs to be joined in AD, there is no lif available
+        # So we will clone the lif that is passed in this parameter (using same port and options)
+        # Use this in combination with parameter "TemporarySecondaryCifsIp"
+        # A temporary lif will be created to join the restored vserver in AD
+        # This paramter provides the custom VLAN of this temporary lif
+        [string]$SecondaryCifsLifCustomVlan,
+
+        # Optional
+        # this parameter provides custom OU where to register this CIFS server into AD
+        [string]$ActiveDirectoryCustomOU,
 
         # Loglevel of the console output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
@@ -2861,17 +2898,17 @@ function Restore-ObjectSvmDr {
     Restores Cluster and Vserver information from previously created Json-files
 .DESCRIPTION
 	Restores Cluster and Vserver information from previously created Json-files
-    The vserver is optional, if not provided all vservers will be restored
+    The vserver is optional, if not provided all vservers available in backup will be restored
 .NOTES
     The restore process is ran in a runspace (parallel execution)
-    Console logging wil not work in an Powershell ISE host
+    Console logging will not work in an Powershell ISE host
     The restore process cannot be run in Non-Interactive Mode
 
     The restore process must be seen like this :
         - the vserver must not yet exist
         - the vserver will be created as complete as possible using information from json file
         - volumes will be created as DP volumes
-        - the idea is then to resync volume data from snapvault locations
+        - the idea is then to resync volume's data from snapvault locations
 
 .EXAMPLE 
 
@@ -2940,18 +2977,32 @@ function Restore-SvmDr {
         # Can be used during ConfigureDR, UpdateDR, CloneDR, Restore, UpdateReverse, Migrate, ReActivate and RestoreObject
         [pscredential]$DefaultChapCredentials,
 
-        # Optional, when the vserver dr is created, all lifs are taken offline (duplicate ip conflicts)
+        # Optional, when the vserver is restored, all lifs are taken offline (duplicate ip conflicts)
         # Hence if the vserver needs to be joined in AD, there is no lif available
         # By passing an temporary ip-address and in combination with parameter "SecondaryCifsLifMaster"
-        # A temporary lif will be created to join the vserver dr in AD
+        # A temporary lif will be created to join the restored vserver in AD
+        # This paramter provides the IP address of this temporary lif
         [string]$TemporarySecondaryCifsIp,
 
-        # Optional, when the vserver dr is created, all lifs are taken offline (duplicate ip conflicts)
+        # Optional, when the vserver is restored, all lifs are taken offline (duplicate ip conflicts)
         # Hence if the vserver needs to be joined in AD, there is no lif available
         # So we will clone the lif that is passed in this parameter (using same port and options)
         # Use this in combination with parameter "TemporarySecondaryCifsIp"
-        # A temporary lif will be created to join the vserver dr in AD
+        # A temporary lif will be created to join the restored vserver in AD
+        # This paramter provides the lif name that will be clonedfor this temporary lif
         [string]$SecondaryCifsLifMaster,
+
+        # Optional, when the vserver is restored, all lifs are taken offline (duplicate ip conflicts)
+        # Hence if the vserver needs to be joined in AD, there is no lif available
+        # So we will clone the lif that is passed in this parameter (using same port and options)
+        # Use this in combination with parameter "TemporarySecondaryCifsIp"
+        # A temporary lif will be created to join the restored vserver in AD
+        # This paramter provides the custom VLAN of this temporary lif
+        [string]$SecondaryCifsLifCustomVlan,
+
+        # Optional
+        # this parameter provides custom OU where to register this CIFS server into AD
+        [string]$ActiveDirectoryCustomOU,
 
         # Loglevel of the console output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
@@ -3011,6 +3062,7 @@ function Import-SvmDrConfiguration {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "ImportInstance"
 }
+
 <#
 .Synopsis
     Shows the SvmDr Script version

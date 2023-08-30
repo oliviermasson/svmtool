@@ -1108,6 +1108,7 @@ Param (
     [Parameter(Mandatory = $false, ParameterSetName = 'ConfigureDR')]
     [Parameter(Mandatory = $false, ParameterSetName = 'CloneDR')]
     [Parameter(Mandatory = $false, ParameterSetName = 'Restore')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'RestoreObject')]
     [Parameter(Mandatory = $false, ParameterSetName = 'UpdateDR')]  
     [Parameter(Mandatory = $false, ParameterSetName = 'Migrate')]   
     [string]$TemporarySecondaryCifsIp = $null,
@@ -1115,6 +1116,7 @@ Param (
     [Parameter(Mandatory = $false, ParameterSetName = 'ConfigureDR')]
     [Parameter(Mandatory = $false, ParameterSetName = 'CloneDR')]
     [Parameter(Mandatory = $false, ParameterSetName = 'Restore')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'RestoreObject')]
     [Parameter(Mandatory = $false, ParameterSetName = 'UpdateDR')] 
     [Parameter(Mandatory = $false, ParameterSetName = 'Migrate')]    
     [string]$SecondaryCifsLifMaster = $null,
@@ -1123,10 +1125,13 @@ Param (
     [Parameter(Mandatory = $false, ParameterSetName = 'CloneDR')]
     [Parameter(Mandatory = $false, ParameterSetName = 'UpdateDR')] 
     [Parameter(Mandatory = $false, ParameterSetName = 'Migrate')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'Restore')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'RestoreObject')]
     [string]$SecondaryCifsLifCustomVlan = $null,
 
     [Parameter(Mandatory = $false, ParameterSetName = 'ConfigureDR')]
     [Parameter(Mandatory = $false, ParameterSetName = 'CloneDR')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'RestoreObject')]
     [string]$ActiveDirectoryCustomOU = $null,
 	
 	[Parameter(Mandatory = $false, ParameterSetName = 'ConfigureDR')]
@@ -1319,6 +1324,13 @@ if ( $null -eq $module ) {
     exit 1
 }
 
+# due to error with log4j append => remove all previous logfile
+$filetoberemoved="smvtool*.*"
+$dir=[System.IO.Path]::GetDirectoryName($LOGFILE)
+$pathtoberemoved=Join-Path -Path $dir -ChildPath $filetoberemoved
+$out=Remove-Item -Path $pathtoberemoved -Force -Confirm:$False -ErrorAction SilentlyContinue
+$out=Remove-Item -Path $LOGFILE -Force -Confirm:$False -ErrorAction SilentlyContinue
+
 # initialize log4net, only needed once.
 init_log4net
 
@@ -1410,9 +1422,10 @@ if($null -eq $module){
                             }
                         }
                     }
-                    Write-LogDebug "will import module version [$($module[$indexModule].Version)]"
+                    Write-LogDebug "Will import module version [$($module[$indexModule].Version)]"
                     $module = Import-Module $module[$indexModule].Path -PassThru
                 }else{
+                    Write-LogDebug "Only one module NetApp.ONTAP is available"
                     $module = Import-Module NetApp.ONTAP -PassThru
                 # workaround for BURT 1385162
                 #$DataONTAP_SkipEmsReport = $null
@@ -1424,6 +1437,8 @@ if($null -eq $module){
             clean_and_exit 1
         }
     }
+}else{
+        Write-LogDebug "module [$module] already imported"
 }
 
 if($module.Version.Major -ge 9 -and $module.Version.Minor -ge 11){
@@ -1682,7 +1697,6 @@ if ( $Backup ) {
                     [Parameter(Mandatory = $False)][string]$LogLevelLogFile,
                     [boolean]$NonInteractive
                 )
-                #Wait-Debugger
                 $ConsoleThreadingRequired = $true
 
                 if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){$Path = $env:PSModulePath.split(";")}else{$Path = $env:PSModulePath.split(":")}
@@ -1728,32 +1742,97 @@ if ( $Backup ) {
 
                 $Global:NonInteractive = $NonInteractive
                 
-                $PSVersion=$PSVersionTable.PSVersion
-                if($PSVersionTable.PSVersion.Major -le 5){
-                    Write-LogDebug "Running svmtool with Powershell version [$PSVersion]"
-                    Write-LogDebug "Import classical PSTK"
-                    if (!($env:PSModulePath -match "NetApp PowerShell Toolkit")) {
-                        $env:PSModulePath = $($env:PSModulePath + ";C:\Program Files (x86)\NetApp\NetApp PowerShell Toolkit\Modules")
-                    }
-                    $module = Import-Module -Name DataONTAP -PassThru
-                    if ( $module -eq $null ) {
-                        Write-LogError "ERROR: Failed to load module Netapp PSTK"
-                        exit 1
+                #-----------------------------------------------------
+
+                $module=get-module netapp.ontap,dataontap
+                if($null -eq $module){
+                    $PSVersion=$PSVersionTable.PSVersion
+                    if($PSVersionTable.PSVersion.Major -le 5){
+                        Write-LogDebug "Running svmtool with Powershell version [$PSVersion]"
+                        Write-LogDebug "Import classical PSTK"
+                        if (!($env:PSModulePath -match "NetApp PowerShell Toolkit")) {
+                            $env:PSModulePath = $($env:PSModulePath + ";C:\Program Files (x86)\NetApp\NetApp PowerShell Toolkit\Modules")
+                        }
+                        $Global:PSTKCall="Zapi"
+                        if (-not $WfaIntegration) {
+                            $module = Get-Module DataONTAP
+                            if ($null -eq $module) {
+                                $module = Import-Module -Name DataONTAP -PassThru
+                                $module = Get-Module DataONTAP
+                                if ( $null -eq $module ) {
+                                    Write-Error "ERROR: DataONTAP module not found" 
+                                    clean_and_exit 1
+                                }
+                            }
+                            else {
+                                # dataontap was loaded externally
+                                Write-LogDebug "DataONTAP module already loaded"
+                            }
+                        }
+                        else {
+                            $module = Import-Module "$PSScriptRoot\..\DataOntap" -PassThru
+                            $module = Get-Module DataONTAP
+                            if ( $null -eq $module ) {
+                                Write-Error "ERROR: DataONTAP Core module not found" 
+                                clean_and_exit 1
+                            }
+                        }
+                    }else{
+                        Write-LogDebug "Running svmtool with PWSH Core version [$PSVersion]"
+                        Write-LogDebug "Import PSTK Core version"
+                        
+                        $module = Get-Module NetApp.ONTAP,DataONTAP -ListAvailable
+                        if ($null -ne $module) {
+                            if($PSTKalpha.IsPresent){
+                                Write-Log "Import PSTK Core Alpha"
+                                $module = Import-Module NetApp.ONTAP -MinimumVersion 9.12.1.2302 -PassThru
+                                $Global:PSTKCall="Rest"
+                            }else{
+                                
+                                # if several module available, will import the latest version
+                                if($module.count -gt 1){
+                                    $index=0
+                                    $indexModule=0
+                                    $moduleVersion=$module[0].Version
+                                    for($index=1;$index -lt $module.count;$index++){
+                                        if($module[$index].Version.Major -ge $moduleVersion.Major){
+                                            if($module[$index].Version.Minor -ge $moduleVersion.Minor){
+                                                if($module[$index].Version.Build -ge $moduleVersion.Build){
+                                                    if($module[$index].Version.Revision -gt $moduleVersion.Revision){
+                                                        $moduleVersion=$module[$index].Version
+                                                        $indexModule=$index
+                                                        Write-LogDebug "Find greater version [$($module[$index].Version)] at index [$index]"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    Write-LogDebug "Will import module version [$($module[$indexModule].Version)]"
+                                    $module = Import-Module $module[$indexModule].Path -PassThru
+                                }else{
+                                    Write-LogDebug "Only one module NetApp.ONTAP is available"
+                                    $module = Import-Module NetApp.ONTAP -PassThru
+                                # workaround for BURT 1385162
+                                #$DataONTAP_SkipEmsReport = $null
+                                #$DataONTAP_SkipUsageReport = $true 
+                                }
+                            }
+                        }else{
+                            Write-Error "ERROR: Firstly you must install PSTK module on your host"
+                            clean_and_exit 1
+                        }
                     }
                 }else{
-                    Write-LogDebug "Running svmtool with PWSH Core version [$PSVersion]"
-                    Write-LogDebug "Import PSTK Core version"
-                    #$module = Import-Module "C:\Users\masson\Downloads\PSTK 9.8 CORE\NetApp.ONTAP\NetApp.ONTAP.psd1"
-                    $module = Import-Module NetApp.ONTAP
-                    $module = Get-Module NetApp.ONTAP
-                    if ( $module -eq $null ) {
-                        Write-Error "ERROR: NetApp.ONTAP Core module not found" 
-                        exit 1
-                    }  
-                    # workaround for BURT 1385162
-                    $DataONTAP_SkipEmsReport = $null
-                    $DataONTAP_SkipUsageReport = $true  
+                        Write-LogDebug "module [$module] already imported"
                 }
+
+                if($module.Version.Major -ge 9 -and $module.Version.Minor -ge 11){
+                    $Global:PSTKCall="Rest"
+                }else{
+                    $Global:PSTKCall="Zapi"
+                }
+
+                #-----------------------------------------------------
 
                 check_create_dir -FullPath $LOGFILE -Vserver $myPrimaryVserver | Out-Null
                 Write-Log "[$myPrimaryVserver] Log File is [$LOGFILE]"
@@ -1771,6 +1850,7 @@ if ( $Backup ) {
                     Write-LogDebug "create_vserver_dr return False [$ret]"
                     flush_log4net -loggerinstance "console_$guid"
                     flush_log4net -loggerinstance "logonly_$guid"
+                    flush_log4net -loggerinstance "svmtool.log_$guid"
                     return $False
                 }
                 Write-LogDebug "create_vserver_dr correctly finished [$ret]"
@@ -1780,6 +1860,7 @@ if ( $Backup ) {
                     Write-LogDebug "ERROR: Get-NcQuota Failed"
                     flush_log4net -loggerinstance "console_$guid"	
                     flush_log4net -loggerinstance "logonly_$guid"
+                    flush_log4net -loggerinstance "svmtool.log_$guid"
                     return $False
                 }
                 $AllQuotaRulesList | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath + "Get-NcQuota.json") -Encoding ASCII -Width 65535
@@ -1790,6 +1871,7 @@ if ( $Backup ) {
                     Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcQuota.json")"
                     flush_log4net -loggerinstance "console_$guid"
                     flush_log4net -loggerinstance "logonly_$guid"
+                    flush_log4net -loggerinstance "svmtool.log_$guid"
                     return $False
                 }
                 Write-Log "[$myPrimaryVserver] Check Quota Policy"
@@ -1798,6 +1880,7 @@ if ( $Backup ) {
                     Write-LogDebug "ERROR: Get-NcQuotaPolicy Failed"
                     flush_log4net -loggerinstance "console_$guid"
                     flush_log4net -loggerinstance "logonly_$guid"
+                    flush_log4net -loggerinstance "svmtool.log_$guid"
                     return $False
                 }
                 $AllQuotaPolicyList | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath + "Get-NcQuotaPolicy.json") -Encoding ASCII -Width 65535
@@ -1808,10 +1891,12 @@ if ( $Backup ) {
                     Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcQuotaPolicy.json")"
                     flush_log4net -loggerinstance "console_$guid"
                     flush_log4net -loggerinstance "logonly_$guid"
+                    flush_log4net -loggerinstance "svmtool.log_$guid"
                     return $False
                 }
                 flush_log4net -loggerinstance "console_$guid"
                 flush_log4net -loggerinstance "logonly_$guid"
+                flush_log4net -loggerinstance "svmtool.log_$guid"
                 return $True
             })
         $BackupJob = [System.Management.Automation.PowerShell]::Create()
@@ -2039,6 +2124,8 @@ if ( $Restore ) {
                     [Parameter(Mandatory = $False)][pscredential]$DefaultLDAPCredentials,
                     [Parameter(Mandatory = $False)][string]$TemporarySecondaryCifsIp="",
                     [Parameter(Mandatory = $False)][string]$SecondaryCifsLifMaster="",
+                    [Parameter(Mandatory = $False)][string]$SecondaryCifsLifCustomVlan="",
+                    [Parameter(Mandatory = $False)][string]$ActiveDirectoryCustomOU="",
                     [Parameter(Mandatory = $False)][string]$RootAggr="",
                     [Parameter(Mandatory = $False)][string]$DataAggr="",        
                     [Parameter(Mandatory = $False)][string]$LogLevelConsole="Info",
@@ -2047,6 +2134,7 @@ if ( $Restore ) {
                     [Parameter(Mandatory = $False)][bool]$FORCE_RESTORE_ORIGINAL=$False,
                     [boolean]$NonInteractive=$True
                 )
+                Wait-Debugger
                 $Global:Run_Mode="Restore"
                 $Global:NFSonly=$False
                 $Global:RootAggr = $RootAggr
@@ -2069,32 +2157,97 @@ if ( $Restore ) {
                 }
                 $Global:NonInteractive = $NonInteractive
 			
-                $PSVersion=$PSVersionTable.PSVersion
-                if($PSVersionTable.PSVersion.Major -le 5){
-                    Write-LogDebug "Running svmtool with Powershell version [$PSVersion]"
-                    Write-LogDebug "Import classical PSTK"
-                    if (!($env:PSModulePath -match "NetApp PowerShell Toolkit")) {
-                        $env:PSModulePath = $($env:PSModulePath + ";C:\Program Files (x86)\NetApp\NetApp PowerShell Toolkit\Modules")
-                    }
-                    $module = Import-Module -Name DataONTAP -PassThru
-                    if ( $module -eq $null ) {
-                        Write-LogError "ERROR: Failed to load module Netapp PSTK"
-                        exit 1
+                # ----------------------------------------------------------------------
+
+                $module=get-module netapp.ontap,dataontap
+                if($null -eq $module){
+                    $PSVersion=$PSVersionTable.PSVersion
+                    if($PSVersionTable.PSVersion.Major -le 5){
+                        Write-LogDebug "Running svmtool with Powershell version [$PSVersion]"
+                        Write-LogDebug "Import classical PSTK"
+                        if (!($env:PSModulePath -match "NetApp PowerShell Toolkit")) {
+                            $env:PSModulePath = $($env:PSModulePath + ";C:\Program Files (x86)\NetApp\NetApp PowerShell Toolkit\Modules")
+                        }
+                        $Global:PSTKCall="Zapi"
+                        if (-not $WfaIntegration) {
+                            $module = Get-Module DataONTAP
+                            if ($null -eq $module) {
+                                $module = Import-Module -Name DataONTAP -PassThru
+                                $module = Get-Module DataONTAP
+                                if ( $null -eq $module ) {
+                                    Write-Error "ERROR: DataONTAP module not found" 
+                                    clean_and_exit 1
+                                }
+                            }
+                            else {
+                                # dataontap was loaded externally
+                                Write-LogDebug "DataONTAP module already loaded"
+                            }
+                        }
+                        else {
+                            $module = Import-Module "$PSScriptRoot\..\DataOntap" -PassThru
+                            $module = Get-Module DataONTAP
+                            if ( $null -eq $module ) {
+                                Write-Error "ERROR: DataONTAP Core module not found" 
+                                clean_and_exit 1
+                            }
+                        }
+                    }else{
+                        Write-LogDebug "Running svmtool with PWSH Core version [$PSVersion]"
+                        Write-LogDebug "Import PSTK Core version"
+                        
+                        $module = Get-Module NetApp.ONTAP,DataONTAP -ListAvailable
+                        if ($null -ne $module) {
+                            if($PSTKalpha.IsPresent){
+                                Write-Log "Import PSTK Core Alpha"
+                                $module = Import-Module NetApp.ONTAP -MinimumVersion 9.12.1.2302 -PassThru
+                                $Global:PSTKCall="Rest"
+                            }else{
+                                
+                                # if several module available, will import the latest version
+                                if($module.count -gt 1){
+                                    $index=0
+                                    $indexModule=0
+                                    $moduleVersion=$module[0].Version
+                                    for($index=1;$index -lt $module.count;$index++){
+                                        if($module[$index].Version.Major -ge $moduleVersion.Major){
+                                            if($module[$index].Version.Minor -ge $moduleVersion.Minor){
+                                                if($module[$index].Version.Build -ge $moduleVersion.Build){
+                                                    if($module[$index].Version.Revision -gt $moduleVersion.Revision){
+                                                        $moduleVersion=$module[$index].Version
+                                                        $indexModule=$index
+                                                        Write-LogDebug "Find greater version [$($module[$index].Version)] at index [$index]"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    Write-LogDebug "Will import module version [$($module[$indexModule].Version)]"
+                                    $module = Import-Module $module[$indexModule].Path -PassThru
+                                }else{
+                                    Write-LogDebug "Only one module NetApp.ONTAP is available"
+                                    $module = Import-Module NetApp.ONTAP -PassThru
+                                # workaround for BURT 1385162
+                                #$DataONTAP_SkipEmsReport = $null
+                                #$DataONTAP_SkipUsageReport = $true 
+                                }
+                            }
+                        }else{
+                            Write-Error "ERROR: Firstly you must install PSTK module on your host"
+                            clean_and_exit 1
+                        }
                     }
                 }else{
-                    Write-LogDebug "Running svmtool with PWSH Core version [$PSVersion]"
-                    Write-LogDebug "Import PSTK Core version"
-                    #$module = Import-Module "C:\Users\masson\Downloads\PSTK 9.8 CORE\NetApp.ONTAP\NetApp.ONTAP.psd1"
-                    $module = Import-Module NetApp.ONTAP
-                    $module = Get-Module NetApp.ONTAP
-                    if ( $module -eq $null ) {
-                        Write-Error "ERROR: NetApp.ONTAP Core module not found" 
-                        exit 1
-                    }  
-                    # workaround for BURT 1385162
-                    $DataONTAP_SkipEmsReport = $null
-                    $DataONTAP_SkipUsageReport = $true  
+                        Write-LogDebug "module [$module] already imported"
                 }
+
+                if($module.Version.Major -ge 9 -and $module.Version.Minor -ge 11){
+                    $Global:PSTKCall="Rest"
+                }else{
+                    $Global:PSTKCall="Zapi"
+                }
+
+                # ----------------------------------------------------------------------
 
                 $Global:STOP_TIMEOUT = 360
                 $Global:START_TIMEOUT = 360
@@ -2181,7 +2334,9 @@ if ( $Restore ) {
         [void]$RestoreJob.AddParameter("ActiveDirectoryCredentials", $ActiveDirectoryCredentials)
         [void]$RestoreJob.AddParameter("DefaultLDAPCredentials", $DefaultLDAPCredentials)
         [void]$RestoreJob.AddParameter("TemporarySecondaryCifsIp", $TemporarySecondaryCifsIp)
+        [void]$RestoreJob.AddParameter("SecondaryCifsLifCustomVlan", $SecondaryCifsLifCustomVlan)
         [void]$RestoreJob.AddParameter("SecondaryCifsLifMaster", $SecondaryCifsLifMaster)
+        [void]$RestoreJob.AddParameter("ActiveDirectoryCustomOU", $ActiveDirectoryCustomOU)
         [void]$RestoreJob.AddParameter("RootAggr", $Global:RootAggr)
         [void]$RestoreJob.AddParameter("DataAggr", $Global:DataAggr)
         [void]$RestoreJob.AddParameter("RESTORE_ORIGINAL", $Global:RESTORE_ORIGINAL)
@@ -2410,6 +2565,10 @@ if ( $RestoreObject ){
     -nodeMatchRegEx $nodeMatchRegEx `
     -aggrMatchRegEx $aggrMatchRegEx `
     -myDataAggr $myDataAggr `
+    -TemporarySecondaryCifsIp $TemporarySecondaryCifsIp `
+    -SecondaryCifsLifMaster $SecondaryCifsLifMaster `
+    -SecondaryCifsLifCustomVlan $SecondaryCifsLifCustomVlan `
+    -ActiveDirectoryCustomOU $ActiveDirectoryCustomOU `
     -objects $Objects ) -ne $True ) {
         Write-LogError "ERROR : Failed to restore all objects for [$Global:DestinationSVM]"
         clean_and_exit 1
@@ -2677,11 +2836,12 @@ if ( $ConfigureDR ) {
         }
     } 
     # default to hourly
-    if ($MirrorSchedule -eq "") {
+    if ($MirrorSchedule -eq "" -or $MirrorSchedule -eq "none" -or $null -eq $MirrorSchedule) {
         $Global:MirrorSchedule = "hourly"
     }
     # no schedule if Policy Sync or StrictSync is chosen
-    if ( ( $Global:XDPPolicy -ne "") -and ( $Global:XDPPolicy -in $("Sync","StrictSync") ) ) {
+    #if ( ( $Global:XDPPolicy -ne "") -and ( $Global:XDPPolicy -in $("Sync","StrictSync") ) ) {
+    if ( $Global:XDPPolicy -in $("Sync","StrictSync") ) {
         Write-Log "Reset MirrorSchedule for Sync or StrictSync relationships"
         $Global:MirrorSchedule = "none"    
     }
@@ -3095,8 +3255,8 @@ if ( $UpdateDR ) {
     if ( $MirrorSchedule -ne "" -and $MirrorSchedule -ne "none") {
         $ret = Get-NcJobCronSchedule -Name $MirrorSchedule -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar
         if ( $? -ne $True -or $ret.count -eq 0 ) {
-            Write-LogDebug "MirrorSchedule [$MirrorSchedule] does not exist on [$SECONDARY_CLUSTER]. Will use no schedule"
-            Write-LogWarn "MirrorSchedule [$MirrorSchedule] does not exist on [$SECONDARY_CLUSTER]. Will use no schedule"
+            Write-LogDebug "MirrorSchedule [$MirrorSchedule] does not exist on [$SECONDARY_CLUSTER]. No schedule will be set"
+            Write-LogWarn "MirrorSchedule [$MirrorSchedule] does not exist on [$SECONDARY_CLUSTER]. No schedule will be set"
             $Global:MirrorSchedule = "none"
         }else{
             $Global:MirrorSchedule = $MirrorSchedule
