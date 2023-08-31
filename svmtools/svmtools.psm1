@@ -11347,6 +11347,7 @@ Try {
                 options=$primaryOptions
             } 
             $body.options.psobject.Properties.Remove("export_policy_enabled")
+            $body.security.psobject.Properties.Remove("kdc_encryption")
             $body = $body | ConvertTo-Json
             $url=$("https://"+$mySecondaryController.Name+"/api/protocols/cifs/services/"+$myVserverUUID)
             Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $myCred -body $body -SkipCertificateCheck"
@@ -16524,7 +16525,10 @@ try{
                 -myPrimaryVserver $myPrimaryVserver `
                 -mySecondaryVserver $mySecondaryVserver `
                 -workOn $mySecondaryVserver `
-                -ForceRestoreOriginal `
+                -TemporarySecondaryCifsIp $TemporarySecondaryCifsIp `
+                -SecondaryCifsLifMaster $SecondaryCifsLifMaster `
+                -SecondaryCifsLifCustomVlan $SecondaryCifsLifCustomVlan `
+                -ActiveDirectoryCustomOU $ActiveDirectoryCustomOU `
                 -objects @("Lifs","CifsServer","Shares","Symlinks") ) -ne $True ) {
                     Write-LogError "ERROR : Failed to restore all objects for [$Global:DestinationSVM]"
                     #clean_and_exit 1
@@ -16740,7 +16744,10 @@ try{
                 -myPrimaryVserver $myPrimaryVserver `
                 -mySecondaryVserver $mySecondaryVserver `
                 -workOn $mySecondaryVserver `
-                -ForceRestoreOriginal `
+                -TemporarySecondaryCifsIp $TemporarySecondaryCifsIp `
+                -SecondaryCifsLifMaster $SecondaryCifsLifMaster `
+                -SecondaryCifsLifCustomVlan $SecondaryCifsLifCustomVlan `
+                -ActiveDirectoryCustomOU $ActiveDirectoryCustomOU `
                 -objects @("Lifs","CifsServer","NetBios","Shares","Symlinks") ) -ne $True ) {
                     Write-LogError "ERROR : Failed to restore all objects on [$mySecondaryVserver]"
                     #clean_and_exit 1
@@ -16871,7 +16878,10 @@ try{
                 -myPrimaryVserver $myPrimaryVserver `
                 -mySecondaryVserver $mySecondaryVserver `
                 -workOn $mySecondaryVserver `
-                -ForceRestoreOriginal `
+                -TemporarySecondaryCifsIp $TemporarySecondaryCifsIp `
+                -SecondaryCifsLifMaster $SecondaryCifsLifMaster `
+                -SecondaryCifsLifCustomVlan $SecondaryCifsLifCustomVlan `
+                -ActiveDirectoryCustomOU $ActiveDirectoryCustomOU `
                 -objects @("Lifs") ) -ne $True ) {
                     Write-LogError "ERROR : Failed to restore all objects on [$mySecondaryVserver]"
                     #clean_and_exit 1
@@ -22856,16 +22866,20 @@ Try {
         }
     }
     if("NetBios" -in $objects){
-        Write-Log "[$mySecondaryVserver] Restore Object CIFS NetBios"
-        #add code here to restore CIFS Shares & Symlink?
-        <# if ( ( $ret=update_cifs_usergroup -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $False -Restore $True) -ne $True ) {
-            Write-LogError "ERROR: update_cifs_usergroup failed" 
-            $Return=$False			
-        } #>
-        if ( ( $ret=create_update_CIFS_netbios_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn -Backup $False -Restore $True) -ne $True ) { 
-            Write-LogError "ERROR: create_update_CIFS_netbios_dr"
-            $Return = $False 
-        }    
+        if($Global:RESTORE_ORIGINAL -eq $True){
+            Write-Log "[$mySecondaryVserver] Restore Object CIFS NetBios"
+            #add code here to restore CIFS Shares & Symlink?
+            <# if ( ( $ret=update_cifs_usergroup -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $False -Restore $True) -ne $True ) {
+                Write-LogError "ERROR: update_cifs_usergroup failed" 
+                $Return=$False			
+            } #>
+            if ( ( $ret=create_update_CIFS_netbios_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn -Backup $False -Restore $True) -ne $True ) { 
+                Write-LogError "ERROR: create_update_CIFS_netbios_dr"
+                $Return = $False 
+            }
+        }else{
+            Write-Log "[$mySecondaryVserver] NetBios cannot be set on CIFS server because resource name may be in use. If you want to force this use -ForceRestoreOriginal switch parameter"
+        }   
     }
     if("Shares" -in $objects){
         Write-Log "[$mySecondaryVserver] Restore Object CIFS Shares"
