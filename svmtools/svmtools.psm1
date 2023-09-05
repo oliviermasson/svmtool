@@ -6527,7 +6527,7 @@ Try {
             if($? -ne $True){
                 Write-LogError "ERROR: Unable to get svm rootvolume name. Reason [$ErrorVar]" 
             }else{
-                $PrimaryRootVolumeName=$ret.records[0].rootvolume
+                $PrimaryRootVolumeName=$ret.records.rootvolume
             }    
         }
     }else{
@@ -6558,7 +6558,7 @@ Try {
             if($? -ne $True){
                 Write-LogError "ERROR: Unable to get svm rootvolume name. Reason [$ErrorVar]" 
             }else{
-                $SecondaryRootVolumeName=$ret.records[0].rootvolume
+                $SecondaryRootVolumeName=$ret.records.rootvolume
             }
         }
     }
@@ -6567,14 +6567,23 @@ Try {
         $PrimaryRootVolume = Get-NcVol -Controller $myPrimaryController -VserverContext $myPrimaryVserver -Volume $PrimaryRootVolumeName  -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed to get RootVolume [$ErrorVar]" }
     }else{
-        if(Test-Path $($Global:JsonPath+"Get-NcVol.json")){
-            $PrimaryRootVolume=Get-Content $($Global:JsonPath+"Get-NcVol.json") -Raw | ConvertFrom-Json
+        if(Test-Path $($Global:JsonPath+"Get-NcVol-root.json")){
+            $PrimaryRootVolume=Get-Content $($Global:JsonPath+"Get-NcVol-root.json") -Raw | ConvertFrom-Json
             $PrimaryRootVolume=$PrimaryRootVolume | Where-Object {$_.Name -eq $PrimaryRootVolumeName}
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcVol.json")
             Throw "ERROR: failed to read $filepath"
         }    
+    }
+    if($Backup -eq $True){
+        $PrimaryRootVolume | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcVol-root.json") -Encoding ASCII -Width 65535
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcVol-root.json") -ErrorAction SilentlyContinue) ){
+            Write-LogDebug "$($Global:JsonPath+"Get-NcVol-root.json") saved successfully"
+        }else{
+            Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcVol-root.json")"
+            $Return=$False
+        }
     }
 	if ($null -eq $PrimaryRootVolume ) { $Return = $False ; Write-logError "root volume $PrimaryRootVolume not found for $myPrimaryVserver" }
     if($Backup -eq $False){
@@ -10207,6 +10216,7 @@ Try {
         $PrimaryInterfaceName=$PrimaryInterface.InterfaceName
         $PrimaryAddress=$PrimaryInterface.Address
         $PrimaryNetmask=$PrimaryInterface.Netmask
+        $PrimaryNetmaskLength=$PrimaryInterface.NetmaskLength
         $PrimaryCurrentPort=$PrimaryInterface.CurrentPort
         $PrimaryDataProtocols=$PrimaryInterface.DataProtocols
         $PrimaryDnsDomainName=$PrimaryInterface.DnsDomainName
@@ -10307,7 +10317,11 @@ Try {
                 $ANS1 = 'y' ; $ANS2 = 'n'
                 while ( ( $ANS1 -eq 'y' ) -and ( $ANS2 -eq 'n' ) ) 
                 {
-                    $LIF = '[' + $PrimaryInterfaceName + '] [' + $PrimaryAddress + '] [' + $PrimaryNetMask + '] [' + $PrimaryGateway + '] [' + $PrimaryCurrentNode + '] [' + $PrimaryCurrentPort + ']'  
+                    if($Global:PSTKCall -ne "Rest"){
+                        $LIF = '[' + $PrimaryInterfaceName + '] [' + $PrimaryAddress + '] [' + $PrimaryNetMask + '] [' + $PrimaryGateway + '] [' + $PrimaryCurrentNode + '] [' + $PrimaryCurrentPort + ']'  
+                    }else{
+                        $LIF = '[' + $PrimaryInterfaceName + '] [' + $PrimaryAddress + '] [' + $PrimaryNetMaskLength + '] [' + $PrimaryGateway + '] [' + $PrimaryCurrentNode + '] [' + $PrimaryCurrentPort + ']'
+                    }
                     if( $Global:ForceCloneOriginal.IsPresent -or ($Global:Run_Mode -eq "Migrate") -or ($Global:NonInteractive.IsPresent)){
                         Write-LogDebug "Run Mode = Migrate or ForceCloneOriginal IsPresent so enable autoselect mode"
                         $autoselect=$True
