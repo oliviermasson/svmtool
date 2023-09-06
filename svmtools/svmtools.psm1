@@ -888,10 +888,10 @@ Function show_instance_list($ResetPassword,[string]$CredName) {
                 {
                     $myVconfFile = $myConfDir + $VserverFile
                     $read_vconf = read_config_file $myVconfFile
-                    if ( $read_vconf -ne $null ) 
+                    if ( $null -ne $read_vconf ) 
                     {
                         $myVserverDR=$read_vconf.Get_Item("VserverDR")
-                        if ( $read_vconf -ne $null )
+                        if ( $null -ne $read_vconf )
                         {
                             $myVserver=$VserverFile.Split('.')[0]
                             Write-Log "Instance [$Instance]: SVM DR Relation     [$myVserver -> $myVserverDR]"  -firstValueIsSpecial
@@ -1103,7 +1103,18 @@ Try {
         $NcController =  Connect-NcController $myController -Credential $myCred -Timeout $Global:TimeoutMilliSeconds  -ErrorVariable ErrorVar
     }
     if ( $? -ne $True ) { throw "ERROR: Connect-NcController failed [$ErrorVar]" }
-        return $NcController
+    if($Global:SRC_CLUSTER.length -gt 0){
+        if($myController -eq $Global:SRC_CLUSTER){
+            # If we are connecting to source cluster and if this one is running ONTAP lower than 9.10.1 we will force to use ONTAPI for all communications
+            # This will allow to use svmtool with a source speaking ONTAPI and a dest speaking REST
+            $version==[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $NcController)[0].VersionTuple.Generation)+','+[string]((Get-NcSystemVersionInfo -Controller $NcController)[0].VersionTuple.Major)))
+            if($version -le 9.10){
+                Write-LogDebug "Connect-NcController $myController -Credential $myCred -Timeout $Global:TimeoutMilliSeconds -ONTAPI"
+                $NcController =  Connect-NcController $myController -Credential $myCred -Timeout $Global:TimeoutMilliSeconds  -ErrorVariable ErrorVar -ONTAPI
+            }
+        }
+    }
+    return $NcController
 }
 
 Catch {
@@ -1517,8 +1528,8 @@ Function select_data_aggr_from_cli ([NetApp.Ontapi.Filer.C.NcController]$myContr
         # try to check if call was performed with REST by looking at same attribute that are empty with REST and populated with ZAPI
         if($null -eq $AggrList[0].AggrRaidAttributes.HasLocalRoot)
         {
-            Write-LogDebug "Get-NcAggr -Controller $myController -ZapiCall"
-            $AggrList=Get-NcAggr -Controller $myController  -ErrorVariable ErrorVar -ZapiCall
+            Write-LogDebug "Get-NcAggr -Controller $myController -ONTAPI"
+            $AggrList=Get-NcAggr -Controller $myController  -ErrorVariable ErrorVar -ONTAPI
             if ( $? -ne $True ) {throw "ERROR: Get-NcAggr failed [$ErrorVar]" }
             if ( $null -eq $AggrList ) {
                 Write-LogError "ERROR: Unable list aggregates for Cluster $myController" 
@@ -2719,8 +2730,8 @@ Function create_update_role_dr(
                         Write-LogDebug "New-NcRolePrivilege -Name $roleName -Path $roleCommandDirectoryName -Access $roleAccessLevel -OwnerName $mySecondaryVserver -Query $roleQuery -Controller $mySecondaryController"
                         $out=New-NcRolePrivilege -Name $roleName -Path $roleCommandDirectoryName -Access $roleAccessLevel -OwnerName $mySecondaryVserver -Query $roleQuery -Controller $mySecondaryController -ErrorVariable ErrorVar
                     }elseif($Global:PSTKCall -eq "ZapiEnforced"){
-                        Write-LogDebug "New-NcRole -Role $roleName -Vserver $roleVserver -CommandDirectory $roleCommandDirectoryName -AccessLevel $roleAccessLevel -RoleQuery $roleQuery -Controller $mySecondaryCluster -ZapiCall"
-                        $out=New-NcRole -Role $roleName -Vserver $roleVserver -CommandDirectory $roleCommandDirectoryName -AccessLevel $roleAccessLevel -RoleQuery $roleQuery -Controller $mySecondaryController -ErrorVariable ErrorVar -ZapiCall
+                        Write-LogDebug "New-NcRole -Role $roleName -Vserver $roleVserver -CommandDirectory $roleCommandDirectoryName -AccessLevel $roleAccessLevel -RoleQuery $roleQuery -Controller $mySecondaryCluster -ONTAPI"
+                        $out=New-NcRole -Role $roleName -Vserver $roleVserver -CommandDirectory $roleCommandDirectoryName -AccessLevel $roleAccessLevel -RoleQuery $roleQuery -Controller $mySecondaryController -ErrorVariable ErrorVar -ONTAPI
                     }else{
                         Write-LogDebug "New-NcRole -Role $roleName -Vserver $roleVserver -CommandDirectory $roleCommandDirectoryName -AccessLevel $roleAccessLevel -RoleQuery $roleQuery -Controller $mySecondaryCluster"
                         $out=New-NcRole -Role $roleName -Vserver $roleVserver -CommandDirectory $roleCommandDirectoryName -AccessLevel $roleAccessLevel -RoleQuery $roleQuery -Controller $mySecondaryController -ErrorVariable ErrorVar 
@@ -2835,8 +2846,8 @@ Function create_update_fpolicy_dr(
                 $PrimaryFpolicyEngineList=Get-NcFpolicyExternalEngine -Vserver $myPrimaryVserver -controller $myPrimaryController  -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcFpolicyExternalEngine failed [$ErrorVar]" }
             # }else{
-            #     Write-LogDebug "Get-NcFpolicyExternalEngine -Vserver $myPrimaryVserver -controller $myPrimaryController -ZapiCall"
-            #     $PrimaryFpolicyEngineList=Get-NcFpolicyExternalEngine -Vserver $myPrimaryVserver -controller $myPrimaryController  -ErrorVariable ErrorVar -ZapiCall
+            #     Write-LogDebug "Get-NcFpolicyExternalEngine -Vserver $myPrimaryVserver -controller $myPrimaryController -ONTAPI"
+            #     $PrimaryFpolicyEngineList=Get-NcFpolicyExternalEngine -Vserver $myPrimaryVserver -controller $myPrimaryController  -ErrorVariable ErrorVar -ONTAPI
             #     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcFpolicyExternalEngine failed [$ErrorVar]" }
             # }
         }else{
@@ -3055,7 +3066,7 @@ Function create_update_fpolicy_dr(
                                         -MaxServerRequests $PrimaryFpolicyEngineMaxServerRequests -ServerProgressTimeout $PrimaryFpolicyEngineServerProgressTimeout `
                                         -KeepAliveInterval $PrimaryFpolicyEngineKeepAliveInterval -CertificateCommonName $PrimaryFpolicyEngineCertificateCommonName `
                                         -CertificateSerial $PrimaryFpolicyEngineCertificateSerial -CertificateCa $PrimaryFpolicyEngineCertificateCa `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ZapiCall"
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
                                         $out=Set-NcFpolicyExternalEngine -Name $PrimaryFpolicyEngineName  `
                                         -Port $PrimaryFpolicyEnginePort -Synchronous -SslOption $PrimaryFpolicyEngineSslOption `
                                         -RequestCancelTimeout $PrimaryFpolicyEngineRequestCancelTimeout -RequestAbortTimeout $PrimaryFpolicyEngineRequestAbortTimeout `
@@ -3063,7 +3074,7 @@ Function create_update_fpolicy_dr(
                                         -MaxServerRequests $PrimaryFpolicyEngineMaxServerRequests -ServerProgressTimeout $PrimaryFpolicyEngineServerProgressTimeout `
                                         -KeepAliveInterval $PrimaryFpolicyEngineKeepAliveInterval -CertificateCommonName $PrimaryFpolicyEngineCertificateCommonName `
                                         -CertificateSerial $PrimaryFpolicyEngineCertificateSerial -CertificateCa $PrimaryFpolicyEngineCertificateCa `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ZapiCall
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
                                     }else{
                                         # ! Due to burt in PSTK 9.12.1.2302 with ISO-8601 value, we need to perform modification in direct REST request
                                         Write-LogDebug "Get SVM uuid"
@@ -3132,7 +3143,7 @@ Function create_update_fpolicy_dr(
                                         -MaxServerRequests $PrimaryFpolicyEngineMaxServerRequests -ServerProgressTimeout $PrimaryFpolicyEngineServerProgressTimeout `
                                         -KeepAliveInterval $PrimaryFpolicyEngineKeepAliveInterval -CertificateCommonName $PrimaryFpolicyEngineCertificateCommonName `
                                         -CertificateSerial $PrimaryFpolicyEngineCertificateSerial -CertificateCa $PrimaryFpolicyEngineCertificateCa `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ZapiCall"
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
                                         $out=Set-NcFpolicyExternalEngine -Name $PrimaryFpolicyEngineName  `
                                         -Port $PrimaryFpolicyEnginePort -Asynchronous -SslOption $PrimaryFpolicyEngineSslOption `
                                         -RequestCancelTimeout $PrimaryFpolicyEngineRequestCancelTimeout -RequestAbortTimeout $PrimaryFpolicyEngineRequestAbortTimeout `
@@ -3140,7 +3151,7 @@ Function create_update_fpolicy_dr(
                                         -MaxServerRequests $PrimaryFpolicyEngineMaxServerRequests -ServerProgressTimeout $PrimaryFpolicyEngineServerProgressTimeout `
                                         -KeepAliveInterval $PrimaryFpolicyEngineKeepAliveInterval -CertificateCommonName $PrimaryFpolicyEngineCertificateCommonName `
                                         -CertificateSerial $PrimaryFpolicyEngineCertificateSerial -CertificateCa $PrimaryFpolicyEngineCertificateCa `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ZapiCall
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
                                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcFpolicyExternalEngine failed [$ErrorVar]" } 
                                     }else{
                                         # ! Due to burt in PSTK 9.12.1.2302 with ISO-8601 value, we need to perform modification in direct REST request
@@ -3262,7 +3273,7 @@ Function create_update_fpolicy_dr(
                                 -MaxServerRequests $PrimaryFpolicyEngineMaxServerRequests -ServerProgressTimeout $PrimaryFpolicyEngineServerProgressTimeout `
                                 -KeepAliveInterval $PrimaryFpolicyEngineKeepAliveInterval -CertificateCommonName $PrimaryFpolicyEngineCertificateCommonName `
                                 -CertificateSerial $PrimaryFpolicyEngineCertificateSerial -CertificateCa $PrimaryFpolicyEngineCertificateCa -VserverContext $mySecondaryVserver `
-                                -Controller $mySecondaryController -Zapicall"
+                                -Controller $mySecondaryController -ONTAPI"
                                 $out=New-NcFpolicyExternalEngine -Name $PrimaryFpolicyEngineName -PrimaryServer $SecondaryFpolicyEnginePrimaryServers `
                                 -Port $PrimaryFpolicyEnginePort -Synchronous -SecondaryServer $SecondaryFpolicyEngineSecondaryServers -SslOption $PrimaryFpolicyEngineSslOption `
                                 -RequestCancelTimeout $PrimaryFpolicyEngineRequestCancelTimeout -RequestAbortTimeout $PrimaryFpolicyEngineRequestAbortTimeout `
@@ -3270,7 +3281,7 @@ Function create_update_fpolicy_dr(
                                 -MaxServerRequests $PrimaryFpolicyEngineMaxServerRequests -ServerProgressTimeout $PrimaryFpolicyEngineServerProgressTimeout `
                                 -KeepAliveInterval $PrimaryFpolicyEngineKeepAliveInterval -CertificateCommonName $PrimaryFpolicyEngineCertificateCommonName `
                                 -CertificateSerial $PrimaryFpolicyEngineCertificateSerial -CertificateCa $PrimaryFpolicyEngineCertificateCa `
-                                -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ZapiCall
+                                -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
                                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyExternalEngine failed [$ErrorVar]" } 
                             }
                             else
@@ -3282,7 +3293,7 @@ Function create_update_fpolicy_dr(
                                 -MaxServerRequests $PrimaryFpolicyEngineMaxServerRequests -ServerProgressTimeout $PrimaryFpolicyEngineServerProgressTimeout `
                                 -KeepAliveInterval $PrimaryFpolicyEngineKeepAliveInterval -CertificateCommonName $PrimaryFpolicyEngineCertificateCommonName `
                                 -CertificateSerial $PrimaryFpolicyEngineCertificateSerial -CertificateCa $PrimaryFpolicyEngineCertificateCa -VserverContext $mySecondaryVserver `
-                                -Controller $mySecondaryController -ZapiCall"
+                                -Controller $mySecondaryController -ONTAPI"
                                 $out=New-NcFpolicyExternalEngine -Name $PrimaryFpolicyEngineName -PrimaryServer $PrimaryFpolicyEnginePrimaryServers `
                                 -Port $PrimaryFpolicyEnginePort -Asynchronous -SecondaryServer $PrimaryFpolicyEngineSecondaryServers -SslOption $PrimaryFpolicyEngineSslOption `
                                 -RequestCancelTimeout $PrimaryFpolicyEngineRequestCancelTimeout -RequestAbortTimeout $PrimaryFpolicyEngineRequestAbortTimeout `
@@ -3290,7 +3301,7 @@ Function create_update_fpolicy_dr(
                                 -MaxServerRequests $PrimaryFpolicyEngineMaxServerRequests -ServerProgressTimeout $PrimaryFpolicyEngineServerProgressTimeout `
                                 -KeepAliveInterval $PrimaryFpolicyEngineKeepAliveInterval -CertificateCommonName $PrimaryFpolicyEngineCertificateCommonName `
                                 -CertificateSerial $PrimaryFpolicyEngineCertificateSerial -CertificateCa $PrimaryFpolicyEngineCertificateCa `
-                                -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ZapiCall
+                                -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
                                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyExternalEngine failed [$ErrorVar]" } #>
                                 $myVserver=Get-NcVserver -Name $mySecondaryVserver -controller $mySecondaryController
                                 $CredSecondary=get_local_cDotcred($mySecondaryController)
@@ -3527,11 +3538,11 @@ Function create_update_fpolicy_dr(
                                 Write-LogDebug "Set-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -EngineName $PrimaryFpolicyEngineName `
                                 -Mandatory $PrimaryFpolPolIsMandatory -AllowPrivilegedAccess $PrimaryFpolPolAllowPrivilegedAccess `
                                 -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ZapiCall"
+                                -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
                                 $out=Set-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -EngineName $PrimaryFpolicyEngineName `
                                 -Mandatory $PrimaryFpolPolIsMandatory -AllowPrivilegedAccess $PrimaryFpolPolAllowPrivilegedAccess `
                                 -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar -ZapiCall
+                                -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar -ONTAPI
                                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcFpolicyPolicy failed [$ErrorVar]" }
                             }else{
                                 if((Get-NcFpolicypolicy -Vserver $mySecondaryVserver -Name $PrimaryFpolPolName -Controller $mySecondaryController).Enabled){
@@ -3573,11 +3584,11 @@ Function create_update_fpolicy_dr(
                                     Write-LogDebug "New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
                                     -EngineName $PrimaryFpolicyEngineName -AllowPrivilegedAccess `
                                     -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                    -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ZapiCall"
+                                    -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
                                     $out=New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
                                     -EngineName $PrimaryFpolicyEngineName -AllowPrivilegedAccess `
                                     -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                    -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ZapiCall
+                                    -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
                                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" } 
                                 }else{
                                     if(($null -ne $PrimaryFpolPolScope) -and ($null -ne (Get-NcFpolicyScope -PolicyName $PrimaryFpolPolName -Vserver $mySecondaryVserver -Controller $mySecondaryController))){
@@ -3595,11 +3606,11 @@ Function create_update_fpolicy_dr(
                                         Write-LogDebug "New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
                                         -EngineName $PrimaryFpolicyEngineName `
                                         -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ZapiCall"
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
                                         $out=New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
                                         -EngineName $PrimaryFpolicyEngineName `
                                         -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ZapiCall
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
                                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" }
                                     }
                                 }
@@ -3620,11 +3631,11 @@ Function create_update_fpolicy_dr(
                                     Write-LogDebug "New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
                                     -EngineName $PrimaryFpolicyEngineName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
                                     -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName  `
-                                    -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ZapiCall"
+                                    -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
                                     $out=New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
                                     -EngineName $PrimaryFpolicyEngineName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
                                     -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName `
-                                    -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ZapiCall
+                                    -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
                                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" }
                                 }else{
                                     if(($null -ne $PrimaryFpolPolScope) -and ($null -ne (Get-NcFpolicyScope -PolicyName $PrimaryFpolPolName -Vserver $mySecondaryVserver -Controller $mySecondaryController))){
@@ -3641,12 +3652,12 @@ Function create_update_fpolicy_dr(
                                         # ! Force ONTAPI Mode because of bug in New-NcFpolicyPolicy in REST which require a mandaotry existing scope variable
                                         Write-LogDebug "New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
                                         -EngineName $PrimaryFpolicyEngineName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                        -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName  -ZapiCall`
+                                        -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName  -ONTAPI`
                                         -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
                                         $out=New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName `
                                         -EngineName $PrimaryFpolicyEngineName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
                                         -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ZapiCall
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
                                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" }
                                     }
                                 }
@@ -3670,11 +3681,11 @@ Function create_update_fpolicy_dr(
                                     Write-LogDebug "New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -NonMandatory `
                                     -EngineName $PrimaryFpolicyEngineName -AllowPrivilegedAccess `
                                     -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                    -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ZapiCall"
+                                    -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
                                     $out=New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -NonMandatory `
                                     -EngineName $PrimaryFpolicyEngineName -AllowPrivilegedAccess `
                                     -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                    -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ZapiCall
+                                    -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
                                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" } 
                                 }else{
                                     if(($null -ne $PrimaryFpolPolScope) -and ($null -ne (Get-NcFpolicyScope -PolicyName $PrimaryFpolPolName -Vserver $mySecondaryVserver -Controller $mySecondaryController))){
@@ -3692,11 +3703,11 @@ Function create_update_fpolicy_dr(
                                         Write-LogDebug "New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -NonMandatory `
                                         -EngineName $PrimaryFpolicyEngineName `
                                         -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController -zapicall"
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
                                         $out=New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -NonMandatory `
                                         -EngineName $PrimaryFpolicyEngineName `
                                         -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ZapiCall
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
                                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" } 
                                     }
                                 }
@@ -3739,11 +3750,11 @@ Function create_update_fpolicy_dr(
                                         Write-LogDebug "New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -NonMandatory `
                                         -EngineName $PrimaryFpolicyEngineName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
                                         -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ZapiCall"
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
                                         $out=New-NcFpolicyPolicy -Name $PrimaryFpolPolName -Event $PrimaryFpolEvtEventName -NonMandatory `
                                         -EngineName $PrimaryFpolicyEngineName -IsPassthroughReadEnabled $PrimaryFpolPolAllowIsPassthroughReadEnabled `
                                         -PrivilegedUserName $PrimaryFpolPolAllowPrivilegedUserName `
-                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ZapiCall
+                                        -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
                                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcFpolicyPolicy failed [$ErrorVar]" }
                                     }
                                 }
@@ -4233,8 +4244,8 @@ Function create_update_qospolicy_dr(
                 # if($Restore -eq $False){
                 #     # if($Global:PSTKCall -eq "Rest"){
                 #     #     # ! force zapicall because of burt in ONTAP 9.12.1RC1 with GetNcVol and type change in REST records
-                #     #     Write-LogDebug "Get-NcVol -Zapicall -Query @{VolumeIdAttributes=@{StyleExtended=`"flexvol|flexgroup`"};VolumeStateAttributes=@{IsVserverRoot=$False};Vserver=$myPrimaryVserver} -Controller $myPrimaryController -VserverContext $myPrimaryVserver"
-                #     #     $PrimaryVolList = Get-NcVol -Zapicall -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"};VolumeStateAttributes=@{IsVserverRoot=$False};Vserver=$myPrimaryVserver} -Controller $myPrimaryController -VserverContext $myPrimaryVserver -ErrorVariable ErrorVar
+                #     #     Write-LogDebug "Get-NcVol -ONTAPI -Query @{VolumeIdAttributes=@{StyleExtended=`"flexvol|flexgroup`"};VolumeStateAttributes=@{IsVserverRoot=$False};Vserver=$myPrimaryVserver} -Controller $myPrimaryController -VserverContext $myPrimaryVserver"
+                #     #     $PrimaryVolList = Get-NcVol -ONTAPI -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"};VolumeStateAttributes=@{IsVserverRoot=$False};Vserver=$myPrimaryVserver} -Controller $myPrimaryController -VserverContext $myPrimaryVserver -ErrorVariable ErrorVar
                 #     #     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
                 #     # }else{
                 #         Write-LogDebug "Get-NcVol -Query @{VolumeIdAttributes=@{StyleExtended=`"flexvol|flexgroup`"};VolumeStateAttributes=@{IsVserverRoot=$False}} -Controller $myPrimaryController -VserverContext $myPrimaryVserver"
@@ -4345,8 +4356,8 @@ Function create_update_qospolicy_dr(
                                 }else{
                                     $attributes.VolumeQosAttributes.PolicyGroupName=$QosPolicyGroupName
                                 }
-                                Write-LogDebug "Update-NcVol -Query `$query -Attributes `$attributes -controller $mySecondaryController -ZapiCAll"
-                                $out=Update-NcVol -Query $query -Attributes $attributes -controller $mySecondaryController  -ErrorVariable ErrorVar -ZapiCall
+                                Write-LogDebug "Update-NcVol -Query `$query -Attributes `$attributes -controller $mySecondaryController -ONTAPI"
+                                $out=Update-NcVol -Query $query -Attributes $attributes -controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
                                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol failed [$ErrorVar]" }
                             }else{
                                 $body=@{
@@ -4427,8 +4438,8 @@ Function create_update_qospolicy_dr(
                                     }else{
                                         $attributes.VolumeQosAttributes.PolicyGroupName=$QosPolicyGroupName
                                     }
-                                    Write-LogDebug "Update-NcVol -Query `$query -Attributes `$attributes -controller $mySecondaryController -ZapiCall"
-                                    $out=Update-NcVol -Query $query -Attributes $attributes -controller $mySecondaryController  -ErrorVariable ErrorVar -ZapiCall
+                                    Write-LogDebug "Update-NcVol -Query `$query -Attributes `$attributes -controller $mySecondaryController -ONTAPI"
+                                    $out=Update-NcVol -Query $query -Attributes $attributes -controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
                                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol failed [$ErrorVar]" }
                                 }else{
                                     $body=@{
@@ -4519,8 +4530,8 @@ Function create_update_qospolicy_dr(
                                     }else{
                                         $attributes.VolumeQosAttributes.PolicyGroupName=$QosPolicyGroupName
                                     }
-                                    Write-LogDebug "Update-NcVol -Query `$query -Attributes `$attributes -controller $mySecondaryController -ZapiCall"
-                                    $out=Update-NcVol -Query $query -Attributes $attributes -controller $mySecondaryController  -ErrorVariable ErrorVar -ZapiCall
+                                    Write-LogDebug "Update-NcVol -Query `$query -Attributes `$attributes -controller $mySecondaryController -ONTAPI"
+                                    $out=Update-NcVol -Query $query -Attributes $attributes -controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
                                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol failed [$ErrorVar]" }
                                 }else{
                                     $body=@{
@@ -4687,8 +4698,8 @@ Try {
                                     $out=Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar
                                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobCronSchedule failed [$ErrorVar]" }
                                 }else{
-                                    Write-LogDebug "Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -ZapiCall"
-                                    $out=Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -ZapiCall
+                                    Write-LogDebug "Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -ONTAPI"
+                                    $out=Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -ONTAPI
                                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobCronSchedule failed [$ErrorVar]" }
                                 }
                             }else{
@@ -4737,8 +4748,8 @@ Try {
                                 Write-LogDebug "Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -ErrorVariable ErrorVar"
                                 $out=Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -ErrorAction SilentlyContinue
                             }else{
-                                Write-LogDebug "Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -ErrorVariable ErrorVar -ZapiCall"
-                                $out=Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -ErrorAction SilentlyContinue -ZapiCall
+                                Write-LogDebug "Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -ErrorVariable ErrorVar -ONTAPI"
+                                $out=Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -ErrorAction SilentlyContinue -ONTAPI
                             }
                         }else{
                             $PrimaryJobScheduleIntervalSeconds = if("" -eq $interval.JobScheduleIntervalSeconds){$null}else{$interval.JobScheduleIntervalSeconds}
@@ -4845,8 +4856,8 @@ Try {
                                         $out=Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -VserverContext $mySecondaryVserver
                                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobCronSchedule failed [$ErrorVar]" }
                                     }else{
-                                        Write-LogDebug "Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -VserverContext $mySecondaryVserver -ZapiCall"
-                                        $out=Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -VserverContext $mySecondaryVserver -ZapiCall
+                                        Write-LogDebug "Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -VserverContext $mySecondaryVserver -ONTAPI"
+                                        $out=Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -VserverContext $mySecondaryVserver -ONTAPI
                                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobCronSchedule failed [$ErrorVar]" }
                                     }
                                 }else{
@@ -4896,8 +4907,8 @@ Try {
                                     $out=Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -ErrorAction SilentlyContinue -VserverContext $mySecondaryVserver
                                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcJobCronSchedule failed [$ErrorVar]" }
                                 }else{
-                                    Write-LogDebug "Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -ErrorVariable ErrorVar -VserverContext $mySecondaryVserver -ZapiCall"
-                                    $out=Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -ErrorAction SilentlyContinue -VserverContext $mySecondaryVserver -ZapiCall
+                                    Write-LogDebug "Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -ErrorVariable ErrorVar -VserverContext $mySecondaryVserver -ONTAPI"
+                                    $out=Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -ErrorAction SilentlyContinue -VserverContext $mySecondaryVserver -ONTAPI
                                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcJobCronSchedule failed [$ErrorVar]" }
                                 }
                             }else{
@@ -5136,8 +5147,8 @@ Try {
                     $SecondarySnapshotPolicy = Get-NcSnapshotPolicy -Controller $mySecondaryController -Query @{VserverName=$LevelName;Policy=$PolicyName} -ErrorVariable ErrorVar    
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapshotPolicy failed [$ErrorVar]" }
                 }else{
-                    Write-LogDebug "Get-NcSnapshotPolicy -Controller $mySecondaryController -Query @{VserverName=$LevelName;Policy=$PolicyName} -ZapiCall"
-                    $SecondarySnapshotPolicy = Get-NcSnapshotPolicy -Controller $mySecondaryController -Query @{VserverName=$LevelName;Policy=$PolicyName} -ErrorVariable ErrorVar -ZapiCall  
+                    Write-LogDebug "Get-NcSnapshotPolicy -Controller $mySecondaryController -Query @{VserverName=$LevelName;Policy=$PolicyName} -ONTAPI"
+                    $SecondarySnapshotPolicy = Get-NcSnapshotPolicy -Controller $mySecondaryController -Query @{VserverName=$LevelName;Policy=$PolicyName} -ErrorVariable ErrorVar -ONTAPI  
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapshotPolicy failed [$ErrorVar]" }
                 }
             }else{
@@ -5147,8 +5158,8 @@ Try {
                     $SecondarySnapshotPolicy = Get-NcSnapshotPolicy -Controller $mySecondaryController -Query @{VserverName=$mySecondaryVserver;Policy=$PolicyName} -ErrorVariable ErrorVar    
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapshotPolicy failed [$ErrorVar]" }
                 }else{
-                    Write-LogDebug "Get-NcSnapshotPolicy -Controller $mySecondaryController -Query @{VserverName=$mySecondaryVserver;Policy=$PolicyName} -ZapiCall"
-                    $SecondarySnapshotPolicy = Get-NcSnapshotPolicy -Controller $mySecondaryController -Query @{VserverName=$mySecondaryVserver;Policy=$PolicyName} -ErrorVariable ErrorVar -ZapiCall   
+                    Write-LogDebug "Get-NcSnapshotPolicy -Controller $mySecondaryController -Query @{VserverName=$mySecondaryVserver;Policy=$PolicyName} -ONTAPI"
+                    $SecondarySnapshotPolicy = Get-NcSnapshotPolicy -Controller $mySecondaryController -Query @{VserverName=$mySecondaryVserver;Policy=$PolicyName} -ErrorVariable ErrorVar -ONTAPI   
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapshotPolicy failed [$ErrorVar]" }
                 }
             }
@@ -5219,8 +5230,8 @@ Try {
                             $out=Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController  -ErrorVariable ErrorVar
                             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcSnapshotPolicySchedule failed [$ErrorVar]" }
                         }elseif($Global:PSTKCall -eq "ZapiEnforced"){
-                            Write-LogDebug "Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController -ZapiCall"
-                            $out=Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController  -ErrorVariable ErrorVar -ZapiCall
+                            Write-LogDebug "Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController -ONTAPI"
+                            $out=Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
                             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcSnapshotPolicySchedule failed [$ErrorVar]" }
                         }else{
                             $NewSecondarySnapshotPolicy=Get-NcSnapshotPolicy -Controller $mySecondaryController -Query @{VserverName=$mySecondaryVserver;Policy=$PolicyName} | Where-Object {$_.VserverName -notmatch "-mc"}
@@ -5332,12 +5343,12 @@ Try {
                             }elseif($Global:PSTKCall -eq "ZapiEnforced"){
                                 Write-LogWarn "SVM scoped Snapshot Policy require to use lastest PSTK with REST call"
                                 if($SnapmirrorLabel -ne "-"){
-                                    Write-LogDebug "Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController -ZapiCall"
-                                    $out=Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController  -ErrorVariable ErrorVar -ZapiCall
+                                    Write-LogDebug "Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController -ONTAPI"
+                                    $out=Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
                                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcSnapshotPolicySchedule failed [$ErrorVar]" }
                                 }else{
-                                    Write-LogDebug "Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel \`n -Controller $mySecondaryController -ZapiCall"
-                                    $out=Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel `n -Controller $mySecondaryController  -ErrorVariable ErrorVar -ZapiCall
+                                    Write-LogDebug "Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel \`n -Controller $mySecondaryController -ONTAPI"
+                                    $out=Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel `n -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
                                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcSnapshotPolicySchedule failed [$ErrorVar]" }
                                 }
                             }else{
@@ -6517,7 +6528,7 @@ Try {
             $PrimaryRootVolumeName = (Get-NcVserver -Controller $myPrimaryController -Vserver $myPrimaryVserver  -ErrorVariable ErrorVar).RootVolume
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed to get RootVolume [$ErrorVar]" }
         }elseif($Global:PSTKCall -eq "ZapiEnforced"){
-            $PrimaryRootVolumeName = (Get-NcVserver -Controller $myPrimaryController -Vserver $myPrimaryVserver  -ErrorVariable ErrorVar -ZapiCall).RootVolume
+            $PrimaryRootVolumeName = (Get-NcVserver -Controller $myPrimaryController -Vserver $myPrimaryVserver  -ErrorVariable ErrorVar -ONTAPI).RootVolume
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed to get RootVolume [$ErrorVar]" }
         }else{
             $PrimaryCredential = get_local_cDotcred($myPrimaryController)
@@ -6547,7 +6558,7 @@ Try {
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed to get RootVolume [$ErrorVar]" } 
             if ($null -eq $SecondaryRootVolumeName) { Write-LogDebug "root volume not found for $mySecondaryVserver" }
         }elseif($Global:PSTKCall -eq "ZapiEnforced"){
-            $SecondaryRootVolumeName = (Get-NcVserver -Controller $mySecondaryController -Vserver $mySecondaryVserver  -ErrorVariable ErrorVar -ZapiCall).RootVolume
+            $SecondaryRootVolumeName = (Get-NcVserver -Controller $mySecondaryController -Vserver $mySecondaryVserver  -ErrorVariable ErrorVar -ONTAPI).RootVolume
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed to get RootVolume [$ErrorVar]" } 
             if ($null -eq $SecondaryRootVolumeName) { Write-LogDebug "root volume not found for $mySecondaryVserver" }
         }else{
@@ -6623,8 +6634,8 @@ Try {
                 $query.NcController=$mySecondaryController
                 $query_string=$query | Out-String
                 $attributes_string=$attributes | Out-String
-                Write-LogDebug "Update-NcVol -Query $query_string -Attributes $attributes_string -Controller $mySecondaryController -ZapiCall"
-                $out=Update-NcVol -Query $query -Attributes $attributes -Controller $mySecondaryController -ErrorVariable ErrorVar -ZapiCall
+                Write-LogDebug "Update-NcVol -Query $query_string -Attributes $attributes_string -Controller $mySecondaryController -ONTAPI"
+                $out=Update-NcVol -Query $query -Attributes $attributes -Controller $mySecondaryController -ErrorVariable ErrorVar -ONTAPI
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol Failed: Failed to update root volume $PrimaryVolName [$ErrorVar]" }
             }else{
                 $body=@{
@@ -6697,7 +6708,7 @@ Try {
         #     # $query.VolumeIdAttributes.StyleExtended="flexgroup|flexvol"
         #     # $query.Vserver=$myPrimaryVserver
         #     # Write-LogDebug "Get-NcVol -Controller $myPrimaryController -Query $query"
-        #     # $PrimaryVolList = Get-NcVol -ZapiCall  -Query $query -Controller $myPrimaryController -ErrorVariable ErrorVar
+        #     # $PrimaryVolList = Get-NcVol -ONTAPI  -Query $query -Controller $myPrimaryController -ErrorVariable ErrorVar
         #     Write-LogDebug "Get-NcVol -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Query `@`{VolumeStateAttributes=`@`{IsVserverRoot=$False`}`;VolumeIdAttributes=`@`{StyleExtended=`"flexvol|flexgroup`"}}"
         #     $PrimaryVolList =Get-NcVol -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -ErrorVariable ErrorVar
         #     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
@@ -6747,7 +6758,7 @@ Try {
                     if($Restore -eq $False){
                         # $PrimaryFlexgroupUuid=$PrimaryVol.VolumeIdAttributes.FlexgroupUuid
                         # Write-LogDebug "Get-NcVol -VserverContext $PrimaryVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended=`"flexgroup`"`}`} -Controller $myPrimaryController"
-                        # $PrimaryFlexgroupMaster= Get-NcVol -ZapiCall  -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
+                        # $PrimaryFlexgroupMaster= Get-NcVol -ONTAPI  -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
                         $PrimaryFlexgroupMaster=$PrimaryVol
                         # if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup master informations [$PrimaryVolName] [$ErrorVar]" }
                         if($InReverse -eq $False){
@@ -6840,8 +6851,8 @@ Try {
                                 $out=Update-NcVol -Query $query -Attributes $attributes -Controller $mySecondaryController -ErrorVariable ErrorVar 
                                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol Failed: Failed to update volume $SecondaryVolName [$ErrorVar]" }
                             }else{
-                                Write-LogDebug "Update-NcVol -Query $query_string -Attributes $attributes_string -Controller $mySecondaryController -ZapiCall"
-                                $out=Update-NcVol -Query $query -Attributes $attributes -Controller $mySecondaryController -ErrorVariable ErrorVar -ZapiCall
+                                Write-LogDebug "Update-NcVol -Query $query_string -Attributes $attributes_string -Controller $mySecondaryController -ONTAPI"
+                                $out=Update-NcVol -Query $query -Attributes $attributes -Controller $mySecondaryController -ErrorVariable ErrorVar -ONTAPI
                                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol Failed: Failed to update volume $SecondaryVolName [$ErrorVar]" }
                             }
                         }else{
@@ -6922,8 +6933,8 @@ Try {
                             $out=Update-NcVol -Query $query -Attributes $attributes -Controller $mySecondaryController -ErrorVariable ErrorVar 
                             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol Failed: Failed to update volume $PrimaryVolName [$ErrorVar]" } 
                         }else{
-                            Write-LogDebug "Update-NcVol -Query $query_string -Attributes $attributes_string -Controller $mySecondaryController -ZapiCall"
-                            $out=Update-NcVol -Query $query -Attributes $attributes -Controller $mySecondaryController -ErrorVariable ErrorVar -ZapiCall
+                            Write-LogDebug "Update-NcVol -Query $query_string -Attributes $attributes_string -Controller $mySecondaryController -ONTAPI"
+                            $out=Update-NcVol -Query $query -Attributes $attributes -Controller $mySecondaryController -ErrorVariable ErrorVar -ONTAPI
                             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol Failed: Failed to update volume $PrimaryVolName [$ErrorVar]" } 
                         }
                     }else{
@@ -7127,12 +7138,12 @@ Try {
                 $PrimaryVolList = Get-NcVol -Controller $myPrimaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup";Type="rw"};Vserver=$myPrimaryVserver} -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
             }elseif($Global:PSTKCall -eq "ZapiEnforced"){
-                Write-LogDebug "Get-NcVol -Controller $myPrimaryController -Query `@`{VolumeStateAttributes=`@`{IsVserverRoot=$False`}`;VolumeIdAttributes=`@`{StyleExtended=`"flexvol|flexgroup`";Type=`"rw`"`}`;Vserver=$myPrimaryVserver`} -ZapiCall"
-                $PrimaryVolList = Get-NcVol -Controller $myPrimaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup";Type="rw"};Vserver=$myPrimaryVserver} -ErrorVariable ErrorVar -ZapiCall
+                Write-LogDebug "Get-NcVol -Controller $myPrimaryController -Query `@`{VolumeStateAttributes=`@`{IsVserverRoot=$False`}`;VolumeIdAttributes=`@`{StyleExtended=`"flexvol|flexgroup`";Type=`"rw`"`}`;Vserver=$myPrimaryVserver`} -ONTAPI"
+                $PrimaryVolList = Get-NcVol -Controller $myPrimaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup";Type="rw"};Vserver=$myPrimaryVserver} -ErrorVariable ErrorVar -ONTAPI
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
             }else{
-                # Write-LogDebug "Get-NcVol -ZapiCall -Controller $myPrimaryController -Query `@`{VolumeStateAttributes=`@`{IsVserverRoot=$False`}`;VolumeIdAttributes=`@`{StyleExtended=`"flexvol|flexgroup`";Type=`"rw`"`}`;Vserver=$myPrimaryVserver`} -VserverContext $myPrimaryVserver"
-                # $PrimaryVolList = Get-NcVol -ZapiCall -Controller $myPrimaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup";Type="rw"};Vserver=$myPrimaryVserver} -VserverContext $myPrimaryVserver -ErrorVariable ErrorVar
+                # Write-LogDebug "Get-NcVol -ONTAPI -Controller $myPrimaryController -Query `@`{VolumeStateAttributes=`@`{IsVserverRoot=$False`}`;VolumeIdAttributes=`@`{StyleExtended=`"flexvol|flexgroup`";Type=`"rw`"`}`;Vserver=$myPrimaryVserver`} -VserverContext $myPrimaryVserver"
+                # $PrimaryVolList = Get-NcVol -ONTAPI -Controller $myPrimaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup";Type="rw"};Vserver=$myPrimaryVserver} -VserverContext $myPrimaryVserver -ErrorVariable ErrorVar
                 # if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
                 $PrimaryCredential = get_local_cDotcred($myPrimaryController)
                 $url=$("https://"+$myPrimaryController.Name+"/api/storage/volumes?svm.name="+$myPrimaryVserver+"&fields=**,!metric,!statistics&is_svm_root=false")
@@ -7357,8 +7368,8 @@ Try {
                         $SecondaryVol = Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $PrimaryVolName  -ErrorVariable ErrorVar 
                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
                     }elseif($Global:PSTKCall -eq "ZapiEnforced"){
-                        Write-LogDebug "Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $PrimaryVolName -ZapiCall"
-                        $SecondaryVol = Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $PrimaryVolName  -ErrorVariable ErrorVar -ZapiCall
+                        Write-LogDebug "Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $PrimaryVolName -ONTAPI"
+                        $SecondaryVol = Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $PrimaryVolName  -ErrorVariable ErrorVar -ONTAPI
                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
                     }else{
                         $Credential = get_local_cDotcred($mySecondaryController)
@@ -7620,8 +7631,8 @@ Try {
                                 $SecondaryVol = New-NcVol -Name $PrimaryVolName -Comment $SecondaryVolComment -Aggregate $myDataAggr -JunctionPath $null -ExportPolicy $PrimaryVolExportPolicy -SecurityStyle $PrimaryVolStyle -Encrypt:$Encrypt -SpaceReserve $SpaceReserve -SnapshotReserve $PrimaryVolSnapshotReserve -Type DP -Language $PrimaryVolLang -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Size $PrimaryVolSize @option -ErrorVariable ErrorVar 
                                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcVol Failed: Failed to create new volume $PrimaryVolName [$ErrorVar]" } 
                             }else{
-                                Write-LogDebug "New-NcVol -Name $PrimaryVolName -Comment $SecondaryVolComment -Aggregate $myDataAggr -JunctionPath $null -ExportPolicy $PrimaryVolExportPolicy -SecurityStyle $PrimaryVolStyle -Encrypt:$Encrypt -SpaceReserve $SpaceReserve -SnapshotReserve $PrimaryVolSnapshotReserve -Type DP -Language $PrimaryVolLang -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Size $PrimaryVolSize $option -ZapiCall"
-                                $SecondaryVol = New-NcVol -Name $PrimaryVolName -Comment $SecondaryVolComment -Aggregate $myDataAggr -JunctionPath $null -ExportPolicy $PrimaryVolExportPolicy -SecurityStyle $PrimaryVolStyle -Encrypt:$Encrypt -SpaceReserve $SpaceReserve -SnapshotReserve $PrimaryVolSnapshotReserve -Type DP -Language $PrimaryVolLang -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Size $PrimaryVolSize @option -ErrorVariable ErrorVar -ZapiCall
+                                Write-LogDebug "New-NcVol -Name $PrimaryVolName -Comment $SecondaryVolComment -Aggregate $myDataAggr -JunctionPath $null -ExportPolicy $PrimaryVolExportPolicy -SecurityStyle $PrimaryVolStyle -Encrypt:$Encrypt -SpaceReserve $SpaceReserve -SnapshotReserve $PrimaryVolSnapshotReserve -Type DP -Language $PrimaryVolLang -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Size $PrimaryVolSize $option -ONTAPI"
+                                $SecondaryVol = New-NcVol -Name $PrimaryVolName -Comment $SecondaryVolComment -Aggregate $myDataAggr -JunctionPath $null -ExportPolicy $PrimaryVolExportPolicy -SecurityStyle $PrimaryVolStyle -Encrypt:$Encrypt -SpaceReserve $SpaceReserve -SnapshotReserve $PrimaryVolSnapshotReserve -Type DP -Language $PrimaryVolLang -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Size $PrimaryVolSize @option -ErrorVariable ErrorVar -ONTAPI
                                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcVol Failed: Failed to create new volume $PrimaryVolName [$ErrorVar]" }
                             }
                         }else{
@@ -7739,8 +7750,8 @@ Try {
                                     # $SecondaryVol = New-NcVol @NewNcVolParameters -Encrypt:$Encrypt -Type "dp" @option -Controller $mySecondaryController -ErrorVariable ErrorVar
                                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcVol Failed: Failed to create new volume $PrimaryVolName [$ErrorVar]" }  
                                 }else{
-                                    Write-LogDebug "New-NcVol -Name $PrimaryVolName -Comment $SecondaryVolComment -Aggregate $myDataAggr -JunctionPath $null -ExportPolicy $PrimaryVolExportPolicy -SecurityStyle $PrimaryVolStyle -Encrypt:$Encrypt -SpaceReserve $SpaceReserve -SnapshotReserve $PrimaryVolSnapshotReserve -Type DP  -Language $PrimaryVolLang -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Size $PrimaryVolSize $option -ZapiCall"
-                                    $SecondaryVol = New-NcVol -Name $PrimaryVolName -Comment $SecondaryVolComment -Aggregate $myDataAggr -JunctionPath $null -ExportPolicy $PrimaryVolExportPolicy -SecurityStyle $PrimaryVolStyle -Encrypt:$Encrypt -SpaceReserve $SpaceReserve -SnapshotReserve $PrimaryVolSnapshotReserve -Type DP -Language $PrimaryVolLang -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Size $PrimaryVolSize @option -ErrorVariable ErrorVar -ZapiCall
+                                    Write-LogDebug "New-NcVol -Name $PrimaryVolName -Comment $SecondaryVolComment -Aggregate $myDataAggr -JunctionPath $null -ExportPolicy $PrimaryVolExportPolicy -SecurityStyle $PrimaryVolStyle -Encrypt:$Encrypt -SpaceReserve $SpaceReserve -SnapshotReserve $PrimaryVolSnapshotReserve -Type DP  -Language $PrimaryVolLang -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Size $PrimaryVolSize $option -ONTAPI"
+                                    $SecondaryVol = New-NcVol -Name $PrimaryVolName -Comment $SecondaryVolComment -Aggregate $myDataAggr -JunctionPath $null -ExportPolicy $PrimaryVolExportPolicy -SecurityStyle $PrimaryVolStyle -Encrypt:$Encrypt -SpaceReserve $SpaceReserve -SnapshotReserve $PrimaryVolSnapshotReserve -Type DP -Language $PrimaryVolLang -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Size $PrimaryVolSize @option -ErrorVariable ErrorVar -ONTAPI
                                     # Write-LogDebug "New-NcVol $NewNcVolParameters_string -Encrypt:$Encrypt -Type dp $option_string -Controller $mySecondaryController"
                                     # $SecondaryVol = New-NcVol @NewNcVolParameters -Encrypt:$Encrypt -Type "dp" @option -Controller $mySecondaryController -ErrorVariable ErrorVar
                                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcVol Failed: Failed to create new volume $PrimaryVolName [$ErrorVar]" } 
@@ -7820,7 +7831,7 @@ Try {
                     # $PrimaryFlexgroupUuid=$PrimaryVol.VolumeIdAttributes.FlexgroupUuid
                     # if($Global:PSTKCall -ne "Rest"){
                     #     Write-LogDebug "Get-NcVol -VserverContext $PrimaryVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended=`"flexgroup_constituent`"`}`} -Controller $myPrimaryController"
-                    #     $PrimaryFlexgroupConstituent= Get-NcVol -ZapiCall  -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup_constituent"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
+                    #     $PrimaryFlexgroupConstituent= Get-NcVol -ONTAPI  -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup_constituent"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
                     #     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup constituent informations [$PrimaryVolName] [$ErrorVar]" }
                     #     $ConstituentSizeByte=$PrimaryFlexgroupConstituent[0].TotalSize
                     # }else{
@@ -7830,7 +7841,7 @@ Try {
                     # $NumberFlexgroupConstituent=($PrimaryFlexgroupConstituent | Measure-Object).Count
                     
                     # # Write-LogDebug "Get-NcVol -VserverContext $PrimaryVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended=`"flexgroup`"`}`} -Controller $myPrimaryController"
-                    # # $PrimaryFlexgroupMaster= Get-NcVol -ZapiCall  -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
+                    # # $PrimaryFlexgroupMaster= Get-NcVol -ONTAPI  -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
                     # # if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup master informations [$PrimaryVolName] [$ErrorVar]" }
                     $SecondaryFlexgroupMasterName=$($PrimaryVolName+'_dst')
                     $PrimaryFlexgroupMasterName=$PrimaryVolName
@@ -8014,7 +8025,7 @@ Try {
 	Write-LogDebug "[$mySecondaryVserver]: start"
     if($Source -eq $False){
         if($Global:PSTKCall -match "Rest|ZapiEnforced"){
-            $SecondaryVolList = Get-NcVol -ZapiCall  -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"};Vserver=$mySecondaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False}} -ErrorVariable ErrorVar  
+            $SecondaryVolList = Get-NcVol -ONTAPI  -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"};Vserver=$mySecondaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False}} -ErrorVariable ErrorVar  
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
         }else{
             $SecondaryVolList = Get-NcVol -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"};Vserver=$mySecondaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False}} -ErrorVariable ErrorVar  
@@ -8039,8 +8050,8 @@ Try {
 	    }
 	
         if($Global:PSTKCall -match "Rest|ZapiEnforced"){
-            Write-LogDebug "Get-NcVol -ZapiCall -Query `@`{VolumeStateAttributes=`@`{IsVserverRoot=$False`}`;VolumeIdAttributes=`@`{StyleExtended=`"flexvol|flexgroup`";Type=`"dp`"`}`;Vserver=$mySecondaryController`} -Controller $mySecondaryController"
-            $SecondaryVolList = Get-NcVol -ZapiCall -Query @{VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup";Type="dp"};Vserver=$mySecondaryVserver} -Controller $mySecondaryController  -ErrorVariable ErrorVar
+            Write-LogDebug "Get-NcVol -ONTAPI -Query `@`{VolumeStateAttributes=`@`{IsVserverRoot=$False`}`;VolumeIdAttributes=`@`{StyleExtended=`"flexvol|flexgroup`";Type=`"dp`"`}`;Vserver=$mySecondaryController`} -Controller $mySecondaryController"
+            $SecondaryVolList = Get-NcVol -ONTAPI -Query @{VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup";Type="dp"};Vserver=$mySecondaryVserver} -Controller $mySecondaryController  -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
         }else{
             Write-LogDebug "Get-NcVol -Controller $mySecondaryController -Query `@`{VolumeStateAttributes=`@`{IsVserverRoot=$False`}`;VolumeIdAttributes=`@`{StyleExtended=`"flexvol|flexgroup`";Type=`"dp`"`}`;Vserver=$mySecondaryController`}"
@@ -8065,7 +8076,7 @@ Try {
         }
     }else{
         if($Global:PSTKCall -match "Rest|zapiEnforced"){
-            $PrimaryVolList = Get-NcVol -ZapiCall  -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"};Vserver=$myPrimaryVserver;VolumeStateAttributes=@{IsVserverRoot=$false}} -ErrorVariable ErrorVar  
+            $PrimaryVolList = Get-NcVol -ONTAPI  -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"};Vserver=$myPrimaryVserver;VolumeStateAttributes=@{IsVserverRoot=$false}} -ErrorVariable ErrorVar  
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
         }else{
             $PrimaryVolList = Get-NcVol -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"};Vserver=$myPrimaryVserver;VolumeStateAttributes=@{IsVserverRoot=$false}} -ErrorVariable ErrorVar  
@@ -8090,7 +8101,7 @@ Try {
             }
         }
         if($Global:PSTKCall -match "Rest|ZapiEnforced"){
-            $PrimaryVolList = Get-NcVol -ZapiCall  -Controller $myPrimaryController -Vserver $myPrimaryVserver  -ErrorVariable ErrorVar
+            $PrimaryVolList = Get-NcVol -ONTAPI  -Controller $myPrimaryController -Vserver $myPrimaryVserver  -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
         }else{
             $PrimaryVolList = Get-NcVol -Controller $myPrimaryController -Vserver $myPrimaryVserver  -ErrorVariable ErrorVar
@@ -8157,8 +8168,8 @@ Try {
         $VolListNotNested= Get-NcVol -VserverContext $myVserver -Query @{VolumeIdAttributes=@{JunctionParentName="$RootVolumeName";StyleExtended="flexvol|flexgroup"};Vserver=$myVserver;VolumeStateAttributes=@{State="online";IsVserverRoot=$false}} -Controller $myController -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get NotNested Volumes failed [$ErrorVar]" }
     }elseif($Global:PSTKCall -eq "ZapiEnforced"){
-        Write-LogDebug "Get-NcVol -Query @{VolumeIdAttributes=@{JunctionParentName=""$RootVolumeName"";StyleExtended=""flexvol|flexgroup""};Vserver=""$myVserver"";VolumeStateAttributes=@{State=online;IsVserverRoot=false}} -Controller $myController -ZapiCall"
-        $VolListNotNested= Get-NcVol -Query @{VolumeIdAttributes=@{JunctionParentName="$RootVolumeName";StyleExtended="flexvol|flexgroup"};Vserver=$myVserver;VolumeStateAttributes=@{State="online";IsVserverRoot=$false}} -Controller $myController -ErrorVariable ErrorVar -ZapiCall
+        Write-LogDebug "Get-NcVol -Query @{VolumeIdAttributes=@{JunctionParentName=""$RootVolumeName"";StyleExtended=""flexvol|flexgroup""};Vserver=""$myVserver"";VolumeStateAttributes=@{State=online;IsVserverRoot=false}} -Controller $myController -ONTAPI"
+        $VolListNotNested= Get-NcVol -Query @{VolumeIdAttributes=@{JunctionParentName="$RootVolumeName";StyleExtended="flexvol|flexgroup"};Vserver=$myVserver;VolumeStateAttributes=@{State="online";IsVserverRoot=$false}} -Controller $myController -ErrorVariable ErrorVar -ONTAPI
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get NotNested Volumes failed [$ErrorVar]" }
     }else{
         $url=$("https://"+$myController.Name+"/api/storage/volumes?svm.name="+$myVserver+"&nas.junction_parent.name="+$RootVolumeName+"&fields=name,nas.path,nas.junction_parent.name,style,nas.unix_permissions")
@@ -8189,7 +8200,7 @@ Try {
             # if($Global:PSTKCall -ne "Rest"){
             #     $volFlexgroupUuid=$vol.VolumeIdAttributes.FlexgroupUuid
             #     Write-LogDebug "Get-NcVol -VserverContext $myVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$volFlexgroupUuid;StyleExtended=`"flexgroup`"`}`} -Controller $myController"
-            #     $PrimaryFlexgroupMaster= Get-NcVol -ZapiCall  -VserverContext $myVserver -Query @{Vserver=$myVserver;VolumeIdAttributes=@{FlexgroupUuid=$volFlexgroupUuid;StyleExtended="flexgroup"}} -Controller $myController -ErrorVariable ErrorVar
+            #     $PrimaryFlexgroupMaster= Get-NcVol -ONTAPI  -VserverContext $myVserver -Query @{Vserver=$myVserver;VolumeIdAttributes=@{FlexgroupUuid=$volFlexgroupUuid;StyleExtended="flexgroup"}} -Controller $myController -ErrorVariable ErrorVar
             #     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup master informations [$($vol_detail.Name)] [$ErrorVar]" }
             # }else{
             #     $PrimaryFlexgroupMaster=$vol_detail
@@ -8241,8 +8252,8 @@ Try {
         $VolListNested= Get-NcVol -VserverContext $myVserver -Query @{VolumeIdAttributes=@{JunctionParentName="!$RootVolumeName";JunctionPath="!-,!/";StyleExtended="flexvol|flexgroup"};Vserver=$myVserver;VolumeStateAttributes=@{IsVserverRoot=$false;State="online"}} -Controller $myController -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get Nested Volumes failed [$ErrorVar]" }
     }elseif($Global:PSTKCall -eq "ZapiEnforced"){
-        Write-LogDebug "Get-NcVol -VserverContext $myVserver -Query @{VolumeStateAttributes=@{IsVserverRoot=$false;State=""online""};VolumeIdAttributes=@{JunctionParentName=""!$RootVolumeName"";JunctionPath=""!-,!/""};StyleExtended=""flexvol|flexgroup""} -Controller $myController -ZapiCall"
-        $VolListNested= Get-NcVol -VserverContext $myVserver -Query @{VolumeIdAttributes=@{JunctionParentName="!$RootVolumeName";JunctionPath="!-,!/";StyleExtended="flexvol|flexgroup"};Vserver=$myVserver;VolumeStateAttributes=@{IsVserverRoot=$false;State="online"}} -Controller $myController -ErrorVariable ErrorVar -ZapiCall
+        Write-LogDebug "Get-NcVol -VserverContext $myVserver -Query @{VolumeStateAttributes=@{IsVserverRoot=$false;State=""online""};VolumeIdAttributes=@{JunctionParentName=""!$RootVolumeName"";JunctionPath=""!-,!/""};StyleExtended=""flexvol|flexgroup""} -Controller $myController -ONTAPI"
+        $VolListNested= Get-NcVol -VserverContext $myVserver -Query @{VolumeIdAttributes=@{JunctionParentName="!$RootVolumeName";JunctionPath="!-,!/";StyleExtended="flexvol|flexgroup"};Vserver=$myVserver;VolumeStateAttributes=@{IsVserverRoot=$false;State="online"}} -Controller $myController -ErrorVariable ErrorVar -ONTAPI
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get Nested Volumes failed [$ErrorVar]" }
     }else{
         $url=$("https://"+$myController.Name+"/api/storage/volumes?svm.name="+$myVserver+"&nas.path=!-,!/&nas.junction_parent.name=!"+$RootVolumeName+"&fields=name,nas.path,nas.junction_parent.name,style,nas.unix_permissions")
@@ -8294,7 +8305,7 @@ Try {
         if($Global:PSTKCall -eq "Zapi"){
             $vol_detail.Permission=(Read-NcDirectory -Controller $myController -VserverContext $myVserver -Path $("/vol/"+$RootName) | Where-Object {$_.Name -match $dir} | Select-Object Perm).Perm
         }elseif($Global:PSTKCall -eq "ZapiEnforced"){
-            $vol_detail.Permission=(Read-NcDirectory -Controller $myController -VserverContext $myVserver -Path $("/vol/"+$RootName) -ZapiCall | Where-Object {$_.Name -match $dir} | Select-Object Perm).Perm
+            $vol_detail.Permission=(Read-NcDirectory -Controller $myController -VserverContext $myVserver -Path $("/vol/"+$RootName) -ONTAPI | Where-Object {$_.Name -match $dir} | Select-Object Perm).Perm
         }else{
             $vol_detail.Permission=$vol.nas.unix_permissions
         }
@@ -8713,7 +8724,7 @@ Try {
     	    Write-LogError "ERROR: analyse_junction_path" 
 		    #clean_and_exit 1
 	    }
-        #$SecondaryVolList = Get-NcVol -ZapiCall  -Controller $mySecondaryController -Vserver $mySecondaryVserver  -ErrorVariable ErrorVar 
+        #$SecondaryVolList = Get-NcVol -ONTAPI  -Controller $mySecondaryController -Vserver $mySecondaryVserver  -ErrorVariable ErrorVar 
 	    #if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
 	    #foreach ( $SecondaryVol in ( $SecondaryVolList | Skip-Null ) ) {
         foreach ( $SecondaryVol in ( ($Script:vol_junction_dest | Sort-Object -Descending -Property Level).Name ) ) {
@@ -8731,7 +8742,7 @@ Try {
     	    Write-LogError "ERROR: analyse_junction_path" 
 		    #clean_and_exit 1
 	    }
-        #$PrimaryVolList = Get-NcVol -ZapiCall  -Controller $myPrimaryController -Vserver $myPrimaryVserver  -ErrorVariable ErrorVar 
+        #$PrimaryVolList = Get-NcVol -ONTAPI  -Controller $myPrimaryController -Vserver $myPrimaryVserver  -ErrorVariable ErrorVar 
 	    #if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
 	    #foreach ( $PrimaryVol in ( $PrimaryVolList | Skip-Null ) ) {
         foreach ( $PrimaryVol in ( ($Script:vol_junction | Sort-Object -Descending -Property Level).Name ) ) {
@@ -9510,8 +9521,8 @@ Try {
     # }else{
     #     if($Global:PSTKCall -eq "Rest"){
     #         # ! force zapicall because of burt in ONTAP 9.12.1RC1 with GetNcVol and type change in REST records
-    #         Write-LogDebug "Get-NcVol -ZapiCall -Vserver $myPrimaryVserver -Controller $myPrimaryController"
-    #         $PrimaryVolList = Get-NcVol -ZapiCall  -Controller $myPrimaryController -VserverContext $myPrimaryVserver -Query @{Vserver=$myPrimaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -ErrorVariable ErrorVar
+    #         Write-LogDebug "Get-NcVol -ONTAPI -Vserver $myPrimaryVserver -Controller $myPrimaryController"
+    #         $PrimaryVolList = Get-NcVol -ONTAPI  -Controller $myPrimaryController -VserverContext $myPrimaryVserver -Query @{Vserver=$myPrimaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -ErrorVariable ErrorVar
     #         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
     #     }else{
     #         Write-LogDebug "Get-NcVol -Vserver $myPrimaryVserver -Controller $myPrimaryController"
@@ -9876,12 +9887,12 @@ Try {
             # # get all constituent informations
             # $PrimaryFlexgroupUuid=$PrimaryVol.VolumeIdAttributes.FlexgroupUuid
             # Write-LogDebug "Get-NcVol -VserverContext $PrimaryVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended=`"flexgroup_constituent`"`}`} -Controller $myPrimaryController"
-            # $PrimaryFlexgroupConstituent= Get-NcVol -ZapiCall  -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup_constituent"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
+            # $PrimaryFlexgroupConstituent= Get-NcVol -ONTAPI  -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup_constituent"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
             # if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup constituent informations [$PrimaryVolName] [$ErrorVar]" }
             # $NumberFlexgroupConstituent=($PrimaryFlexgroupConstituent | Measure-Object).Count
             # $ConstituentSizeByte=$PrimaryFlexgroupConstituent[0].TotalSize
             # Write-LogDebug "Get-NcVol -VserverContext $PrimaryVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended=`"flexgroup`"`}`} -Controller $myPrimaryController"
-            # $PrimaryFlexgroupMaster= Get-NcVol -ZapiCall  -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
+            # $PrimaryFlexgroupMaster= Get-NcVol -ONTAPI  -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
             # if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Failed to get flexgroup master informations [$PrimaryVolName] [$ErrorVar]" }
             $SecondaryFlexgroupMasterName=$($PrimaryVolName+'_dst')
             $PrimaryFlexgroupMasterName=$PrimaryVolName
@@ -9947,8 +9958,8 @@ Try {
                             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
                         }else{
                             # ! Need to force an ONTAPI call becasue of burt in PSTK and i need a 'PSTK' answer to pipe it into Invoke-NcSnapmirrorRelease
-                            Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName) -DestinationLocation $($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName) -Controller $myPrimaryController -ZapiCall | Invoke-NcSnapmirrorRelease -RelationshipInfoOnly"
-                            $ret=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName) -DestinationLocation $($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName) -Controller $myPrimaryController -ErrorVariable ErrorVar -ZapiCall | Invoke-NcSnapmirrorRelease -RelationshipInfoOnly -ErrorVariable ErrorVar -Confirm:$False
+                            Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName) -DestinationLocation $($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName) -Controller $myPrimaryController -ONTAPI | Invoke-NcSnapmirrorRelease -RelationshipInfoOnly"
+                            $ret=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName) -DestinationLocation $($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName) -Controller $myPrimaryController -ErrorVariable ErrorVar -ONTAPI | Invoke-NcSnapmirrorRelease -RelationshipInfoOnly -ErrorVariable ErrorVar -Confirm:$False
                             if($? -ne $True){$Return=$False; Throw "ERROR : Failed to release destination relationship [${mySecondaryController}:${mySecondaryVserver}:${SecondaryFlexgroupMasterName}] reason [$ErrorVar]"}
 
                             <# Write-LogDebug "New-NcSnapmirror -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Type vault -Policy $PreviousRelationPolicy -Schedule $Schedule -controller $mySecondaryController"
@@ -11726,7 +11737,7 @@ Try {
             $QName=$qtree.Qtree
             $ExportPolicy=$qtree.ExportPolicy
             $Volume=$qtree.Volume
-            $PrimaryVolumeType= (Get-NcVol -ZapiCall  -Name $Volume -Vserver $myPrimaryVserver -Controller $myPrimaryController).VolumeIdAttributes.StyleExtended
+            $PrimaryVolumeType= (Get-NcVol -ONTAPI  -Name $Volume -Vserver $myPrimaryVserver -Controller $myPrimaryController).VolumeIdAttributes.StyleExtended
             if($PrimaryVolumeType -eq "flexgroup"){
                 $SecondaryVolumeName=$($Volume+"_dst")
                 Write-LogDebug "Working on flexgroup volume on destination [$SecondaryVolumeName]"
@@ -12123,8 +12134,8 @@ Try {
                     }
                 # }elseif ($Global:PSTKCall -eq "ZapiEnforced") {
                 #     try{
-                #         Write-LogDebug "Remove-NcLdapClient -Name $PrimClient -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$false -ZapiCall"
-                #         $out=Remove-NcLdapClient -Name $PrimClient -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$false -ErrorVariable ErrorVar -ZapiCall
+                #         Write-LogDebug "Remove-NcLdapClient -Name $PrimClient -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$false -ONTAPI"
+                #         $out=Remove-NcLdapClient -Name $PrimClient -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$false -ErrorVariable ErrorVar -ONTAPI
                 #         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Remove-NcLdapClient failed [$ErrorVar]" }
                 #     }catch{
                 #         $reason=$_.Exception.Message
@@ -12398,28 +12409,28 @@ Try {
                     Write-Log "[$workOn] LDAP Config [$PrimClient] created successfully"
                 }
             }elseif($Global:PSTKCall -eq "ZapiEnforced"){
-                Write-LogDebug "Get-NcLdapConfig -vserver $mySecondaryVserver -controller $mySecondaryController -ZapiCall"
-                $SecondaryLdapConfig=Get-NcLdapConfig -vserver $mySecondaryVserver -controller $mySecondaryController -ErrorVariable ErrorVar-ZapiCall
+                Write-LogDebug "Get-NcLdapConfig -vserver $mySecondaryVserver -controller $mySecondaryController -ONTAPI"
+                $SecondaryLdapConfig=Get-NcLdapConfig -vserver $mySecondaryVserver -controller $mySecondaryController -ErrorVariable ErrorVar-ONTAPI
                 if($? -ne $True){Throw "ERROR: Failed to get LDAP Config on [$mySecondaryVserver] reason [$ErrorVar]"}
                 if($null -ne $SecondaryLdapConfig)
                 {
-                    Write-LogDebug "Remove-NcLdapConfig -Vservercontext $mySecondaryVserver -Controller $mySecondaryController -ZapiCall"
-                    $out=Remove-NcLdapConfig -Vservercontext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar -ZapiCall
+                    Write-LogDebug "Remove-NcLdapConfig -Vservercontext $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
+                    $out=Remove-NcLdapConfig -Vservercontext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar -ONTAPI
                     if($? -ne $True){Throw "ERROR: Failed to remove LDAP Config on [$mySecondaryVserver] reason [$ErrorVar]"}
                 }
                 $version=Get-NcSystemVersionInfo -Controller $mySecondaryController
                 if($version[0].VersionTuple.Major -ge 9 -and $version[0].VersionTuple.Minor -ge 3){
                     if($PrimClientEnabled -eq $True){
-                        Write-LogDebug "New-NcLdapConfig -ClientConfig $PrimClient -ClientEnabled $PrimClientEnabled -SkipConfigValidation -Vservercontext $mySecondaryVserver -Controller $mySecondaryController -ZapiCall"
-                        $out=New-NcLdapConfig -ClientConfig $PrimClient -ClientEnabled $PrimClientEnabled -SkipConfigValidation -Vservercontext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar -ZapiCall
+                        Write-LogDebug "New-NcLdapConfig -ClientConfig $PrimClient -ClientEnabled $PrimClientEnabled -SkipConfigValidation -Vservercontext $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
+                        $out=New-NcLdapConfig -ClientConfig $PrimClient -ClientEnabled $PrimClientEnabled -SkipConfigValidation -Vservercontext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar -ONTAPI
                         if($? -ne $True){Throw "ERROR: Failed to create LDAP Config on [$mySecondaryVserver] reason [$ErrorVar]"}
                         Write-Log "[$workOn] LDAP Config [$PrimClient] created successfully"
                     }else{
                         Write-Log "[$workOn] LDAP config not created on [$mySecondaryVserver] because it is disable on [$myPrimaryVserver]"
                     }
                 }else{
-                    Write-LogDebug "New-NcLdapConfig -ClientConfig $PrimClient -ClientEnabled $PrimClientEnabled -SkipConfigValidation -Vservercontext $mySecondaryVserver -Controller $mySecondaryController -ZapiCall"
-                    $out=New-NcLdapConfig -ClientConfig $PrimClient -ClientEnabled $PrimClientEnabled -SkipConfigValidation -Vservercontext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar -ZapiCall
+                    Write-LogDebug "New-NcLdapConfig -ClientConfig $PrimClient -ClientEnabled $PrimClientEnabled -SkipConfigValidation -Vservercontext $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
+                    $out=New-NcLdapConfig -ClientConfig $PrimClient -ClientEnabled $PrimClientEnabled -SkipConfigValidation -Vservercontext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar -ONTAPI
                     if($? -ne $True){Throw "ERROR: Failed to create LDAP Config on [$mySecondaryVserver] reason [$ErrorVar]"}
                     Write-Log "[$workOn] LDAP Config [$PrimClient] created successfully"
                 }
@@ -14445,8 +14456,8 @@ Function show_vserver_dr (
                 }    
             # }else{
             #     if($Global:PSTKCall -eq "ZapiEnforced"){
-            #         Write-LogDebug "Get-NcVol -ZapiCall -Vserver $myPrimaryVserver -Controller $myPrimaryController -Query @{Vserver=$myPrimaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended=""flexvol|flexgroup""}}"
-            #         $PrimaryVolList = Get-NcVol -ZapiCall  -Controller $myPrimaryController -Query @{Vserver=$myPrimaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -ErrorVariable ErrorVar
+            #         Write-LogDebug "Get-NcVol -ONTAPI -Vserver $myPrimaryVserver -Controller $myPrimaryController -Query @{Vserver=$myPrimaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended=""flexvol|flexgroup""}}"
+            #         $PrimaryVolList = Get-NcVol -ONTAPI  -Controller $myPrimaryController -Query @{Vserver=$myPrimaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -ErrorVariable ErrorVar
             #         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }  
             #     }else{
             #         Write-LogDebug "Get-NcVol -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$False};VolumeIdAttributes=@{StyleExtended=""flexvol|flexgroup""}}"
@@ -14531,8 +14542,8 @@ Function show_vserver_dr (
         elseif ( $null -ne $SecondaryVserver ) 
         {
             if($Global:PSTKCall -eq "ZapiEnforced"){
-                Write-LogDebug "Get-NcVol -ZapiCall -Controller $mySecondaryController -Vserver $mySecondaryVserver -Query @{VolumeIdAttributes=@{StyleExtended=""flexvol|flexgroup""};Vserver=$mySecondaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False}}"
-                $SecondaryVolList = Get-NcVol -ZapiCall  -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"};Vserver=$mySecondaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False}} -ErrorVariable ErrorVar  
+                Write-LogDebug "Get-NcVol -ONTAPI -Controller $mySecondaryController -Vserver $mySecondaryVserver -Query @{VolumeIdAttributes=@{StyleExtended=""flexvol|flexgroup""};Vserver=$mySecondaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False}}"
+                $SecondaryVolList = Get-NcVol -ONTAPI  -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"};Vserver=$mySecondaryVserver;VolumeStateAttributes=@{IsVserverRoot=$False}} -ErrorVariable ErrorVar  
             }else{
                 Write-LogDebug "Get-NcVol -Controller $mySecondaryController -VserverContext $mySecondaryVserver -Query @{VolumeIdAttributes=@{StyleExtended=""flexvol|flexgroup""};VolumeStateAttributes=@{IsVserverRoot=$False}}"
                 $SecondaryVolList = Get-NcVol -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Query @{VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"};VolumeStateAttributes=@{IsVserverRoot=$False}} -ErrorVariable ErrorVar   
@@ -15049,7 +15060,7 @@ Try {
         }
         if($Global:PSTKCall -match "Zapi"){
             if($null -eq $PrimaryVserver.RootVolume){
-                $PrimaryVserver = Get-NcVserver -Controller $myPrimaryController -Name $myPrimaryVserver  -ErrorVariable ErrorVar -ZapiCall 
+                $PrimaryVserver = Get-NcVserver -Controller $myPrimaryController -Name $myPrimaryVserver  -ErrorVariable ErrorVar -ONTAPI 
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" }
                 if ( $null -eq $PrimaryVserver ) {
                     Write-LogError "ERROR: Vserver $myPrimaryVserver not found" 
@@ -15406,8 +15417,8 @@ Try {
     }
 
     if($Global:PSTKCall -match "Rest|ZapiEnforced"){
-        Write-LogDebug "Get-NcVol -zapicall -VserverContext $mySecondaryVserver -Query @{VolumeStateAttributes=@{IsVserverRoot=$false;State="online"};VolumeIdAttributes=@{StyleExtended=""flexvol|flexgroup""}} -Controller $mySecondaryController"
-        $VolList= Get-NcVol -ZapiCall  -VserverContext $mySecondaryVserver -Query @{VolumeStateAttributes=@{IsVserverRoot=$false;State="online"};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -Controller $mySecondaryController -ErrorVariable ErrorVar
+        Write-LogDebug "Get-NcVol -ONTAPI -VserverContext $mySecondaryVserver -Query @{VolumeStateAttributes=@{IsVserverRoot=$false;State="online"};VolumeIdAttributes=@{StyleExtended=""flexvol|flexgroup""}} -Controller $mySecondaryController"
+        $VolList= Get-NcVol -ONTAPI  -VserverContext $mySecondaryVserver -Query @{VolumeStateAttributes=@{IsVserverRoot=$false;State="online"};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -Controller $mySecondaryController -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
     }else{
         Write-LogDebug "Get-NcVol -VserverContext $mySecondaryVserver -Query @{VolumeStateAttributes=@{IsVserverRoot=$false;State="online"};VolumeIdAttributes=@{StyleExtended=""flexvol|flexgroup""}} -Controller $mySecondaryController"
@@ -15494,8 +15505,8 @@ Try {
     }
     if($volume.Count -eq 0){
         if($Global:PSTKCall -match "Rest|ZapiEnforced"){
-            Write-LogDebug "Get-NcVol -ZapiCall -VserverContext $mySecondaryVserver -Query @{VolumeStateAttributes=@{IsVserverRoot=$false;State="online"};VolumeIdAttributes=@{StyleExtended=""flexvol|flexgroup""}} -Controller $mySecondaryController"
-            $VolList= Get-NcVol -ZapiCall  -VserverContext $mySecondaryVserver -Query @{VolumeStateAttributes=@{IsVserverRoot=$false;State="online"};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -Controller $mySecondaryController -ErrorVariable ErrorVar
+            Write-LogDebug "Get-NcVol -ONTAPI -VserverContext $mySecondaryVserver -Query @{VolumeStateAttributes=@{IsVserverRoot=$false;State="online"};VolumeIdAttributes=@{StyleExtended=""flexvol|flexgroup""}} -Controller $mySecondaryController"
+            $VolList= Get-NcVol -ONTAPI  -VserverContext $mySecondaryVserver -Query @{VolumeStateAttributes=@{IsVserverRoot=$false;State="online"};VolumeIdAttributes=@{StyleExtended="flexvol|flexgroup"}} -Controller $mySecondaryController -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
         }else{
             Write-LogDebug "Get-NcVol -VserverContext $mySecondaryVserver -Query @{VolumeStateAttributes=@{IsVserverRoot=$false;State="online"};VolumeIdAttributes=@{StyleExtended=""flexvol|flexgroup""}} -Controller $mySecondaryController"
@@ -16950,9 +16961,9 @@ try{
                 if($? -ne $True){$Return=$False; Throw "ERROR : Failed to release destination relationship [${mySecondaryController}:${mySecondaryVserver}:* reason [$ErrorVar]"}
             }else{
                 # If we must delete source SVM, we must first release all snapmirror relationship to be able to delete the vserver peering inside remove_vserver_source()
-                Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myPrimaryController -ErrorVariable ErrorVar -ZapiCall | Where-Object {$_.RelationshipGroupType -match none|flexgroup} | Invoke-NcSnapmirrorRelease"
+                Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myPrimaryController -ErrorVariable ErrorVar -ONTAPI | Where-Object {$_.RelationshipGroupType -match none|flexgroup} | Invoke-NcSnapmirrorRelease"
                 #$ret=Invoke-NcSnapmirrorRelease -Controller $myPrimaryController -Query @{DestinationVserver=$mySecondaryVserver;DestinationVolume="*";SourceVserver=$myPrimaryVserver;SourceVolume"*"} -ErrorVariable ErrorVar -Confirm:$False
-                $ret=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myPrimaryController -ErrorVariable ErrorVar -ZapiCall | Where-Object {$_.RelationshipGroupType -match "none|flexgroup"} | Invoke-NcSnapmirrorRelease -Controller $myPrimaryController -ErrorVariable ErrorVar -Confirm:$False
+                $ret=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myPrimaryController -ErrorVariable ErrorVar -ONTAPI | Where-Object {$_.RelationshipGroupType -match "none|flexgroup"} | Invoke-NcSnapmirrorRelease -Controller $myPrimaryController -ErrorVariable ErrorVar -Confirm:$False
                 if($? -ne $True){$Return=$False; Throw "ERROR : Failed to release destination relationship [${mySecondaryController}:${mySecondaryVserver}:* reason [$ErrorVar]"}
             }
             if ( ( $ret = remove_vserver_source -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver) -eq $False ) {
@@ -18802,8 +18813,8 @@ Try {
         $relationList=Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -VserverContext $myVserver -DestinationLocation $($mySecondaryVserver+":*") -Controller $myController  -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" } 
     }else{
-        Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -VserverContext $myVserver -DestinationLocation $($mySecondaryVserver+":*") -Controller $myController -ZapiCall"
-        $relationList=Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -VserverContext $myVserver -DestinationLocation $($mySecondaryVserver+":*") -Controller $myController  -ErrorVariable ErrorVar -ZapiCall
+        Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -VserverContext $myVserver -DestinationLocation $($mySecondaryVserver+":*") -Controller $myController -ONTAPI"
+        $relationList=Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -VserverContext $myVserver -DestinationLocation $($mySecondaryVserver+":*") -Controller $myController  -ErrorVariable ErrorVar -ONTAPI
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" } 
     }
     if ( $null -eq $relationList ) {
@@ -18915,8 +18926,8 @@ Function create_subdir (
                 }
             }elseif($Global:PSTKCall -eq "ZapiEnforced"){
                 try{
-                    Write-LogDebug "Read-NcDirectory -Path $fullpath -VserverContext $myVserver -Controller $myController -ZapiCall"
-                    $DirDetails=Read-NcDirectory -Path $fullpath -VserverContext $myVserver -Controller $myController -ErrorAction SilentlyContinue -ZapiCall
+                    Write-LogDebug "Read-NcDirectory -Path $fullpath -VserverContext $myVserver -Controller $myController -ONTAPI"
+                    $DirDetails=Read-NcDirectory -Path $fullpath -VserverContext $myVserver -Controller $myController -ErrorAction SilentlyContinue -ONTAPI
                 }catch{
                     $DirDetails=$null
                 }
@@ -18959,8 +18970,8 @@ Function create_subdir (
                         }
                     }elseif($Global:PSTKCall -eq "ZapiEnforced"){
                         try{
-                            Write-LogDebug "Read-NcDirectory -Path $searchPath -VserverContext $myPrimaryVserver -Controller $myPrimaryController -ZapiCall"
-                            $PrimDirDetails=Read-NcDirectory -Path $searchPath -VserverContext $myPrimaryVserver -Controller $myPrimaryController -ZapiCall | Where-Object {$_.Name -eq $dir}
+                            Write-LogDebug "Read-NcDirectory -Path $searchPath -VserverContext $myPrimaryVserver -Controller $myPrimaryController -ONTAPI"
+                            $PrimDirDetails=Read-NcDirectory -Path $searchPath -VserverContext $myPrimaryVserver -Controller $myPrimaryController -ONTAPI | Where-Object {$_.Name -eq $dir}
                             $PrimDirPerm=$PrimDirDetails.Perm
                             $PrimDirType=$PrimDirDetails.Type
                         }catch{
@@ -19064,7 +19075,7 @@ Function mount_volume (
     $PathLevel=$FindVolume.Level
     Write-LogDebug "volume [$myVolumeName] Parent [$Parent] JunctionPath [$JunctionPath] Perm [$Permission] RootVol [$svmRootVolume] Level [$PathLevel] ParentPath [$ParentPath]"
     if($Global:PSTKCall -eq "ZapiEnforced"){
-        $mountpath= (Get-NcVol -ZapiCall  -Name $myVolumeName -Vserver $myVserver -Controller $myController).VolumeIdAttributes.JunctionPath
+        $mountpath= (Get-NcVol -ONTAPI  -Name $myVolumeName -Vserver $myVserver -Controller $myController).VolumeIdAttributes.JunctionPath
     }else{
         $mountpath= (Get-NcVol -Name $myVolumeName -Vserver $myVserver -Controller $myController).VolumeIdAttributes.JunctionPath
     }
@@ -19086,7 +19097,7 @@ Function mount_volume (
         if($Parent -ne $svmRootVolume){
             if($Global:PSTKCall -match "Rest|ZapiEnforced"){
                 #! force ZAPI call due to burt in PSTK with 9.12.1
-                $volType= (Get-NcVol -ZapiCall  -Controller $myController -Vserver $myVserver -Volume $myVolumeName).VolumeIdAttributes.Type
+                $volType= (Get-NcVol -ONTAPI  -Controller $myController -Vserver $myVserver -Volume $myVolumeName).VolumeIdAttributes.Type
             }else{
                 $volType= (Get-NcVol -Controller $myController -Vserver $myVserver -Volume $myVolumeName).VolumeIdAttributes.Type
             }
@@ -19155,8 +19166,8 @@ Function mount_volume (
                 if ( $? -ne $True ) {throw "ERROR: Mount-NcVol [$myVolumeName] failed [$ErrorVar]" } 
             }else{
                 #! force ZAPI call because of burt with 9.12.1RC1
-                Write-LogDebug "Mount-NcVol -Name $myVolumeName -JunctionPath $JunctionPath -VserverContext $myVserver -Controller $myController -ZapiCall"
-                $out=Mount-NcVol -Name $myVolumeName -JunctionPath $JunctionPath -VserverContext $myVserver -Controller $myController -ErrorVariable ErrorVar -ZapiCall
+                Write-LogDebug "Mount-NcVol -Name $myVolumeName -JunctionPath $JunctionPath -VserverContext $myVserver -Controller $myController -ONTAPI"
+                $out=Mount-NcVol -Name $myVolumeName -JunctionPath $JunctionPath -VserverContext $myVserver -Controller $myController -ErrorVariable ErrorVar -ONTAPI
                 if ( $? -ne $True ) {throw "ERROR: Mount-NcVol [$myVolumeName] failed [$ErrorVar]" } 
             }
         }catch{
@@ -19390,8 +19401,8 @@ Try {
             }else{
                 $relationList=$null
             }
-            # Write-LogDebug "Get-NcSnapmirrorDestination  -SourceLocation $($myPrimaryVserver+":"+$SourceVolume) -DestinationLocation $($mySecondaryVserver+":"+$DestVolume) -Controller $myPrimaryController -ZapiCall"
-            # $relationList=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":"+$SourceVolume) -DestinationLocation $($mySecondaryVserver+":"+$DestVolume) -Controller $myPrimaryController -ZapiCall -ErrorVariable ErrorVar
+            # Write-LogDebug "Get-NcSnapmirrorDestination  -SourceLocation $($myPrimaryVserver+":"+$SourceVolume) -DestinationLocation $($mySecondaryVserver+":"+$DestVolume) -Controller $myPrimaryController -ONTAPI"
+            # $relationList=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":"+$SourceVolume) -DestinationLocation $($mySecondaryVserver+":"+$DestVolume) -Controller $myPrimaryController -ONTAPI -ErrorVariable ErrorVar
             # if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
         }
     }else{
@@ -19414,8 +19425,8 @@ Try {
             }else{
                 $relationList=$null
             }
-            # Write-LogDebug "Get-NcSnapmirrorDestination  -SourceLocation $($myPrimaryVserver+":"+$PrimaryVolumeName) -DestinationLocation $($mySecondaryVserver+":*") -Controller $myPrimaryController -ZapiCall"
-            # $relationList=Get-NcSnapmirrorDestination  -SourceLocation $($myPrimaryVserver+":"+$PrimaryVolumeName) -DestinationLocation $($mySecondaryVserver+":*") -Controller $myPrimaryController  -ErrorVariable ErrorVar -ZapiCall
+            # Write-LogDebug "Get-NcSnapmirrorDestination  -SourceLocation $($myPrimaryVserver+":"+$PrimaryVolumeName) -DestinationLocation $($mySecondaryVserver+":*") -Controller $myPrimaryController -ONTAPI"
+            # $relationList=Get-NcSnapmirrorDestination  -SourceLocation $($myPrimaryVserver+":"+$PrimaryVolumeName) -DestinationLocation $($mySecondaryVserver+":*") -Controller $myPrimaryController  -ErrorVariable ErrorVar -ONTAPI
             # if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
         }
     }
@@ -19514,8 +19525,8 @@ Try {
             $relationList=Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -DestinationLocation $($secondaryVserver+":*") -Controller $myController  -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" } 
         }else{
-            Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -DestinationLocation $($secondaryVserver+":*") -Controller $myController -ZapiCall"
-            $relationList=Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -DestinationLocation $($secondaryVserver+":*") -Controller $myController  -ErrorVariable ErrorVar -ZapiCall
+            Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -DestinationLocation $($secondaryVserver+":*") -Controller $myController -ONTAPI"
+            $relationList=Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -DestinationLocation $($secondaryVserver+":*") -Controller $myController  -ErrorVariable ErrorVar -ONTAPI
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
         }
         if ( $null -eq $relationList ) { 
@@ -19647,8 +19658,8 @@ Try {
         Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -Controller $myPrimaryController -DestinationLocation $($mySecondaryVserver+":*") -ErrorVariable ErrorVar"
         $relationlist=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -Controller $myPrimaryController -DestinationLocation $($mySecondaryVserver+":*") -ErrorVariable ErrorVar
     }else{
-        Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -Controller $myPrimaryController -DestinationLocation $($mySecondaryVserver+":*") -ErrorVariable ErrorVar -ZapiCall"
-        $relationlist=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -Controller $myPrimaryController -DestinationLocation $($mySecondaryVserver+":*") -ErrorVariable ErrorVar -ZapiCall
+        Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -Controller $myPrimaryController -DestinationLocation $($mySecondaryVserver+":*") -ErrorVariable ErrorVar -ONTAPI"
+        $relationlist=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -Controller $myPrimaryController -DestinationLocation $($mySecondaryVserver+":*") -ErrorVariable ErrorVar -ONTAPI
     }
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
     $QuotaErrorCaptured=@()
@@ -20984,8 +20995,8 @@ Function save_vol_options_to_voldb (
             $relationlist=Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myController  -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
         }else{
-            Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myController -ZapiCall"
-            $relationlist=Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myController  -ErrorVariable ErrorVar -ZapiCall
+            Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myController -ONTAPI"
+            $relationlist=Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myController  -ErrorVariable ErrorVar -ONTAPI
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }            
         }
         #$count_delete_SRC=0
@@ -21054,8 +21065,8 @@ Function save_vol_options_to_voldb (
                 if ($PrimaryVolIsSis -eq $True)
                 {
                     # ! Force ZapiCall due to burt with Get-NcSis in REST mode
-                    Write-LogDebug "Get-NcSis -Name $SourceVolume -Controller $myController -Vserver $myVserver -ZapiCall"
-                    $PrimaryVol = Get-NcSis -Name $SourceVolume -Controller $myController -Vserver $myVserver  -ErrorVariable ErrorVar -ZapiCall
+                    Write-LogDebug "Get-NcSis -Name $SourceVolume -Controller $myController -Vserver $myVserver -ONTAPI"
+                    $PrimaryVol = Get-NcSis -Name $SourceVolume -Controller $myController -Vserver $myVserver  -ErrorVariable ErrorVar -ONTAPI
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSis failed [$ErrorVar]" }
                     $PrimarySisSchedule=$PrimaryVol.Schedule
                     $PrimarySisPolicy=$PrimaryVol.Policy
@@ -21639,8 +21650,8 @@ Function save_shareacl_options_to_shareacldb (
             $relationlist=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myPrimaryController  -ErrorVariable ErrorVar | sort-object -unique SourceVserver,DestinationVserver,RelationShipType
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
         }else{
-            Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myPrimaryController -ZapiCall"
-            $relationlist=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myPrimaryController  -ErrorVariable ErrorVar -ZapiCall | sort-object -unique SourceVserver,DestinationVserver,RelationShipType
+            Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myPrimaryController -ONTAPI"
+            $relationlist=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myPrimaryController  -ErrorVariable ErrorVar -ONTAPI | sort-object -unique SourceVserver,DestinationVserver,RelationShipType
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }            
         }
         #$count_delete_SRC=0
