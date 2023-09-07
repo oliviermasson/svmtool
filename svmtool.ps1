@@ -1592,9 +1592,125 @@ if ( $Setup ) {
         clean_and_exit 1
     }
 }
-####################################################################################################
 
+####################################################################################################
+# Backup one svm 
 if ( $Backup ) {
+    $Global:Run_Mode = "Backup"
+    Write-Log "SVMTOOL running Backup"
+    if ((Test-Path $Global:CONFFILE) -eq $True ) {
+        Write-LogDebug "use Config File [$Global:CONFFILE]"
+        $read_conf = read_config_file $Global:CONFFILE
+        if ( $null -eq $read_conf ) {
+            Write-LogError "ERROR: read configuration file $Global:CONFFILE failed"
+            clean_and_exit 1 ;
+        }
+        $SVMTOOL_DB = $read_conf.Get_Item("SVMTOOL_DB")
+        if ($RecreateConf -eq $True) {
+            $ANS = Read-HostOptions -question "Configuration file already exist. Do you want to recreate it ?" -options "y/n" -default "y"
+            if ( $ANS -ne 'y' ) {
+                $RecreateConf = $False 
+            }
+        }
+    }
+    if ($RecreateConf -eq $True -or (Test-Path $Global:CONFFILE) -eq $False) {
+        Write-Log "[$Backup] Create new Config File"
+        $ANS = 'n'
+        while ( $ANS -ne 'y' ) {
+            $SVMTOOL_DB = Read-HostDefault -question  "Please enter the directory in which the backups will be stored" -default $Global:SVMTOOL_DB_DEFAULT
+            if($SVMTOOL_DB -notmatch $("\\"+$Backup+"$")){
+                Write-LogDebug "Backup directory [$SVMTOOL_DB] does not contains subfolder with Cluster name [$Backup]"
+                if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){$SVMTOOL_DB+=$("\"+$Backup)}
+                else{$SVMTOOL_DB+=$("/"+$Backup)}
+            }else{
+                Write-LogDebug "Backup directory [$SVMTOOL_DB] already contains subfolder with Cluster name [$Backup]"    
+            }
+            Write-Log "SVMTOOL Backup directory:  [$SVMTOOL_DB]"
+            Write-Log ""
+            $ANS = Read-HostOptions -question "Apply new configuration ?" -options "y/n/q" -default "y"
+            if ( $ANS -eq 'q' ) {
+                clean_and_exit 1 
+            }
+            Write-Output "#" | Out-File -FilePath $Global:CONFFILE  
+            Write-Output "SVMTOOL_DB=$SVMTOOL_DB" | Out-File -FilePath $Global:CONFFILE -Append 
+            Write-Output "INSTANCE_MODE=BACKUP_RESTORE" | Out-File -FilePath $Global:CONFFILE -Append
+            Write-Output "BACKUP_CLUSTER=$Backup" | Out-File -FilePath $Global:CONFFILE -Append  
+        }
+    }
+    elseif ($SVMTOOL_DB.Length -gt 0) {
+        Write-Log "Backup will be done inside [$SVMTOOL_DB]"
+    }
+    if ($Vserver.length -eq 0) { 
+        Write-Error "ERROR: No SVM selected. You must select one SVM to backup Cluster [$Restore]"
+        clean_and_exit 1
+    }
+    else {
+        Write-Log "Backup SVM [$Vserver] on Cluster [$Backup]"
+        $SVMList = @($Vserver)
+    }
+
+    $myCred = get_local_cDotcred ($Backup)
+    $tmp_str = $myCred.UserName
+    Write-LogDebug "Connect to cluster [$Backup] with login [$tmp_str]"
+    Write-LogDebug "connect_cluster -myController $Backup -myCred $myCred -myTimeout $Global:Timeout"
+    if ( ( $myPrimaryController = connect_cluster -myController $Backup -myCred $myCred -myTimeout $Global:Timeout ) -eq $False ) {
+        Write-LogError "ERROR: Unable to Connect to NcController [$Backup]" 
+        clean_and_exit 1
+    }
+    check_create_dir -FullPath $LOGFILE -Vserver $Vserver | Out-Null
+    Write-Log "[$Vserver] Log File is [$LOGFILE]"
+    $Global:SVMTOOL_DB = $SVMTOOL_DB
+    $BackupDate = Get-Date -UFormat "%Y%m%d%H%M%S"
+    if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){
+        $Global:JsonPath = $($SVMTOOL_DB + "\" + $Vserver + "\" + $BackupDate + "\")
+    }else{
+        $Global:JsonPath = $($SVMTOOL_DB + "/" + $Vserver + "/" + $BackupDate + "/")    
+    }
+    
+    Write-LogDebug "[$Vserver] Backup Folder is [$Global:JsonPath]"
+    check_create_dir -FullPath $($Global:JsonPath + "backup.json") -Vserver $Vserver | Out-Null
+    #wait-debugger
+    Write-LogDebug "[$Vserver] Backup Folder after check_create_dir is [$Global:JsonPath]"
+    if ( ( $ret = create_vserver_dr -myPrimaryController $myPrimaryController -workOn $Vserver -Backup -myPrimaryVserver $Vserver -DDR $False -aggrMatchRegEx $AggrMatchRegex -nodeMatchRegEx $NodeMatchRegex -myDataAggr $DataAggr -RootAggr $RootAggr)[-1] -ne $True ) {
+        Write-LogDebug "create_vserver_dr return False [$ret]"
+        clean_and_exit 1
+    }
+    Write-LogDebug "create_vserver_dr correctly finished [$ret]"
+    Write-Log "[$Vserver] Check Quota"
+    $AllQuotaRulesList = Get-NcQuota -Controller $myPrimaryController -VserverContext $Vserver -ErrorVariable ErrorVar 
+    if ( $? -ne $True ) { 
+        Write-LogDebug "ERROR: Get-NcQuota Failed"
+        clean_and_exit 1
+    }
+    $AllQuotaRulesList | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath + "Get-NcQuota.json") -Encoding ASCII -Width 65535
+    if ( $null -ne ($ret = Get-Item $($Global:JsonPath + "Get-NcQuota.json") -ErrorAction SilentlyContinue) ) {
+        Write-LogDebug "$($Global:JsonPath+"Get-NcQuota.json") saved successfully"
+    }
+    else {
+        Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcQuota.json")"
+        clean_and_exit 1
+    }
+    Write-Log "[$Vserver] Check Quota Policy"
+    $AllQuotaPolicyList = Get-NcQuotaPolicy -Controller $myPrimaryController -VserverContext $Vserver -ErrorVariable ErrorVar 
+    if ( $? -ne $True ) { 
+        Write-LogDebug "ERROR: Get-NcQuotaPolicy Failed"
+        clean_and_exit 1
+    }
+    $AllQuotaPolicyList | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath + "Get-NcQuotaPolicy.json") -Encoding ASCII -Width 65535
+    if ( $null -ne ($ret = Get-Item $($Global:JsonPath + "Get-NcQuotaPolicy.json") -ErrorAction SilentlyContinue) ) {
+        Write-LogDebug "$($Global:JsonPath+"Get-NcQuotaPolicy.json") saved successfully"
+    }
+    else {
+        Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcQuotaPolicy.json")"
+        clean_and_exit 1
+    }
+    clean_and_exit 0
+    return $True
+}
+
+####################################################################################################
+# Backup multiple svm in parallel using pwsh runspace
+if ( $BackupMultiSVM ) {
     $Global:Run_Mode = "Backup"
     Write-Log "SVMTOOL running Backup"
     if ((Test-Path $Global:CONFFILE) -eq $True ) {
@@ -1975,9 +2091,187 @@ if ( $Backup ) {
     Write-Log $("Finished - Script ran for {0}" -f $stopwatch.Elapsed.toString())
     clean_and_exit 0
 } #End Backup
-####################################################################################################
+
+#################################################################################################
+# restore one single SVM
 
 if ( $Restore ) {
+    $Global:Run_Mode = "Restore"
+    $Global:RESTORE_SRC_CLUSTER = $Restore
+    $Global:RESTORE_DST_CLUSTER = $Destination
+    if ($Global:RESTORE_SRC_CLUSTER -eq $Global:RESTORE_DST_CLUSTER) {
+        $Global:RESTORE_ORIGINAL = $True
+        Write-Log "[$Restore] Restore to Origin [$Vserver]"
+    }
+    else {
+        $Global:RESTORE_ORIGINAL = $False	
+    }
+    Write-LogOnly "SVMTOOL running Restore"
+    if ((Test-Path $Global:CONFFILE) -eq $True ) {
+        $read_conf = read_config_file $Global:CONFFILE
+        if ( $null -eq $read_conf ) {
+            Write-LogError "ERROR: read configuration file $Global:CONFFILE failed"
+            clean_and_exit 1
+        }
+        $SVMTOOL_DB = $read_conf.Get_Item("SVMTOOL_DB")
+    }
+    if ($SVMTOOL_DB.Length -gt 0) {
+        Write-Log "Restore from Cluster [$Restore] from Backup Folder [$SVMTOOL_DB]"
+    }
+    else {
+        Write-Error "ERROR: No Backup Folder configured, check configuration file [$Global:CONFFILE] for item [SVMTOOL_DB]"
+        clean_and_exit 1
+    }
+    $RESTOREALLSVM = $False
+    if ($Vserver.Length -eq 0) { 
+        Write-Error "ERROR: No SVM selected. You must select one SVM to restore from Cluster [$Restore]"
+        clean_and_exit 1
+    }
+    else {
+        Write-Log "Restore SVM [$Vserver] from Backup for Cluster [$Restore]"
+    }
+    if ($Destination.length -lt 1) {
+        $Destination = $Restore
+        Write-Log "No Destination specified. Will restore on source Cluster [$Destination]"
+    }
+    else {
+        Write-Log "Will restore on new Cluster [$Destination]"	
+    }
+    $myCred = get_local_cDotcred ($Destination)
+    $tmp_str = $MyCred.UserName
+    Write-LogDebug "Connect to cluster [$Destination] with login [$tmp_str]"
+    Write-LogDebug "connect_cluster -myController $Destination -myCred $MyCred -myTimeout $Global:Timeout"
+    if ( ( $DestinationController = connect_cluster -myController $Destination -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
+        Write-LogError "ERROR: Unable to Connect to NcController [$Destination]" 
+        clean_and_exit 1
+    }
+    if ($RESTOREALLSVM -eq $True) {
+        if ($null -eq ($ALLSVM = (Get-ChildItem $SVMTOOL_DB).Name)) {
+            $Return = $False ; throw "ERROR: Get-ChildItem failed for [$SVMTOOL_DB]`nERROR: no Backup available"
+        }
+        if ($AllSVM) {
+            $SVMList = $AllSVM
+        }
+    }
+    else {
+        if ($null -eq (Test-Path $SVMTOOL_DB)) {
+            $Return = $False ; throw "ERROR: no Backup available for [$Restore] inside [$SVMTOOL_DB]"	
+        }
+        else {
+            $SVMList = @($Vserver)
+        }
+    }
+    foreach ($svm in $SVMList) {
+        Write-Log "Select Backup Date for [$svm]"
+        if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){
+            $BackupAvailable = Get-ChildItem $($SVMTOOL_DB + "\" + $svm) -Directory | Sort-Object -Property CreationTime
+        }else{
+            $BackupAvailable = Get-ChildItem $($SVMTOOL_DB + "/" + $svm) -Directory | Sort-Object -Property CreationTime
+        }
+        if ($null -eq $BackupAvailable) {
+            Write-Error "ERROR: No Backup available for [$svm]"
+            next
+        }
+        else {
+            $ans = $null
+            if ($SelectBackupDate -eq $True) {
+                $listBackupAvailable = ($BackupAvailable | Select-Object Name).Name
+                while ($null -eq $ans) {
+                    Write-Host "Select a Backup Date for [$svm] : "
+                    $i = 1
+                    foreach ($date in $listBackupAvailable) {
+                        if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){
+                            $numFiles = (Get-ChildItem $($SVMTOOL_DB + "\" + $svm + "\" + $date + "\") | Measure-Object).Count
+                        }else{
+                            $numFiles = (Get-ChildItem $($SVMTOOL_DB + "/" + $svm + "/" + $date + "/") | Measure-Object).Count
+                        }
+                        $datetime = [datetime]::parseexact($date, "yyyyMMddHHmmss", $null)
+                        Format-ColorBrackets "`t[$i] : [$datetime] [$numFiles Files]" -FirstIsSpecial
+                        $i++
+                    }
+                    $Query = "Please select Backup from (1.." + $listBackupAvailable.count + ")"
+                    $ans = Read-HostDefault -question $Query -default $listBackupAvailable.count
+                    $ans = [int]$ans / 1
+                    if (($ans -notmatch "[0-9]") -or ($ans -lt 1 -or $ans -gt $listBackupAvailable.count)) {
+                        Write-LogWarn "Bad input"; $ans = $null
+                    }
+                }
+                if($listBackupAvailable.count -gt 1){
+                    $date = $listBackupAvailable[$ans - 1]
+                }else{
+                    $date = $listBackupAvailable
+                }
+            }
+            else {
+                # display lastbackup automatically selected for each SVM (with #files inside folder)
+                $LastBackup = $BackupAvailable[-1]
+                $date = $LastBackup.Name
+                $datetime = [datetime]::parseexact($date, "yyyyMMddHHmmss", $null)
+                if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){
+                    $numFiles = (Get-ChildItem $($SVMTOOL_DB + "\" + $svm + "\" + $date + "\") | Measure-Object).Count
+                }else{
+                    $numFiles = (Get-ChildItem $($SVMTOOL_DB + "/" + $svm + "/" + $date + "/") | Measure-Object).Count
+                }
+                Write-Log "[$svm] Last Backup date is [$datetime] with [$numFiles Files]" -firstValueIsSpecial
+            }
+        }
+        if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){
+            $JsonPath = $($SVMTOOL_DB + "\" + $svm + "\" + $date + "\")
+        }else{
+            $JsonPath = $($SVMTOOL_DB + "/" + $svm + "/" + $date + "/")
+        }
+        Write-Log "[$svm] Create Restore Job from [$JsonPath]"
+        $Global:NFSonly=$False
+        $Global:RootAggr = $RootAggr
+        $Global:DataAggr = $DataAggr
+        $Global:ConsoleThreadingRequired = $true
+        $Global:RESTORE_ORIGINAL = $RESTORE_ORIGINAL
+        $Global:ForceRestoreOriginal = $FORCE_RESTORE_ORIGINAL
+        $Global:NonInteractive = $NonInteractive
+        $Global:JsonPath = $JsonPath
+        $Global:SVMTOOL_DB = $SVMTOOL_DB
+        $Global:VOLUME_TYPE = $VOLUME_TYPE
+
+        Write-LogDebug ""
+        Write-LogDebug "Restore [$svm] on Cluster [$Destination]"
+        Write-LogDebug "LOGFILE [$LOGFILE]"
+        Write-Log "[$svm] LOGFILE [$LOGFILE]"
+        Write-LogDebug "SVMTOOL_DB [$Global:SVMTOOL_DB]"
+        Write-LogDebug "JsonPath [$Global:JsonPath]"
+        Write-LogDebug "svm [$svm]"
+        Write-LogDebug "DestinationController [$DestinationController]"
+        Write-LogDebug "VOLUME_TYPE [$Global:VOLUME_TYPE]"
+        Write-LogDebug "RootAggr [$Global:RootAggr]"
+        Write-LogDebug "DataAggr [$Global:DataAggr]"
+
+        if ( ( $ret = create_vserver_dr -myPrimaryVserver $svm -mySecondaryController $DestinationController -workOn $svm -mySecondaryVserver $svm -Restore -DDR $False -aggrMatchRegEx $AggrMatchRegex -nodeMatchRegEx $NodeMatchRegex -myDataAggr $Global:DataAggr -RootAggr $Global:RootAggr -TemporarySecondaryCifsIp $TemporarySecondaryCifsIp -SecondaryCifsLifMaster $SecondaryCifsLifMaster -SecondaryCifsLifCustomVlan $SecondaryCifsLifCustomVlan )[-1] -ne $True ) {
+            Write-LogDebug "ERROR in create_vserver_dr [$ret]"
+            #return $False
+        }
+        if ($Global:VOLUME_TYPE -eq "RW") {
+            # in restore mode force update snapshot policy on all destinations volumes
+            $Global:ForceUpdateSnapPolicy = $True
+            if ( ( $ret = set_vol_options_from_voldb -myVserver $svm -myController $DestinationController -Restore) -ne $True ) {
+                Write-LogDebug "ERROR in set_vol_options_from_voldb [$ret]"
+                #return $False
+            }
+            if ( ($ret = restore_quota -myController $DestinationController -myVserver $svm) -ne $True) {
+                Write-LogDebug "restore_quota return False [$ret]"
+                #return $False
+            }
+        }
+        else {
+            Write-Log "Once Data restored via SnapMirror on DP destinations volumes, update, as necessarry, Snapshot Policy and Efficiency"
+        }
+        flush_log4net -loggerinstance "console_$guid"
+        flush_log4net -loggerinstance "logonly_$guid"
+        clean_and_exit 0
+    }
+}
+
+####################################################################################################
+# Restore multiple SVM in parallel through pwsh runspace
+if ( $RestoreMultiSVM ) {
     $Global:Run_Mode = "Restore"
     $Global:RESTORE_SRC_CLUSTER = $Restore
     $Global:RESTORE_DST_CLUSTER = $Destination
@@ -2298,7 +2592,7 @@ if ( $Restore ) {
                 Write-LogDebug "VOLUME_TYPE [$Global:VOLUME_TYPE]"
                 Write-LogDebug "RootAggr [$Global:RootAggr]"
                 Write-LogDebug "DataAggr [$Global:DataAggr]"
-                if ( ( $ret = create_vserver_dr -myPrimaryVserver $SourceVserver -mySecondaryController $DestinationController -workOn $SourceVserver -mySecondaryVserver $SourceVserver -Restore -DDR $False -aggrMatchRegEx $AggrMatchRegex -nodeMatchRegEx $NodeMatchRegex -myDataAggr $Global:DataAggr -RootAggr $Global:RootAggr -TemporarySecondaryCifsIp $TemporarySecondaryCifsIp -SecondaryCifsLifMaster $SecondaryCifsLifMaster)[-1] -ne $True ) {
+                if ( ( $ret = create_vserver_dr -myPrimaryVserver $SourceVserver -mySecondaryController $DestinationController -workOn $SourceVserver -mySecondaryVserver $SourceVserver -Restore -DDR $False -aggrMatchRegEx $AggrMatchRegex -nodeMatchRegEx $NodeMatchRegex -myDataAggr $Global:DataAggr -RootAggr $Global:RootAggr -TemporarySecondaryCifsIp $TemporarySecondaryCifsIp -SecondaryCifsLifMaster $SecondaryCifsLifMaster -SecondaryCifsLifCustomVlan $SecondaryCifsLifCustomVlan )[-1] -ne $True ) {
 
                     Write-LogDebug "ERROR in create_vserver_dr [$ret]"
                     #return $False
@@ -2397,11 +2691,11 @@ if ( $Restore ) {
             $JobRemain
         }
         $percentage = [math]::round((($numJobRestore - $numberRemaining) / $numJobRestore) * 100)
-        Write-Progress `
+        <# Write-Progress `
             -id 1 `
             -Activity "Waiting for all $numJobRestore Jobs to finish..." `
             -PercentComplete (((($Jobs_Restore.Count) - $numberRemaining) / $Jobs_Restore.Count) * 100) `
-            -Status "$($($($Jobs_Restore | Where-Object {$_.Handle.IsCompleted -eq $False})).count) remaining : $Remaining [$percentage% done]"
+            -Status "$($($($Jobs_Restore | Where-Object {$_.Handle.IsCompleted -eq $False})).count) remaining : $Remaining [$percentage% done]" #>
     }
     ForEach ($JobRestore in $($Jobs_Restore | Where-Object { $_.Handle.IsCompleted -eq $True })) {
         $jobname = $JobRestore.Name
