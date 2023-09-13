@@ -199,7 +199,7 @@ Function clean_and_exit ([int]$return_code) {
 }
 
 #############################################################################################
-Function Error_Handling([object]$object,[string]$vserver){
+Function Error_Handling([object]$object,[string]$vserver,[switch]$donotcleanlog4net){
     foreach($appenders in $Global:consolelog.Logger.Appenders){
         if($appenders.Name -match "svmtool.log"){
             $appenders.Threshold=[log4net.Core.Level]::Debug
@@ -228,7 +228,9 @@ Function Error_Handling([object]$object,[string]$vserver){
 	Write-LogDebug  "Trap PipelineIterationInfo: [$PipelineIterationInfo]"
 	Write-LogDebug  "Trap ScriptStackTrace: [$ScriptStackTrace]"
 	Write-LogDebug  "Trap TargetObject: [$TargetObject]"
-    exit_log4net
+    if(-not $donotcleanlog4net.IsPresent){
+        exit_log4net
+    }
 }
 #############################################################################################
 function replace_regex_groupmatches($string,$regex,$replacewith){
@@ -748,7 +750,7 @@ Function import_instance_svmdr() {
         $mySourceConfFile=$mySourceConfDir+'svmdr.conf'
         $myDestConfFile=$myConfDir+'svmtool.conf'
         $read_conf = read_config_file $mySourceConfFile
-        if ( $read_conf -ne $null )
+        if ( $null -ne $read_conf )
         {
             $myPrimaryCluster=$read_conf.Get_Item("PRIMARY_CLUSTER")
             $mySecondaryCluster=$read_conf.Get_Item("SECONDARY_CLUSTER")
@@ -955,7 +957,7 @@ Try {
 }
 
 Catch {
-	Error_Handling $_
+	Error_Handling $_ $Instance
 	return $False
 }
 }
@@ -1384,7 +1386,7 @@ Function select_nodePort_from_cli ([NetApp.Ontapi.Filer.C.NcController]$myContro
 	$NodePortSelectedList = @()
  	$NodePortList=Get-NcNetPort -role data,node_mgmt -node $myNode  -Controller $myController  -ErrorVariable ErrorVar
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetPort failed [$ErrorVar]" }
-	if ( $NodePortList -eq $null ) {
+	if ( $null -eq $NodePortList ) {
 		Write-LogError "ERROR: Unable to list Ports for node $myNode $myController" 
 		clean_and_exit 1
 	}
@@ -1467,7 +1469,7 @@ Function select_node_from_cli ([NetApp.Ontapi.Filer.C.NcController]$myController
     $defaultReason = ""
  	$NodeList=Get-NcNode -Controller $myController  -ErrorVariable ErrorVar
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNode failed [$ErrorVar]" }
-	if ( $NodeList -eq $null ) {
+	if ( $null -eq $NodeList ) {
 		Write-LogError "ERROR: Unable to list nodes for Cluster $myController" 
 		clean_and_exit 1
 	}
@@ -1636,6 +1638,7 @@ Function create_update_vscan_dr (
         }else{
             if(Test-Path $($Global:JsonPath+"Get-NcVscanScannerPool.json")){
                 $PrimaryScannerPoolList=Get-Content $($Global:JsonPath+"Get-NcVscanScannerPool.json") -Raw | ConvertFrom-Json
+                Write-LogDebug "$($Global:JsonPath+"Get-NcVscanScannerPool.json") successfully imported"
             }else{
                 $Return=$False
                 $filepath=$($Global:JsonPath+"Get-NcVscanScannerPool.json")
@@ -1768,6 +1771,7 @@ Function create_update_vscan_dr (
             }else{
                 if(Test-Path $($Global:JsonPath+"Get-NcVscanOnAccessPolicy.json")){
                     $PrimaryOnAccessPolicyList=Get-Content $($Global:JsonPath+"Get-NcVscanOnAccessPolicy.json") -Raw | ConvertFrom-Json
+                    Write-LogDebug "$($Global:JsonPath+"Get-NcVscanOnAccessPolicy.json") successfully imported"
                 }else{
                     $Return=$False
                     $filepath=$($Global:JsonPath+"Get-NcVscanOnAccessPolicy.json")
@@ -1798,19 +1802,24 @@ Function create_update_vscan_dr (
                     $PrimaryOnAccessPolicyPathtoExclude_str=[string]$PrimaryOnAccessPolicyPathtoExclude
                     $PrimaryOnAccessPolicyFileExtToInclude=$PrimaryOnAccessPolicy.FileExtToInclude
                     $PrimaryOnAccessPolicyFileExtToInclude_str=[string]$PrimaryOnAccessPolicy.FileExtToInclude
-                    if($Global:PSTKCall -eq "Rest"){
-                        $Credential = get_local_cDotcred($myPrimaryController)
-                        $url="https://"+$myPrimaryController.Name+"/api/private/cli/vserver/vscan/on-access-policy?vserver="+$myPrimaryVserver+"&policy_name="+$PrimaryOnAccessPolicyName+"&fields=owner"
-                        Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-                        $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
-                        if($? -ne $True){
-                            Write-LogError "ERROR: Unable to get policy admin owner. Reason [$ErrorVar]" 
+                    <# if($Restore -eq $False){
+                        if($Global:PSTKCall -eq "Rest"){
+                            $Credential = get_local_cDotcred($myPrimaryController)
+                            $url="https://"+$myPrimaryController.Name+"/api/private/cli/vserver/vscan/on-access-policy?vserver="+$myPrimaryVserver+"&policy_name="+$PrimaryOnAccessPolicyName+"&fields=owner"
+                            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+                            $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                            if($? -ne $True){
+                                Write-LogError "ERROR: Unable to get policy admin owner. Reason [$ErrorVar]" 
+                            }else{
+                                $PrimaryOnAccessPolicyAdminOwner=$ret.records[0].owner
+                            }
                         }else{
-                            $PrimaryOnAccessPolicyAdminOwner=$ret.records[0].owner
+                            $PrimaryOnAccessPolicyAdminOwner=$PrimaryOnAccessPolicy.AdminOwner
                         }
-                    }else{
-                        $PrimaryOnAccessPolicyAdminOwner=$PrimaryOnAccessPolicy.AdminOwner
                     }
+                    if($Backup -eq $True){
+                        
+                    } #>
                     Write-LogDebug "Get-NcVscanOnAccessPolicy -Name $PrimaryOnAccessPolicyName -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
                     $SecondaryOnAccessPolicy = Get-NcVscanOnAccessPolicy -Name $PrimaryOnAccessPolicyName -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVscanOnAccessPolicy failed on [$mySecondaryController] [$ErrorVar]" }
@@ -1827,20 +1836,21 @@ Function create_update_vscan_dr (
                         $SecondaryOnAccessPolicyPathtoExclude_str=[string]$SecondaryOnAccessPolicyPathtoExclude
                         $SecondaryOnAccessPolicyFileExtToInclude=$SecondaryOnAccessPolicy.FileExtToInclude
                         $SecondaryOnAccessPolicyFileExtToInclude_str=[string]$SecondaryOnAccessPolicy.FileExtToInclude
-                        if($Global:PSTKCall -eq "Rest"){
-                            $Credential = get_local_cDotcred($mySecondaryController)
-                            $url="https://"+$mySecondaryController.Name+"/api/private/cli/vserver/vscan/on-access-policy?vserver="+$mySecondaryVserver+"&policy_name="+$PrimaryOnAccessPolicyName+"&fields=owner"
-                            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-                            $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
-                            if($? -ne $True){
-                                Write-LogError "ERROR: Unable to get policy admin owner. Reason [$ErrorVar]" 
+                        if($Backup -eq $False){
+                            if($Global:PSTKCall -eq "Rest"){
+                                $Credential = get_local_cDotcred($mySecondaryController)
+                                $url="https://"+$mySecondaryController.Name+"/api/private/cli/vserver/vscan/on-access-policy?vserver="+$mySecondaryVserver+"&policy_name="+$PrimaryOnAccessPolicyName+"&fields=owner"
+                                Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+                                $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                                if($? -ne $True){
+                                    Write-LogError "ERROR: Unable to get policy admin owner. Reason [$ErrorVar]" 
+                                }else{
+                                    $SecondaryOnAccessPolicyAdminOwner=$ret.records[0].owner
+                                }
                             }else{
-                                $SecondaryOnAccessPolicyAdminOwner=$ret.records[0].owner
+                                $SecondaryOnAccessPolicyAdminOwner=$SecondaryOnAccessPolicy.AdminOwner
                             }
-                        }else{
-                            $SecondaryOnAccessPolicyAdminOwner=$SecondaryOnAccessPolicy.AdminOwner
                         }
-                        
                         if ( (($PrimaryOnAccessPolicyFilters_str -ne $SecondaryOnAccessPolicyFilters_str) `
                             -and (($null -ne $PrimaryOnAccessPolicyFilters) -and ($null -ne $SecondaryOnAccessPolicyFilters))) `
                             -or ($PrimaryOnAccessPolicyMaxFileSize -ne $SecondaryOnAccessPolicyMaxFileSize) `
@@ -1953,6 +1963,7 @@ Function create_update_vscan_dr (
             }else{
                 if(Test-Path $($Global:JsonPath+"Get-NcVscanStatus.json")){
                     $PrimaryVscan=Get-Content $($Global:JsonPath+"Get-NcVscanStatus.json") -Raw | ConvertFrom-Json
+                    Write-LogDebug "$($Global:JsonPath+"Get-NcVscanStatus.json") successfully imported"
                 }else{
                     $Return=$False
                     $filepath=$($Global:JsonPath+"Get-NcVscanStatus.json")
@@ -2034,6 +2045,7 @@ Function create_update_firewallpolicy_dr(
         }else{
             if(Test-Path $($Global:JsonPath+"Get-NcNetFirewallPolicy.json")){
                 $PrimaryFirewallPolicies=Get-Content $($Global:JsonPath+"Get-NcNetFirewallPolicy.json") -Raw | ConvertFrom-Json
+                Write-LogDebug "$($Global:JsonPath+"Get-NcNetFirewallPolicy.json") successfully imported"
             }else{
                 $Return=$False
                 $filepath=$($Global:JsonPath+"Get-NcNetFirewallPolicy.json")
@@ -2187,6 +2199,7 @@ Function create_update_usermapping_dr(
         }else{
             if(Test-Path $($Global:JsonPath+"Get-NcNameMapping.json")){
                 $PrimaryMapping=Get-Content $($Global:JsonPath+"Get-NcNameMapping.json") -Raw | ConvertFrom-Json
+                Write-LogDebug "$($Global:JsonPath+"Get-NcNameMapping.json") successfully imported"
             }else{
                 $Return=$False
                 $filepath=$($Global:JsonPath+"Get-NcNameMapping.json")
@@ -2304,6 +2317,7 @@ Function create_update_localuser_dr(
         }else{
             if(Test-Path $($Global:JsonPath+"Get-NcUser.json")){
                 $PrimaryUsers=Get-Content $($Global:JsonPath+"Get-NcUser.json") -Raw | ConvertFrom-Json
+                Write-LogDebug "$($Global:JsonPath+"Get-NcUser.json") successfully imported"
             }else{
                 $Return=$False
                 $filepath=$($Global:JsonPath+"Get-NcUser.json")
@@ -2509,6 +2523,7 @@ Function create_update_localunixgroupanduser_dr(
         }else{
             if(Test-Path $($Global:JsonPath+"Get-NcNameMappingUnixUser.json")){
                 $PrimaryUserList=Get-Content $($Global:JsonPath+"Get-NcNameMappingUnixUser.json") -Raw | ConvertFrom-Json
+                Write-LogDebug "$($Global:JsonPath+"Get-NcNameMappingUnixUser.json") successfully imported"
             }else{
                 $Return=$False
                 $filepath=$($Global:JsonPath+"Get-NcNameMappingUnixUser.json")
@@ -2558,6 +2573,7 @@ Function create_update_localunixgroupanduser_dr(
         }else{
             if(Test-Path $($Global:JsonPath+"Get-NcNameMappingUnixGroup.json")){
                 $PrimaryGroupList=Get-Content $($Global:JsonPath+"Get-NcNameMappingUnixGroup.json") -Raw | ConvertFrom-Json
+                Write-LogDebug "$($Global:JsonPath+"Get-NcNameMappingUnixGroup.json") successfully imported"
             }else{
                 $Return=$False
                 $filepath=$($Global:JsonPath+"Get-NcNameMappingUnixGroup.json")
@@ -2675,6 +2691,7 @@ Function create_update_role_dr(
         }else{
             if(Test-Path $($Global:JsonPath+"Get-NcRole.json")){
                 $source_roles=Get-Content $($Global:JsonPath+"Get-NcRole.json") -Raw | ConvertFrom-Json
+                Write-LogDebug "$($Global:JsonPath+"Get-NcRole.json") successfully imported"
             }else{
                 $Return=$False
                 $filepath=$($Global:JsonPath+"Get-NcRole.json")
@@ -2753,6 +2770,7 @@ Function create_update_role_dr(
             }else{
                 if(Test-Path $($Global:JsonPath+"Get-NcRoleConfig-"+$role+".json")){
                     $PrimaryRoleConfig=Get-Content $($Global:JsonPath+"Get-NcRoleConfig-"+$role+".json") -Raw | ConvertFrom-Json
+                    Write-LogDebug "$($Global:JsonPath+"Get-NcRoleConfig-"+$role+".json") successfully imported"
                 }else{
                     $Return=$False
                     $filepath=$($Global:JsonPath+"Get-NcRoleConfig-"+$role+".json")
@@ -2858,6 +2876,7 @@ Function create_update_fpolicy_dr(
         }else{
             if(Test-Path $($Global:JsonPath+"Get-NcFpolicyExternalEngine.json")){
                 $PrimaryFpolicyEngineList=Get-Content $($Global:JsonPath+"Get-NcFpolicyExternalEngine.json") -Raw | ConvertFrom-Json
+                Write-LogDebug "$($Global:JsonPath+"Get-NcFpolicyExternalEngine.json") successfully imported"
             }else{
                 $Return=$False
                 $filepath=$($Global:JsonPath+"Get-NcFpolicyExternalEngine.json")
@@ -2865,6 +2884,7 @@ Function create_update_fpolicy_dr(
             }
             if(Test-Path $($Global:JsonPath+"Get-NcFpolicyPolicy.json")){
                 $PrimaryFpolicyPolicyList=Get-Content $($Global:JsonPath+"Get-NcFpolicyPolicy.json") -Raw | ConvertFrom-Json
+                Write-LogDebug "$($Global:JsonPath+"Get-NcFpolicyPolicy.json") successfully imported"
             }else{
                 $Return=$False
                 $filepath=$($Global:JsonPath+"Get-NcFpolicyPolicy.json")
@@ -3392,6 +3412,7 @@ Function create_update_fpolicy_dr(
         }else{
             if(Test-Path $($Global:JsonPath+"Get-NcFpolicyEvent.json")){
                 $PrimaryFpolEvtList=Get-Content $($Global:JsonPath+"Get-NcFpolicyEvent.json") -Raw | ConvertFrom-Json
+                Write-LogDebug "$($Global:JsonPath+"Get-NcFpolicyEvent.json") successfully imported"
             }else{
                 $Return=$False
                 $filepath=$($Global:JsonPath+"Get-NcFpolicyEvent.json")
@@ -3776,6 +3797,7 @@ Function create_update_fpolicy_dr(
                 }else{
                     if(Test-Path $($Global:JsonPath+"Get-NcFpolicyScope.json")){
                         $PrimaryFpolScope=Get-Content $($Global:JsonPath+"Get-NcFpolicyScope.json") -Raw | ConvertFrom-Json
+                        Write-LogDebug "$($Global:JsonPath+"Get-NcFpolicyScope.json") successfully imported"
                     }else{
                         $Return=$False
                         $filepath=$($Global:JsonPath+"Get-NcFpolicyScope.json")
@@ -3900,6 +3922,7 @@ Function create_update_fpolicy_dr(
                 }else{
                     if(Test-Path $($Global:JsonPath+"Get-NcFpolicyStatus.json")){
                         $PrimaryFpolStatus=Get-Content $($Global:JsonPath+"Get-NcFpolicyStatus.json") -Raw | ConvertFrom-Json
+                        Write-LogDebug "$($Global:JsonPath+"Get-NcFpolicyStatus.json") successfully imported"
                     }else{
                         $Return=$False
                         $filepath=$($Global:JsonPath+"Get-NcFpolicyStatus.json")
@@ -3986,6 +4009,7 @@ Function create_update_qospolicy_dr(
         }else{
             if(Test-Path $($Global:JsonPath+"Get-NcQosPolicyGroup.json")){
                 $PrimaryQosGroupList=Get-Content $($Global:JsonPath+"Get-NcQosPolicyGroup.json") -Raw | ConvertFrom-Json
+                Write-LogDebug "$($Global:JsonPath+"Get-NcQosPolicyGroup.json") successfully imported"
             }else{
                 $Return=$False
                 $filepath=$($Global:JsonPath+"Get-NcQosPolicyGroup.json")
@@ -4001,7 +4025,7 @@ Function create_update_qospolicy_dr(
                 $Return=$False
             }
         }
-        if($Backup -eq $False){
+        #if($Backup -eq $False){
             foreach ( $PrimaryQosGroup in ( $PrimaryQosGroupList | Skip-Null ) ) {
                 $PrimaryQosGroupName=$PrimaryQosGroup.PolicyGroup
                 $PrimaryQosGroupMaxThroughput=$PrimaryQosGroup.MaxThroughput
@@ -4013,11 +4037,30 @@ Function create_update_qospolicy_dr(
                 $PrimaryQosGroupIsShared=$PrimaryQosGroup.IsShared
                 if(($null -eq $PrimaryQosGroupMaxThroughput) -and ($null -eq $PrimaryQosGroupMinThroughput)){  
                     # Process QOS Adaptative Policy Group
-                    Write-LogDebug "PolicyGroup [$PrimaryQosGroupName] is an adaptative PolicyGroup"
-                    Write-LogDebug "Get-NcQosAdaptivePolicyGroup -PolicyGroup $PrimaryQosGroupName -Controller $myPrimaryController"
-                    $PrimaryQosAdaptativeGroup=Get-NcQosAdaptivePolicyGroup -PolicyGroup $PrimaryQosGroupName -Controller $myPrimaryController -ErrorVariable ErrorVar
-                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcQosAdaptivePolicyGroup failed [$ErrorVar]" }
-                    
+                    if($Restore -eq $False){
+                        Write-LogDebug "PolicyGroup [$PrimaryQosGroupName] is an adaptative PolicyGroup"
+                        Write-LogDebug "Get-NcQosAdaptivePolicyGroup -PolicyGroup $PrimaryQosGroupName -Controller $myPrimaryController"
+                        $PrimaryQosAdaptativeGroup=Get-NcQosAdaptivePolicyGroup -PolicyGroup $PrimaryQosGroupName -Controller $myPrimaryController -ErrorVariable ErrorVar
+                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcQosAdaptivePolicyGroup failed [$ErrorVar]" }
+                    }else{
+                        if(Test-Path $($Global:JsonPath+"Get-NcQosAdaptivePolicyGroup_"+$PrimaryQosGroupName+".json")){
+                            $PrimaryQosAdaptativeGroup=Get-Content $($Global:JsonPath+"Get-NcQosAdaptivePolicyGroup_"+$PrimaryQosGroupName+".json") -Raw | ConvertFrom-Json
+                            Write-LogDebug "$($Global:JsonPath+"Get-NcQosAdaptivePolicyGroup_"+$PrimaryQosGroupName+".json") successfully imported"
+                        }else{
+                            $Return=$False
+                            $filepath=$($Global:JsonPath+"Get-NcQosAdaptivePolicyGroup_"+$PrimaryQosGroupName+".json")
+                            Throw "ERROR: failed to read $filepath"
+                        }
+                    }
+                    if($Backup -eq $True){
+                        $PrimaryQosAdaptativeGroup | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcQosAdaptivePolicyGroup_"+$PrimaryQosGroupName+".json") -Encoding ASCII -Width 65535
+                        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcQosAdaptivePolicyGroup_"+$PrimaryQosGroupName+".json") -ErrorAction SilentlyContinue) ){
+                            Write-LogDebug "$($Global:JsonPath+"Get-NcQosAdaptivePolicyGroup_"+$PrimaryQosGroupName+".json") saved successfully"
+                        }else{
+                            Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcQosAdaptivePolicyGroup_"+$PrimaryQosGroupName+".json")"
+                            $Return=$False
+                        }
+                    }
                     $PrimaryQosAdaptativeGroupAbsoluteMinIops=$PrimaryQosAdaptativeGroup.AbsoluteMinIops
                     $PrimaryQosAdaptativeGroupExpectedIops=$PrimaryQosAdaptativeGroup.ExpectedIops
                     $PrimaryQosAdaptativeGroupPeakIops=$PrimaryQosAdaptativeGroup.PeakIops
@@ -4031,138 +4074,141 @@ Function create_update_qospolicy_dr(
                         $QosPolicyGroupName=$PrimaryQosGroupName
                         Write-LogDebug "Working outside MCC so destination policy name is [$QosPolicyGroupName]"
                     }
+                    if($Backup -eq $False){
+                        $SecondaryQosAdaptativeGroup=Get-NcQosAdaptivePolicyGroup -PolicyGroup $QosPolicyGroupName -Controller $mySecondaryController -ErrorVariable ErrorVar
+                        if($null -ne $SecondaryQosAdaptativeGroup)  
+                        {
+                            # QOS ADaptative Policy group exist, so modify if needed
+                            Write-Log "[$workOn] Modify QOS Adaptative Policy Group [$QosPolicyGroupName]"
+                            Write-LogDebug "Set-NcQosAdaptivePolicyGroup -PolicyGroup $QosPolicyGroupName -AbsoluteMinIops $PrimaryQosAdaptativeGroupAbsoluteMinIops `
+                            -ExpectedIops $PrimaryQosAdaptativeGroupExpectedIops -PeakIops $PrimaryQosAdaptativeGroupPeakIops -PeakIopsAllocation `
+                            $PrimaryQosAdaptativeGroupPeakIopsAllocation -ExpectedIopsAllocation $PrimaryQosAdaptativeGroupExpectedIopsAllocation `
+                            -BlockSize $PrimaryQosAdaptativeGroupBlockSize -Controller $mySecondaryController"
+                            $ret=Set-NcQosAdaptivePolicyGroup -PolicyGroup $QosPolicyGroupName -AbsoluteMinIops $PrimaryQosAdaptativeGroup.AbsoluteMinIops `
+                            -ExpectedIops $PrimaryQosAdaptativeGroup.ExpectedIops -PeakIops $PrimaryQosAdaptativeGroup.PeakIops -PeakIopsAllocation `
+                            $PrimaryQosAdaptativeGroup.PeakIopsAllocation -ExpectedIopsAllocation $PrimaryQosAdaptativeGroup.ExpectedIopsAllocation `
+                            -BlockSize $PrimaryQosAdaptativeGroup.BlockSize -Controller $mySecondaryController -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) { Write-Error "ERROR: Set-NcQosAdaptivePolicyGroup failed [$ErrorVar]" }
 
-                    $SecondaryQosAdaptativeGroup=Get-NcQosAdaptivePolicyGroup -PolicyGroup $QosPolicyGroupName -Controller $mySecondaryController -ErrorVariable ErrorVar
-                    if($null -ne $SecondaryQosAdaptativeGroup)  
-                    {
-                        # QOS ADaptative Policy group exist, so modify if needed
-                        Write-Log "[$workOn] Modify QOS Adaptative Policy Group [$QosPolicyGroupName]"
-                        Write-LogDebug "Set-NcQosAdaptivePolicyGroup -PolicyGroup $QosPolicyGroupName -AbsoluteMinIops $PrimaryQosAdaptativeGroupAbsoluteMinIops `
-                        -ExpectedIops $PrimaryQosAdaptativeGroupExpectedIops -PeakIops $PrimaryQosAdaptativeGroupPeakIops -PeakIopsAllocation `
-                        $PrimaryQosAdaptativeGroupPeakIopsAllocation -ExpectedIopsAllocation $PrimaryQosAdaptativeGroupExpectedIopsAllocation `
-                        -BlockSize $PrimaryQosAdaptativeGroupBlockSize -Controller $mySecondaryController"
-                        $ret=Set-NcQosAdaptivePolicyGroup -PolicyGroup $QosPolicyGroupName -AbsoluteMinIops $PrimaryQosAdaptativeGroup.AbsoluteMinIops `
-                        -ExpectedIops $PrimaryQosAdaptativeGroup.ExpectedIops -PeakIops $PrimaryQosAdaptativeGroup.PeakIops -PeakIopsAllocation `
-                        $PrimaryQosAdaptativeGroup.PeakIopsAllocation -ExpectedIopsAllocation $PrimaryQosAdaptativeGroup.ExpectedIopsAllocation `
-                        -BlockSize $PrimaryQosAdaptativeGroup.BlockSize -Controller $mySecondaryController -ErrorVariable ErrorVar
-                        if ( $? -ne $True ) { Write-Error "ERROR: Set-NcQosAdaptivePolicyGroup failed [$ErrorVar]" }
-
-                    }else{  
-                        # QOS ADaptative Policy group does not exist, create it
-                        Write-Log "[$workOn] Create QOS Adaptative Policy Group [$QosPolicyGroupName]"
-                        Write-LogDebug "New-NcQosAdaptivePolicyGroup -Vserver $mySecondaryVserver -PolicyGroup $QosPolicyGroupName -AbsoluteMinIops $PrimaryQosAdaptativeGroupAbsoluteMinIops `
-                        -ExpectedIops $PrimaryQosAdaptativeGroupExpectedIops -PeakIops $PrimaryQosAdaptativeGroupPeakIops -PeakIopsAllocation `
-                        $PrimaryQosAdaptativeGroupPeakIopsAllocation -ExpectedIopsAllocation $PrimaryQosAdaptativeGroupExpectedIopsAllocation `
-                        -BlockSize $PrimaryQosAdaptativeGroupBlockSize -Controller $mySecondaryController"
-                        $ret=New-NcQosAdaptivePolicyGroup -Vserver $mySecondaryVserver -PolicyGroup $QosPolicyGroupName -AbsoluteMinIops $PrimaryQosAdaptativeGroup.AbsoluteMinIops `
-                        -ExpectedIops $PrimaryQosAdaptativeGroup.ExpectedIops -PeakIops $PrimaryQosAdaptativeGroup.PeakIops -PeakIopsAllocation `
-                        $PrimaryQosAdaptativeGroup.PeakIopsAllocation -ExpectedIopsAllocation $PrimaryQosAdaptativeGroup.ExpectedIopsAllocation `
-                        -BlockSize $PrimaryQosAdaptativeGroup.BlockSize -Controller $mySecondaryController -ErrorVariable ErrorVar
-                        if ( $? -ne $True ) { Write-Error "ERROR: New-NcQosAdaptivePolicyGroup failed [$ErrorVar]" }
+                        }else{  
+                            # QOS ADaptative Policy group does not exist, create it
+                            Write-Log "[$workOn] Create QOS Adaptative Policy Group [$QosPolicyGroupName]"
+                            Write-LogDebug "New-NcQosAdaptivePolicyGroup -Vserver $mySecondaryVserver -PolicyGroup $QosPolicyGroupName -AbsoluteMinIops $PrimaryQosAdaptativeGroupAbsoluteMinIops `
+                            -ExpectedIops $PrimaryQosAdaptativeGroupExpectedIops -PeakIops $PrimaryQosAdaptativeGroupPeakIops -PeakIopsAllocation `
+                            $PrimaryQosAdaptativeGroupPeakIopsAllocation -ExpectedIopsAllocation $PrimaryQosAdaptativeGroupExpectedIopsAllocation `
+                            -BlockSize $PrimaryQosAdaptativeGroupBlockSize -Controller $mySecondaryController"
+                            $ret=New-NcQosAdaptivePolicyGroup -Vserver $mySecondaryVserver -PolicyGroup $QosPolicyGroupName -AbsoluteMinIops $PrimaryQosAdaptativeGroup.AbsoluteMinIops `
+                            -ExpectedIops $PrimaryQosAdaptativeGroup.ExpectedIops -PeakIops $PrimaryQosAdaptativeGroup.PeakIops -PeakIopsAllocation `
+                            $PrimaryQosAdaptativeGroup.PeakIopsAllocation -ExpectedIopsAllocation $PrimaryQosAdaptativeGroup.ExpectedIopsAllocation `
+                            -BlockSize $PrimaryQosAdaptativeGroup.BlockSize -Controller $mySecondaryController -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) { Write-Error "ERROR: New-NcQosAdaptivePolicyGroup failed [$ErrorVar]" }
+                        }
                     }
                 }else{ 
-                    # process Qos Policy Group
-                    if($Global:InsideMCC){
-                        $QosPolicyGroupName=$($PrimaryQosGroupName+"_"+$mySecondaryVserver)
-                        Write-LogDebug "Working inside MCC so change destination policy name from [$PrimaryQosGroupName] to [$QosPolicyGroupName]"
-                    }else{
-                        $QosPolicyGroupName=$PrimaryQosGroupName
-                        Write-LogDebug "Working outside MCC so destination policy name is [$QosPolicyGroupName]"
-                    }
-                    Write-LogDebug "Get-NcQosPolicyGroup -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $QosPolicyGroupName"
-                    $SecondaryQosGroup=Get-NcQosPolicyGroup -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $QosPolicyGroupName -ErrorVariable ErrorVar    
-                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcQosPolicyGroup failed [$ErrorVar]" }
-                    if($null -ne $SecondaryQosGroup)  # QOS Policy group exist, so modify if needed
-                    {
-                        Write-LogDebug "QOS Policy already exists on secondary"
-                        $SecondaryQosGroupMaxThroughput=$SecondaryQosGroup.MaxThroughput
-                        $SecondaryQosGroupMinThroughput=$SecondaryQosGroup.MinThroughput
-                        if( ($PrimaryQosGroupMaxThroughput -ne $SecondaryQosGroupMaxThroughput) -or ($PrimaryQosGroupMinThroughput -ne $SecondaryQosGroupMinThroughput) )
+                    if($Backup -eq $False){
+                        # process Qos Policy Group
+                        if($Global:InsideMCC){
+                            $QosPolicyGroupName=$($PrimaryQosGroupName+"_"+$mySecondaryVserver)
+                            Write-LogDebug "Working inside MCC so change destination policy name from [$PrimaryQosGroupName] to [$QosPolicyGroupName]"
+                        }else{
+                            $QosPolicyGroupName=$PrimaryQosGroupName
+                            Write-LogDebug "Working outside MCC so destination policy name is [$QosPolicyGroupName]"
+                        }
+                        Write-LogDebug "Get-NcQosPolicyGroup -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $QosPolicyGroupName"
+                        $SecondaryQosGroup=Get-NcQosPolicyGroup -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $QosPolicyGroupName -ErrorVariable ErrorVar    
+                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcQosPolicyGroup failed [$ErrorVar]" }
+                        if($null -ne $SecondaryQosGroup)  # QOS Policy group exist, so modify if needed
                         {
-                            Write-LogDebug "Need to update this fiexed policy on secondary"
-                            if($ForClone.IsPresent -eq $True){
-                                Write-LogDebug "Work in ForClone mode"
-                                Write-LogDebug "QOS Policy Group old name [$QosPolicyGroupName]"
-                                $QosPolicyGroupName=$PrimaryQosGroupName+"___"+($mySecondaryVserver -replace "\.","_")
-                                <# if($PrimaryQosGroupName -notmatch ".+___.+$"){
+                            Write-LogDebug "QOS Policy already exists on secondary"
+                            $SecondaryQosGroupMaxThroughput=$SecondaryQosGroup.MaxThroughput
+                            $SecondaryQosGroupMinThroughput=$SecondaryQosGroup.MinThroughput
+                            if( ($PrimaryQosGroupMaxThroughput -ne $SecondaryQosGroupMaxThroughput) -or ($PrimaryQosGroupMinThroughput -ne $SecondaryQosGroupMinThroughput) )
+                            {
+                                Write-LogDebug "Need to update this fiexed policy on secondary"
+                                if($ForClone.IsPresent -eq $True){
+                                    Write-LogDebug "Work in ForClone mode"
+                                    Write-LogDebug "QOS Policy Group old name [$QosPolicyGroupName]"
                                     $QosPolicyGroupName=$PrimaryQosGroupName+"___"+($mySecondaryVserver -replace "\.","_")
-                                }else{
-                                    $splitted=$PrimaryQosGroupName -split "___"
-                                    if($splitted.count -ge 3){
-                                        $QosPolicyGroupName=[string]::join("___",$splitted[0..($splitted.length-2)]) 
+                                    <# if($PrimaryQosGroupName -notmatch ".+___.+$"){
+                                        $QosPolicyGroupName=$PrimaryQosGroupName+"___"+($mySecondaryVserver -replace "\.","_")
                                     }else{
-                                        $QosPolicyGroupName=$PrimaryQosGroupName    
-                                    }    
-                                } #>
-                                Write-LogDebug "QOS Policy Group new name [$QosPolicyGroupName]"
-                                Write-Log "[$workOn] Update QOS Policy Group [$QosPolicyGroupName]"
-                                Write-LogDebug "Set-NcQosPolicyGroup -Name $QosPolicyGroupName -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController"
-                                $out=Set-NcQosPolicyGroup -Name $QosPolicyGroupName -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController  -ErrorVariable ErrorVar
-                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcQosPolicyGroup failed [$ErrorVar]" }
-                            }else{
-                                if($Global:SINGLE_CLUSTER -eq $True)
-                                {
-                                    Write-LogDebug "Work in SINGLE_CLUSTER mode"
-                                    Write-Log "[$workOn] Update QOS Policy Group [$PrimaryQosGroupName`_$workOn]"
-                                    Write-LogDebug "Set-NcQosPolicyGroup -Name $PrimaryQosGroupName`_$mySecondaryVserver -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController"
-                                    $out=Set-NcQosPolicyGroup -Name $($PrimaryQosGroupName+"_"+$mySecondaryVserver) -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController  -ErrorVariable ErrorVar
-                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcQosPolicyGroup failed [$ErrorVar]" }
-                                }
-                                else
-                                {
-                                    Write-LogDebug "Work in normal mode"
+                                        $splitted=$PrimaryQosGroupName -split "___"
+                                        if($splitted.count -ge 3){
+                                            $QosPolicyGroupName=[string]::join("___",$splitted[0..($splitted.length-2)]) 
+                                        }else{
+                                            $QosPolicyGroupName=$PrimaryQosGroupName    
+                                        }    
+                                    } #>
+                                    Write-LogDebug "QOS Policy Group new name [$QosPolicyGroupName]"
                                     Write-Log "[$workOn] Update QOS Policy Group [$QosPolicyGroupName]"
                                     Write-LogDebug "Set-NcQosPolicyGroup -Name $QosPolicyGroupName -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController"
                                     $out=Set-NcQosPolicyGroup -Name $QosPolicyGroupName -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController  -ErrorVariable ErrorVar
                                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcQosPolicyGroup failed [$ErrorVar]" }
+                                }else{
+                                    if($Global:SINGLE_CLUSTER -eq $True)
+                                    {
+                                        Write-LogDebug "Work in SINGLE_CLUSTER mode"
+                                        Write-Log "[$workOn] Update QOS Policy Group [$PrimaryQosGroupName`_$workOn]"
+                                        Write-LogDebug "Set-NcQosPolicyGroup -Name $PrimaryQosGroupName`_$mySecondaryVserver -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController"
+                                        $out=Set-NcQosPolicyGroup -Name $($PrimaryQosGroupName+"_"+$mySecondaryVserver) -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController  -ErrorVariable ErrorVar
+                                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcQosPolicyGroup failed [$ErrorVar]" }
+                                    }
+                                    else
+                                    {
+                                        Write-LogDebug "Work in normal mode"
+                                        Write-Log "[$workOn] Update QOS Policy Group [$QosPolicyGroupName]"
+                                        Write-LogDebug "Set-NcQosPolicyGroup -Name $QosPolicyGroupName -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController"
+                                        $out=Set-NcQosPolicyGroup -Name $QosPolicyGroupName -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController  -ErrorVariable ErrorVar
+                                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcQosPolicyGroup failed [$ErrorVar]" }
+                                    }
+                                }
+                            }else{
+                                Write-LogDebug "No need to update this Fixed QOS policy on secondary"
+                            }
+                        }
+                        else 
+                        {
+                            # QOS Policy group does not exist, create it
+                            Write-LogDebug "QOS Policy does not exists on secondary"
+                            if($ForClone.IsPresent -eq $True){
+                                Write-LogDebug "Work in normal mode"
+                                Write-LogDebug "QOS Policy Group old name [$PrimaryQosGroupName]"
+                                $QosPolicyGroupName=$PrimaryQosGroupName+"___"+($mySecondaryVserver -replace "\.","_")
+                                Write-LogDebug "QOS Policy Group new name [$QosPolicyGroupName]"
+                                Write-Log "[$workOn] Create QOS Policy Group [$QosPolicyGroupName]" 
+                                Write-LogDebug "New-NcQosPolicyGroup -Name $QosPolicyGroupName -Vserver $mySecondaryVserver -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController"
+                                $out=New-NcQosPolicyGroup -Name $QosPolicyGroupName -Vserver $mySecondaryVserver -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController  -ErrorVariable ErrorVar 
+                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcQosPolicyGroup failed [$ErrorVar]" }
+                            }else{
+                                if($Global:SINGLE_CLUSTER -eq $True)
+                                {
+                                    Write-LogDebug "Work in SINGLE_CLUSTER mode"
+                                    Write-Log "[$workOn] Create QOS Policy Group [$PrimaryQosGroupName`_$workOn]" 
+                                    Write-LogDebug "New-NcQosPolicyGroup -Name $PrimaryQosGroupName`_$mySecondaryVserver -Vserver $mySecondaryVserver -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController"
+                                    $out=New-NcQosPolicyGroup -Name $($PrimaryQosGroupName+"_"+$mySecondaryVserver) -Vserver $mySecondaryVserver -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController  -ErrorVariable ErrorVar 
+                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcQosPolicyGroup failed [$ErrorVar]" }
+                                }
+                                else
+                                {
+                                    
+                                    Write-LogDebug "Work in normal mode"
+                                    Write-Log "[$workOn] Create QOS Policy Group [$QosPolicyGroupName]" 
+                                    # Write-LogDebug "Check existance of QOS"
+                                    # Write-LogDebug "Get-NcQosPolicyGroup -Name $QosPolicyGroupName -controller $mySecondaryController"
+                                    # $ExistingQOS=Get-NcQosPolicyGroup -Name $QosPolicyGroupName -controller $mySecondaryController -ErrorVariable ErrorVar
+                                    # if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcQosPolicyGroup failed [$ErrorVar]" }
+                                    # if($null -eq $ExistingQOS){
+                                        Write-LogDebug "New-NcQosPolicyGroup -Name $QosPolicyGroupName -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -Vserver $mySecondaryVserver -controller $mySecondaryController"
+                                        New-NcQosPolicyGroup -Name $QosPolicyGroupName -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -Vserver $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar 
+                                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcQosPolicyGroup failed [$ErrorVar]" }
+                                    # }
                                 }
                             }
-                        }else{
-                            Write-LogDebug "No need to update this Fixed QOS policy on secondary"
-                        }
-                    }
-                    else 
-                    {
-                        # QOS Policy group does not exist, create it
-                        Write-LogDebug "QOS Policy does not exists on secondary"
-                        if($ForClone.IsPresent -eq $True){
-                            Write-LogDebug "Work in normal mode"
-                            Write-LogDebug "QOS Policy Group old name [$PrimaryQosGroupName]"
-                            $QosPolicyGroupName=$PrimaryQosGroupName+"___"+($mySecondaryVserver -replace "\.","_")
-                            Write-LogDebug "QOS Policy Group new name [$QosPolicyGroupName]"
-                            Write-Log "[$workOn] Create QOS Policy Group [$QosPolicyGroupName]" 
-                            Write-LogDebug "New-NcQosPolicyGroup -Name $QosPolicyGroupName -Vserver $mySecondaryVserver -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController"
-                            $out=New-NcQosPolicyGroup -Name $QosPolicyGroupName -Vserver $mySecondaryVserver -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController  -ErrorVariable ErrorVar 
-                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcQosPolicyGroup failed [$ErrorVar]" }
-                        }else{
-                            if($Global:SINGLE_CLUSTER -eq $True)
-                            {
-                                Write-LogDebug "Work in SINGLE_CLUSTER mode"
-                                Write-Log "[$workOn] Create QOS Policy Group [$PrimaryQosGroupName`_$workOn]" 
-                                Write-LogDebug "New-NcQosPolicyGroup -Name $PrimaryQosGroupName`_$mySecondaryVserver -Vserver $mySecondaryVserver -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController"
-                                $out=New-NcQosPolicyGroup -Name $($PrimaryQosGroupName+"_"+$mySecondaryVserver) -Vserver $mySecondaryVserver -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -controller $mySecondaryController  -ErrorVariable ErrorVar 
-                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcQosPolicyGroup failed [$ErrorVar]" }
-                            }
-                            else
-                            {
-                                
-                                Write-LogDebug "Work in normal mode"
-                                Write-Log "[$workOn] Create QOS Policy Group [$QosPolicyGroupName]" 
-                                # Write-LogDebug "Check existance of QOS"
-                                # Write-LogDebug "Get-NcQosPolicyGroup -Name $QosPolicyGroupName -controller $mySecondaryController"
-                                # $ExistingQOS=Get-NcQosPolicyGroup -Name $QosPolicyGroupName -controller $mySecondaryController -ErrorVariable ErrorVar
-                                # if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcQosPolicyGroup failed [$ErrorVar]" }
-                                # if($null -eq $ExistingQOS){
-                                    Write-LogDebug "New-NcQosPolicyGroup -Name $QosPolicyGroupName -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -Vserver $mySecondaryVserver -controller $mySecondaryController"
-                                    New-NcQosPolicyGroup -Name $QosPolicyGroupName -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -Vserver $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar 
-                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcQosPolicyGroup failed [$ErrorVar]" }
-                                # }
-                            }
-                        }
+                        }   
                     }
                 }
             }
-        }
+        #}
         if($Restore -eq $False){
             Write-LogDebug "Get-NcVserver -Name $myPrimaryVserver -Controller $myPrimaryController"
             $PrimaryQosPolicyGroupOnSVM=(Get-NcVserver -Name $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar).QosPolicyGroup
@@ -4170,6 +4216,7 @@ Function create_update_qospolicy_dr(
         }else{
             if(Test-Path $($Global:JsonPath+"Get-NcVserver.json")){
                 $PrimaryQosPolicyGroupOnSVM=Get-Content $($Global:JsonPath+"Get-NcVserver.json") -Raw | ConvertFrom-Json
+                Write-LogDebug "$($Global:JsonPath+"Get-NcVserver.json") successfully imported"
                 $PrimaryQosPolicyGroupOnSVM=$PrimaryQosPolicyGroupOnSVM.QosPolicyGroup
             }else{
                 $Return=$False
@@ -4183,50 +4230,67 @@ Function create_update_qospolicy_dr(
                 Write-LogDebug "Get-NcVserver -Name $mySecondaryVserver -Controller $mySecondaryController"
                 $SecondaryQosPolicyGroupOnSVM=(Get-NcVserver -Name $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar).QosPolicyGroup
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" }
+            }
                 if($Global:PSTKCall -eq "Rest"){
                     # ! in REST QosPolicyGroup at SVM level contains an Uuid not a name. Need to get the name of the policy at another level
-                    $PrimaryQosPolicyGroupOnSVM=(Get-NcQosPolicyGroup -Uuid $PrimaryQosPolicyGroupOnSVM -Controller $myPrimaryController  -ErrorVariable ErrorVar).PolicyGroup
-                    $SecondaryQosPolicyGroupOnSVM=(Get-NcQosPolicyGroup -Uuid $SecondaryQosPolicyGroupOnSVM -Controller $mySecondaryController  -ErrorVariable ErrorVar).PolicyGroup
-                }
-                if($ForClone.IsPresent -eq $True){
-                    Write-LogDebug "Work in ForClone mode"
-                    Write-LogDebug "QOS Policy Group old name [$PrimaryQosGroupName]"
-                    $QosPolicyGroupName=$PrimaryQosGroupName+"___"+($mySecondaryVserver -replace "\.","_")
-                    Write-LogDebug "QOS Policy Group new name [$QosPolicyGroupName]"
-                    Write-LogDebug "Set-NcVserver -name $mySecondaryVserver -QOsPolicyGroup $QosPolicyGroupName -Controller $mySecondaryController"
-                    $out=Set-NcVserver -Name $mySecondaryVserver -QOsPolicyGroup $QosPolicyGroupName -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcVserver failed [$ErrorVar]" }     
-                }else{
-                    if($Global:SINGLE_CLUSTER -eq $True)
-                    {
-                        $SecondaryQosPolicyGroupOnSVM=$SecondaryQosPolicyGroupOnSVM -replace "$mySecondaryVserver",""
-                        if($PrimaryQosPolicyGroupOnSVM -ne $SecondaryQosPolicyGroupOnSVM)
-                        {
-                            Write-LogDebug "Work in SINGLE_CLUSTER mode"
-                            Write-LogDebug "Set-NcVserver -name $mySecondaryVserver -QOsPolicyGroup $PrimaryQosPolicyGroupOnSVM`_$mySecondaryVserver -Controller $mySecondaryController"
-                            $out=Set-NcVserver -Name $mySecondaryVserver -QOsPolicyGroup $($PrimaryQosPolicyGroupOnSVM+"_"+$mySecondaryVserver) -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcVserver failed [$ErrorVar]" }  
-                        }
-                    }
-                    else
-                    {
-                        if($Global:InsideMCC){
-                            $PrimaryQosPolicyGroupOnSVM=$($PrimaryQosPolicyGroupOnSVM+"_"+$mySecondaryVserver)
-                            Write-LogDebug "Working inside MCC so change destination policy for SVM name from [$PrimaryQosPolicyGroupOnSVM] to [$PrimaryQosPolicyGroupOnSVM]"
+                    if($Restore -eq $False){
+                        $PrimaryQosPolicyGroupOnSVM=(Get-NcQosPolicyGroup -Uuid $PrimaryQosPolicyGroupOnSVM -Controller $myPrimaryController  -ErrorVariable ErrorVar).PolicyGroup
+                    }else{
+                        if(Test-Path $($Global:JsonPath+"Get-NcQosPolicyGroup.json")){
+                            $PrimaryQosPolicyGroupOnSVM=Get-Content $($Global:JsonPath+"Get-NcQosPolicyGroup.json") -Raw | ConvertFrom-Json
+                            Write-LogDebug "$($Global:JsonPath+"Get-NcQosPolicyGroup.json") successfully imported"
+                            $PrimaryQosPolicyGroupOnSVM=PrimaryQosPolicyGroupOnSVM.PolicyGroup
                         }else{
-                            $PrimaryQosPolicyGroupOnSVM=$PrimaryQosPolicyGroupOnSVM
-                            Write-LogDebug "Working outside MCC so destination policy for SVM name is [$PrimaryQosPolicyGroupOnSVM]"
+                            $Return=$False
+                            $filepath=$($Global:JsonPath+"Get-NcQosPolicyGroup.json")
+                            Throw "ERROR: failed to read $filepath"
                         }
-                        if($PrimaryQosPolicyGroupOnSVM -ne $SecondaryQosPolicyGroupOnSVM)
+                    }
+                    if($Backup -eq $False){
+                        $SecondaryQosPolicyGroupOnSVM=(Get-NcQosPolicyGroup -Uuid $SecondaryQosPolicyGroupOnSVM -Controller $mySecondaryController  -ErrorVariable ErrorVar).PolicyGroup
+                    }
+                }
+                if($Backup -eq $False){
+                    if($ForClone.IsPresent -eq $True){
+                        Write-LogDebug "Work in ForClone mode"
+                        Write-LogDebug "QOS Policy Group old name [$PrimaryQosGroupName]"
+                        $QosPolicyGroupName=$PrimaryQosGroupName+"___"+($mySecondaryVserver -replace "\.","_")
+                        Write-LogDebug "QOS Policy Group new name [$QosPolicyGroupName]"
+                        Write-LogDebug "Set-NcVserver -name $mySecondaryVserver -QOsPolicyGroup $QosPolicyGroupName -Controller $mySecondaryController"
+                        $out=Set-NcVserver -Name $mySecondaryVserver -QOsPolicyGroup $QosPolicyGroupName -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcVserver failed [$ErrorVar]" }     
+                    }else{
+                        if($Global:SINGLE_CLUSTER -eq $True)
                         {
-                            Write-LogDebug "Work in normal mode"
-                            Write-LogDebug "Set-NcVserver -name $mySecondaryVserver -QOsPolicyGroup $PrimaryQosPolicyGroupOnSVM -Controller $mySecondaryController"
-                            $out=Set-NcVserver -Name $mySecondaryVserver -QOsPolicyGroup $PrimaryQosPolicyGroupOnSVM -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcVserver failed [$ErrorVar]" }  
+                            $SecondaryQosPolicyGroupOnSVM=$SecondaryQosPolicyGroupOnSVM -replace "$mySecondaryVserver",""
+                            if($PrimaryQosPolicyGroupOnSVM -ne $SecondaryQosPolicyGroupOnSVM)
+                            {
+                                Write-LogDebug "Work in SINGLE_CLUSTER mode"
+                                Write-LogDebug "Set-NcVserver -name $mySecondaryVserver -QOsPolicyGroup $PrimaryQosPolicyGroupOnSVM`_$mySecondaryVserver -Controller $mySecondaryController"
+                                $out=Set-NcVserver -Name $mySecondaryVserver -QOsPolicyGroup $($PrimaryQosPolicyGroupOnSVM+"_"+$mySecondaryVserver) -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcVserver failed [$ErrorVar]" }  
+                            }
+                        }
+                        else
+                        {
+                            if($Global:InsideMCC){
+                                $PrimaryQosPolicyGroupOnSVM=$($PrimaryQosPolicyGroupOnSVM+"_"+$mySecondaryVserver)
+                                Write-LogDebug "Working inside MCC so change destination policy for SVM name from [$PrimaryQosPolicyGroupOnSVM] to [$PrimaryQosPolicyGroupOnSVM]"
+                            }else{
+                                $PrimaryQosPolicyGroupOnSVM=$PrimaryQosPolicyGroupOnSVM
+                                Write-LogDebug "Working outside MCC so destination policy for SVM name is [$PrimaryQosPolicyGroupOnSVM]"
+                            }
+                            if($PrimaryQosPolicyGroupOnSVM -ne $SecondaryQosPolicyGroupOnSVM)
+                            {
+                                Write-LogDebug "Work in normal mode"
+                                Write-LogDebug "Set-NcVserver -name $mySecondaryVserver -QOsPolicyGroup $PrimaryQosPolicyGroupOnSVM -Controller $mySecondaryController"
+                                $out=Set-NcVserver -Name $mySecondaryVserver -QOsPolicyGroup $PrimaryQosPolicyGroupOnSVM -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcVserver failed [$ErrorVar]" }  
+                            }
                         }
                     }
                 }
-            }
+            #}
         }
         else 
         {
@@ -4260,6 +4324,7 @@ Function create_update_qospolicy_dr(
                 # }else{
                     if(Test-Path $($Global:JsonPath+"Get-NcVol.json")){
                         $PrimaryVolList=Get-Content $($Global:JsonPath+"Get-NcVol.json") -Raw | ConvertFrom-Json
+                        Write-LogDebug "$($Global:JsonPath+"Get-NcVol.json") successfully imported"
                     }else{
                         $Return=$False
                         $filepath=$($Global:JsonPath+"Get-NcVol.json")
@@ -4267,28 +4332,47 @@ Function create_update_qospolicy_dr(
                     }
                 # } 
             }
-            if($Backup -eq $False){
+            #if($Backup -eq $False){
+            
                 if($Global:PSTKCall -eq "Zapi"){
                     $PrimaryVolWithQosList=$PrimaryVolList | Where-Object {$null -ne $_.VolumeQosAttributes.PolicyGroupName}
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
                 }else{
-                    $PrimaryCredential = get_local_cDotcred($myPrimaryController)
-                    if($Global:SelectVolume -eq $True)
-                    {
-                        $VolListRest=$Selected.volumes -join ","
+                    if($Restore -eq $False){
+                        $PrimaryCredential = get_local_cDotcred($myPrimaryController)
+                        if($Global:SelectVolume -eq $True)
+                        {
+                            $VolListRest=$Selected.volumes -join ","
+                        }else{
+                            $VolListRest="*"
+                        }
+                        $url=$("https://"+$myPrimaryController.Name+"/api/storage/volumes?svm.name="+$myPrimaryVserver+"&name="+$VolListRest+"&qos.policy.name=!-&fields=qos.policy.*")
+                        Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck"
+                        $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+                        if($? -ne $True){
+                            Write-LogError "ERROR: Unable to get policy admin owner. Reason [$ErrorVar]" 
+                            $PrimaryVolWithQosList=$null
+                        }elseif($ret.num_records -ge 1){
+                            $PrimaryVolWithQosList=$ret.records
+                        }else{
+                            $PrimaryVolWithQosList=$null
+                        }
                     }else{
-                        $VolListRest="*"
+                        if(Test-Path $($Global:JsonPath+"Get-RESTVolWithQos.json")){
+                            $PrimaryVolWithQosList=Get-Content $($Global:JsonPath+"Get-RESTVolWithQos.json") -Raw | ConvertFrom-Json
+                            Write-LogDebug "$($Global:JsonPath+"Get-RESTVolWithQos.json") successfully imported"
+                        }else{
+                            $PrimaryVolWithQosList=$null
+                        }
                     }
-                    $url=$("https://"+$myPrimaryController.Name+"/api/storage/volumes?svm.name="+$myPrimaryVserver+"&name="+$VolListRest+"&qos.policy.name=!-&fields=qos.policy.*")
-                    Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck"
-                    $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
-                    if($? -ne $True){
-                        Write-LogError "ERROR: Unable to get policy admin owner. Reason [$ErrorVar]" 
-                        $PrimaryVolWithQosList=$null
-                    }elseif($ret.num_records -ge 1){
-                        $PrimaryVolWithQosList=$ret.records
-                    }else{
-                        $PrimaryVolWithQosList=$null
+                    if($Backup -eq $True){
+                        $PrimaryVolWithQosList | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-RESTVolWithQos.json") -Encoding ASCII -Width 65535
+                        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-RESTVolWithQos.json") -ErrorAction SilentlyContinue) ){
+                            Write-LogDebug "$($Global:JsonPath+"Get-RESTVolWithQos.json") saved successfully"
+                        }else{
+                            Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-RESTVolWithQos.json")"
+                            $Return=$False
+                        }
                     }
                 }
                 foreach ( $PrimaryVolWithQos in ( $PrimaryVolWithQosList | Skip-Null ) ) {
@@ -4315,110 +4399,33 @@ Function create_update_qospolicy_dr(
                             $isAdaptative=$False
                         }
                     }
-                    Write-LogDebug "Get-NcVol -Name $PrimaryVolName -VserverContext $mySecondaryVserver -controller $mySecondaryController"
-                    $SecondaryVol= Get-NcVol -Name $PrimaryVolName -VserverContext $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar
-                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
-                    $SecondaryVolQosName=$SecondaryVol.VolumeQosAttributes.PolicyGroupName
-                    $SecondaryVolQosAdaptativeName=$SecondaryVol.VolumeQosAttributes.AdaptativePolicyGroupName
-                    if($null -ne $SecondaryVolQosName){
-                        $SecondaryQOSPolicy=$SecondaryVolQosName
-                    }else{
-                        $SecondaryQOSPolicy=$SecondaryVolQosAdaptativeName
-                    }
-                    $SecondaryVolUuid=$SecondaryVol.VolumeIdAttributes.InstanceUuid
-                    $CredSecondary=get_local_cDotcred($mySecondaryController)
+                    if($Backup -eq $False){
+                        Write-LogDebug "Get-NcVol -Name $PrimaryVolName -VserverContext $mySecondaryVserver -controller $mySecondaryController"
+                        $SecondaryVol= Get-NcVol -Name $PrimaryVolName -VserverContext $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar
+                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+                        $SecondaryVolQosName=$SecondaryVol.VolumeQosAttributes.PolicyGroupName
+                        $SecondaryVolQosAdaptativeName=$SecondaryVol.VolumeQosAttributes.AdaptativePolicyGroupName
+                        if($null -ne $SecondaryVolQosName){
+                            $SecondaryQOSPolicy=$SecondaryVolQosName
+                        }else{
+                            $SecondaryQOSPolicy=$SecondaryVolQosAdaptativeName
+                        }
+                        $SecondaryVolUuid=$SecondaryVol.VolumeIdAttributes.InstanceUuid
+                        $CredSecondary=get_local_cDotcred($mySecondaryController)
 
-                    if($ForClone.IsPresent -eq $True){
-                        Write-LogDebug "QOS Policy Group old name [$PrimaryQOSPolicy]"
-                        $QosPolicyGroupName=$PrimaryQOSPolicy+"___"+($mySecondaryVserver -replace "\.","_")
-                        Write-LogDebug "QOS Policy Group new name [$QosPolicyGroupName]"
-                        if($QosPolicyGroupName -ne $SecondaryQOSPolicy)
-                        {
-                            Write-LogDebug "Work in ForClone mode"
-                            Write-log "[$workOn] Update Qos Policy Group name [$QosPolicyGroupName] for volume [$PrimaryVolName]"
-                            if($Global:PSTKCall -eq "Zapi"){
-                                $query= Get-NcVol -Template -Fill
-                                $query.Name=$PrimaryVolName
-                                $query.Vserver=$mySecondaryVserver
-                                $attributes= Get-NcVol -Template
-                                Initialize-NcObjectProperty $attributes VolumeQosAttributes
-                                if($isAdaptative){
-                                    $attributes.VolumeQosAttributes.AdaptativePolicyGroupName=$QosPolicyGroupName
-                                }else{
-                                    $attributes.VolumeQosAttributes.PolicyGroupName=$QosPolicyGroupName
-                                }
-                                Write-LogDebug "Update-NcVol -Query `$query -Attributes `$attributes -controller $mySecondaryController"
-                                $out=Update-NcVol -Query $query -Attributes $attributes -controller $mySecondaryController  -ErrorVariable ErrorVar
-                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol failed [$ErrorVar]" }
-                            }elseif($Global:PSTKCall -eq "ZapiEnforced"){
-                                $query= Get-NcVol -Template -Fill
-                                $query.Name=$PrimaryVolName
-                                $query.Vserver=$mySecondaryVserver
-                                $attributes= Get-NcVol -Template
-                                Initialize-NcObjectProperty $attributes VolumeQosAttributes
-                                if($isAdaptative){
-                                    $attributes.VolumeQosAttributes.AdaptativePolicyGroupName=$QosPolicyGroupName
-                                }else{
-                                    $attributes.VolumeQosAttributes.PolicyGroupName=$QosPolicyGroupName
-                                }
-                                Write-LogDebug "Update-NcVol -Query `$query -Attributes `$attributes -controller $mySecondaryController -ONTAPI"
-                                $out=Update-NcVol -Query $query -Attributes $attributes -controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
-                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol failed [$ErrorVar]" }
-                            }else{
-                                $body=@{
-                                    qos=@{policy=@{name=$QosPolicyGroupName}}
-                                } | ConvertTo-Json
-                                $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$SecondaryVolUuid)
-                                Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
-                                $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
-                                if($? -ne $True){
-                                    Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
-                                }
-                                $JobUuid=$ret.job.uuid
-                                $StartTime=Get-date
-                                $Timeout=$False
-                                $JobDone=$False
-                                While(($JobDone -eq $False) -and ($Timeout -eq $False)){
-                                    $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
-                                    if($JobDetail.JobCompletion -eq "success"){
-                                        $JobDone=$True
-                                        break
-                                    }else{
-                                        $JobStatus=$JobDetail.JobState
-                                        Write-LogDebug "[$workOn] Update Vol job status [$JobStatus]"
-                                        if($JobStatus -eq "failure"){
-                                            $JobCompletion=$JobDetail.JobCompletion
-                                            Write-LogError "[$workOn] Vol creation failed [$JobCompletion]"
-                                            break
-                                        }
-                                    }
-                                    $CurrentTime=Get-date
-                                    $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
-                                    if($TimeSpend -gt $Global:STOP_TIMEOUT){
-                                        Write-LogWarn "[$workOn] Update Vol job take too much time. Check in Ontap its status"
-                                        $Timeout=$True
-                                    }
-                                    Start-Sleep 5
-                                }
-                            }
-                        }   
-                    }else{
-                        if($Global:SINGLE_CLUSTER -eq $True)
-                        {
-                            $SecondaryQOSPolicy=$SecondaryQOSPolicy -replace "$mySecondaryVserver",""
-                            if($PrimaryQOSPolicy -ne $SecondaryQOSPolicy)
+                        if($ForClone.IsPresent -eq $True){
+                            Write-LogDebug "QOS Policy Group old name [$PrimaryQOSPolicy]"
+                            $QosPolicyGroupName=$PrimaryQOSPolicy+"___"+($mySecondaryVserver -replace "\.","_")
+                            Write-LogDebug "QOS Policy Group new name [$QosPolicyGroupName]"
+                            if($QosPolicyGroupName -ne $SecondaryQOSPolicy)
                             {
-                                Write-LogDebug "Work in SINGLE_CLUSTER mode"
-                                Write-log "[$workOn] Update Qos Policy Group name [$PrimaryQOSPolicy`_$workOn] for volume [$PrimaryVolName]"
+                                Write-LogDebug "Work in ForClone mode"
+                                Write-log "[$workOn] Update Qos Policy Group name [$QosPolicyGroupName] for volume [$PrimaryVolName]"
                                 if($Global:PSTKCall -eq "Zapi"){
-                                    Write-LogDebug "Get-NcVol -Template -controller $mySecondaryController"
-                                    $query= Get-NcVol -Template -Fill 
-                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+                                    $query= Get-NcVol -Template -Fill
                                     $query.Name=$PrimaryVolName
                                     $query.Vserver=$mySecondaryVserver
-                                    Write-LogDebug "Get-NcVol -Template -controller $mySecondaryController"
                                     $attributes= Get-NcVol -Template
-                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
                                     Initialize-NcObjectProperty $attributes VolumeQosAttributes
                                     if($isAdaptative){
                                         $attributes.VolumeQosAttributes.AdaptativePolicyGroupName=$QosPolicyGroupName
@@ -4429,14 +4436,10 @@ Function create_update_qospolicy_dr(
                                     $out=Update-NcVol -Query $query -Attributes $attributes -controller $mySecondaryController  -ErrorVariable ErrorVar
                                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol failed [$ErrorVar]" }
                                 }elseif($Global:PSTKCall -eq "ZapiEnforced"){
-                                    Write-LogDebug "Get-NcVol -Template -controller $mySecondaryController"
-                                    $query= Get-NcVol -Template -Fill 
-                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+                                    $query= Get-NcVol -Template -Fill
                                     $query.Name=$PrimaryVolName
                                     $query.Vserver=$mySecondaryVserver
-                                    Write-LogDebug "Get-NcVol -Template -controller $mySecondaryController"
                                     $attributes= Get-NcVol -Template
-                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
                                     Initialize-NcObjectProperty $attributes VolumeQosAttributes
                                     if($isAdaptative){
                                         $attributes.VolumeQosAttributes.AdaptativePolicyGroupName=$QosPolicyGroupName
@@ -4448,7 +4451,7 @@ Function create_update_qospolicy_dr(
                                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol failed [$ErrorVar]" }
                                 }else{
                                     $body=@{
-                                        qos=@{policy=@{name=$($PrimaryQOSPolicy+"_"+$mySecondaryVserver)}}
+                                        qos=@{policy=@{name=$QosPolicyGroupName}}
                                     } | ConvertTo-Json
                                     $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$SecondaryVolUuid)
                                     Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
@@ -4464,10 +4467,10 @@ Function create_update_qospolicy_dr(
                                         $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
                                         if($JobDetail.JobCompletion -eq "success"){
                                             $JobDone=$True
+                                            break
                                         }else{
                                             $JobStatus=$JobDetail.JobState
                                             Write-LogDebug "[$workOn] Update Vol job status [$JobStatus]"
-                                            break
                                             if($JobStatus -eq "failure"){
                                                 $JobCompletion=$JobDetail.JobCompletion
                                                 Write-LogError "[$workOn] Vol creation failed [$JobCompletion]"
@@ -4483,103 +4486,186 @@ Function create_update_qospolicy_dr(
                                         Start-Sleep 5
                                     }
                                 }
-                            }    
-                        }
-                        else
-                        {
-                            if($Global:InsideMCC){
-                                $QosPolicyGroupName=$($PrimaryQOSPolicy+"_"+$mySecondaryVserver)
-                                Write-LogDebug "Working inside MCC so change destination policy name from [$PrimaryQOSPolicy] to [$QosPolicyGroupName]"
-                            }else{
-                                $QosPolicyGroupName=$PrimaryQOSPolicy
-                                Write-LogDebug "Working outside MCC so destination policy name is [$QosPolicyGroupName]"
-                            }
-                            # if($isAdaptative){
-                            #     $PrimaryQOSPolicy=$QosPolicyGroupName
-                            # }
-                            if($QosPolicyGroupName -ne $SecondaryQOSPolicy)
+                            }   
+                        }else{
+                            if($Global:SINGLE_CLUSTER -eq $True)
                             {
-                                Write-LogDebug "Work in normal mode"
-                                Write-log "[$workOn] Update Qos Policy Group name [$QosPolicyGroupName] for volume [$PrimaryVolName]"
-                                if($Global:PSTKCall -eq "Zapi"){
-                                    Write-LogDebug "Get-NcVol -Template -controller $mySecondaryController"
-                                    $query= Get-NcVol -Template -Fill 
-                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
-                                    $query.Name=$PrimaryVolName
-                                    $query.Vserver=$mySecondaryVserver
-                                    Write-LogDebug "Get-NcVol -Template -controller $mySecondaryController"
-                                    $attributes= Get-NcVol -Template
-                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
-                                    Initialize-NcObjectProperty $attributes VolumeQosAttributes
-                                    if($isAdaptative){
-                                        $attributes.VolumeQosAttributes.AdaptativePolicyGroupName=$QosPolicyGroupName
-                                    }else{
-                                        $attributes.VolumeQosAttributes.PolicyGroupName=$QosPolicyGroupName
-                                    }
-                                    
-                                    Write-LogDebug "Update-NcVol -Query `$query -Attributes `$attributes -controller $mySecondaryController"
-                                    $out=Update-NcVol -Query $query -Attributes $attributes -controller $mySecondaryController  -ErrorVariable ErrorVar
-                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol failed [$ErrorVar]" }
-                                }elseif($Global:PSTKCall -eq "ZapiEnforced"){ 
-                                    Write-LogDebug "Get-NcVol -Template -controller $mySecondaryController"
-                                    $query= Get-NcVol -Template -Fill 
-                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
-                                    $query.Name=$PrimaryVolName
-                                    $query.Vserver=$mySecondaryVserver
-                                    Write-LogDebug "Get-NcVol -Template -controller $mySecondaryController"
-                                    $attributes= Get-NcVol -Template
-                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
-                                    Initialize-NcObjectProperty $attributes VolumeQosAttributes
-                                    if($isAdaptative){
-                                        $attributes.VolumeQosAttributes.AdaptativePolicyGroupName=$QosPolicyGroupName
-                                    }else{
-                                        $attributes.VolumeQosAttributes.PolicyGroupName=$QosPolicyGroupName
-                                    }
-                                    Write-LogDebug "Update-NcVol -Query `$query -Attributes `$attributes -controller $mySecondaryController -ONTAPI"
-                                    $out=Update-NcVol -Query $query -Attributes $attributes -controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
-                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol failed [$ErrorVar]" }
-                                }else{
-                                    $body=@{
-                                        qos=@{policy=@{name=$QosPolicyGroupName}}
-                                    } | ConvertTo-Json
-                                    $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$SecondaryVolUuid)
-                                    Write-Logdebug "Invoke-RestMethod -Method patch -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
-                                    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
-                                    if($? -ne $True){
-                                        Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
-                                    }
-                                    $JobUuid=$ret.job.uuid
-                                    $StartTime=Get-date
-                                    $Timeout=$False
-                                    $JobDone=$False
-                                    While(($JobDone -eq $False) -and ($Timeout -eq $False)){
-                                        $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
-                                        if($JobDetail.JobCompletion -eq "success"){
-                                            $JobDone=$True
-                                            break
+                                $SecondaryQOSPolicy=$SecondaryQOSPolicy -replace "$mySecondaryVserver",""
+                                if($PrimaryQOSPolicy -ne $SecondaryQOSPolicy)
+                                {
+                                    Write-LogDebug "Work in SINGLE_CLUSTER mode"
+                                    Write-log "[$workOn] Update Qos Policy Group name [$PrimaryQOSPolicy`_$workOn] for volume [$PrimaryVolName]"
+                                    if($Global:PSTKCall -eq "Zapi"){
+                                        Write-LogDebug "Get-NcVol -Template -controller $mySecondaryController"
+                                        $query= Get-NcVol -Template -Fill 
+                                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+                                        $query.Name=$PrimaryVolName
+                                        $query.Vserver=$mySecondaryVserver
+                                        Write-LogDebug "Get-NcVol -Template -controller $mySecondaryController"
+                                        $attributes= Get-NcVol -Template
+                                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+                                        Initialize-NcObjectProperty $attributes VolumeQosAttributes
+                                        if($isAdaptative){
+                                            $attributes.VolumeQosAttributes.AdaptativePolicyGroupName=$QosPolicyGroupName
                                         }else{
-                                            $JobStatus=$JobDetail.JobState
-                                            Write-LogDebug "[$workOn] update vol job status [$JobStatus]"
-                                            if($JobStatus -eq "failure"){
-                                                $JobCompletion=$JobDetail.JobCompletion
-                                                Write-LogError "[$workOn] Vol update failed [$JobCompletion]"
+                                            $attributes.VolumeQosAttributes.PolicyGroupName=$QosPolicyGroupName
+                                        }
+                                        Write-LogDebug "Update-NcVol -Query `$query -Attributes `$attributes -controller $mySecondaryController"
+                                        $out=Update-NcVol -Query $query -Attributes $attributes -controller $mySecondaryController  -ErrorVariable ErrorVar
+                                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol failed [$ErrorVar]" }
+                                    }elseif($Global:PSTKCall -eq "ZapiEnforced"){
+                                        Write-LogDebug "Get-NcVol -Template -controller $mySecondaryController"
+                                        $query= Get-NcVol -Template -Fill 
+                                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+                                        $query.Name=$PrimaryVolName
+                                        $query.Vserver=$mySecondaryVserver
+                                        Write-LogDebug "Get-NcVol -Template -controller $mySecondaryController"
+                                        $attributes= Get-NcVol -Template
+                                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+                                        Initialize-NcObjectProperty $attributes VolumeQosAttributes
+                                        if($isAdaptative){
+                                            $attributes.VolumeQosAttributes.AdaptativePolicyGroupName=$QosPolicyGroupName
+                                        }else{
+                                            $attributes.VolumeQosAttributes.PolicyGroupName=$QosPolicyGroupName
+                                        }
+                                        Write-LogDebug "Update-NcVol -Query `$query -Attributes `$attributes -controller $mySecondaryController -ONTAPI"
+                                        $out=Update-NcVol -Query $query -Attributes $attributes -controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
+                                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol failed [$ErrorVar]" }
+                                    }else{
+                                        $body=@{
+                                            qos=@{policy=@{name=$($PrimaryQOSPolicy+"_"+$mySecondaryVserver)}}
+                                        } | ConvertTo-Json
+                                        $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$SecondaryVolUuid)
+                                        Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
+                                        $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                        if($? -ne $True){
+                                            Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
+                                        }
+                                        $JobUuid=$ret.job.uuid
+                                        $StartTime=Get-date
+                                        $Timeout=$False
+                                        $JobDone=$False
+                                        While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+                                            $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
+                                            if($JobDetail.JobCompletion -eq "success"){
+                                                $JobDone=$True
+                                            }else{
+                                                $JobStatus=$JobDetail.JobState
+                                                Write-LogDebug "[$workOn] Update Vol job status [$JobStatus]"
                                                 break
+                                                if($JobStatus -eq "failure"){
+                                                    $JobCompletion=$JobDetail.JobCompletion
+                                                    Write-LogError "[$workOn] Vol creation failed [$JobCompletion]"
+                                                    break
+                                                }
                                             }
+                                            $CurrentTime=Get-date
+                                            $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+                                            if($TimeSpend -gt $Global:STOP_TIMEOUT){
+                                                Write-LogWarn "[$workOn] Update Vol job take too much time. Check in Ontap its status"
+                                                $Timeout=$True
+                                            }
+                                            Start-Sleep 5
                                         }
-                                        $CurrentTime=Get-date
-                                        $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
-                                        if($TimeSpend -gt $Global:STOP_TIMEOUT){
-                                            Write-LogWarn "[$workOn] Update Vol job take too much time. Check in Ontap its status"
-                                            $Timeout=$True
+                                    }
+                                }    
+                            }
+                            else
+                            {
+                                if($Global:InsideMCC){
+                                    $QosPolicyGroupName=$($PrimaryQOSPolicy+"_"+$mySecondaryVserver)
+                                    Write-LogDebug "Working inside MCC so change destination policy name from [$PrimaryQOSPolicy] to [$QosPolicyGroupName]"
+                                }else{
+                                    $QosPolicyGroupName=$PrimaryQOSPolicy
+                                    Write-LogDebug "Working outside MCC so destination policy name is [$QosPolicyGroupName]"
+                                }
+                                # if($isAdaptative){
+                                #     $PrimaryQOSPolicy=$QosPolicyGroupName
+                                # }
+                                if($QosPolicyGroupName -ne $SecondaryQOSPolicy)
+                                {
+                                    Write-LogDebug "Work in normal mode"
+                                    Write-log "[$workOn] Update Qos Policy Group name [$QosPolicyGroupName] for volume [$PrimaryVolName]"
+                                    if($Global:PSTKCall -eq "Zapi"){
+                                        Write-LogDebug "Get-NcVol -Template -controller $mySecondaryController"
+                                        $query= Get-NcVol -Template -Fill 
+                                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+                                        $query.Name=$PrimaryVolName
+                                        $query.Vserver=$mySecondaryVserver
+                                        Write-LogDebug "Get-NcVol -Template -controller $mySecondaryController"
+                                        $attributes= Get-NcVol -Template
+                                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+                                        Initialize-NcObjectProperty $attributes VolumeQosAttributes
+                                        if($isAdaptative){
+                                            $attributes.VolumeQosAttributes.AdaptativePolicyGroupName=$QosPolicyGroupName
+                                        }else{
+                                            $attributes.VolumeQosAttributes.PolicyGroupName=$QosPolicyGroupName
                                         }
-                                        Start-Sleep 5
+                                        
+                                        Write-LogDebug "Update-NcVol -Query `$query -Attributes `$attributes -controller $mySecondaryController"
+                                        $out=Update-NcVol -Query $query -Attributes $attributes -controller $mySecondaryController  -ErrorVariable ErrorVar
+                                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol failed [$ErrorVar]" }
+                                    }elseif($Global:PSTKCall -eq "ZapiEnforced"){ 
+                                        Write-LogDebug "Get-NcVol -Template -controller $mySecondaryController"
+                                        $query= Get-NcVol -Template -Fill 
+                                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+                                        $query.Name=$PrimaryVolName
+                                        $query.Vserver=$mySecondaryVserver
+                                        Write-LogDebug "Get-NcVol -Template -controller $mySecondaryController"
+                                        $attributes= Get-NcVol -Template
+                                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+                                        Initialize-NcObjectProperty $attributes VolumeQosAttributes
+                                        if($isAdaptative){
+                                            $attributes.VolumeQosAttributes.AdaptativePolicyGroupName=$QosPolicyGroupName
+                                        }else{
+                                            $attributes.VolumeQosAttributes.PolicyGroupName=$QosPolicyGroupName
+                                        }
+                                        Write-LogDebug "Update-NcVol -Query `$query -Attributes `$attributes -controller $mySecondaryController -ONTAPI"
+                                        $out=Update-NcVol -Query $query -Attributes $attributes -controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
+                                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol failed [$ErrorVar]" }
+                                    }else{
+                                        $body=@{
+                                            qos=@{policy=@{name=$QosPolicyGroupName}}
+                                        } | ConvertTo-Json
+                                        $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$SecondaryVolUuid)
+                                        Write-Logdebug "Invoke-RestMethod -Method patch -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
+                                        $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                        if($? -ne $True){
+                                            Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
+                                        }
+                                        $JobUuid=$ret.job.uuid
+                                        $StartTime=Get-date
+                                        $Timeout=$False
+                                        $JobDone=$False
+                                        While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+                                            $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
+                                            if($JobDetail.JobCompletion -eq "success"){
+                                                $JobDone=$True
+                                                break
+                                            }else{
+                                                $JobStatus=$JobDetail.JobState
+                                                Write-LogDebug "[$workOn] update vol job status [$JobStatus]"
+                                                if($JobStatus -eq "failure"){
+                                                    $JobCompletion=$JobDetail.JobCompletion
+                                                    Write-LogError "[$workOn] Vol update failed [$JobCompletion]"
+                                                    break
+                                                }
+                                            }
+                                            $CurrentTime=Get-date
+                                            $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+                                            if($TimeSpend -gt $Global:STOP_TIMEOUT){
+                                                Write-LogWarn "[$workOn] Update Vol job take too much time. Check in Ontap its status"
+                                                $Timeout=$True
+                                            }
+                                            Start-Sleep 5
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
-            } 
+            #} 
         }
 
         Write-LogDebug "[$myPrimaryVserver]: end"
@@ -4617,23 +4703,25 @@ Try {
     Write-Log "[$ctrlName] Check Cluster Cron configuration"
     if($Restore -eq $False){
         $PrimaryName=(Get-NcCluster -Controller $myPrimaryController).ClusterName
-        $PrimaryCronList = Get-NcJobSchedule -Controller $myPrimaryController -ErrorVariable ErrorVar -Query @{JobScheduleCluster=$PrimaryName}
+        Write-LogDebug "Get-NcJobSchedule -Controller $myPrimaryController -Query @{scope=cluster;JobScheduleCluster=$PrimaryName}"
+        $PrimaryCronList = Get-NcJobSchedule -Controller $myPrimaryController -ErrorVariable ErrorVar -Query @{scope="cluster";JobScheduleCluster=$PrimaryName}
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcJobSchedule failed [$ErrorVar]" }
     }else{
-        if(Test-Path $($Global:JsonPath+"Get-NcJobSchedule.json")){
-            $PrimaryCronList=Get-Content $($Global:JsonPath+"Get-NcJobSchedule.json") -Raw | ConvertFrom-Json
+        if(Test-Path $($Global:JsonPath+"Get-NcJobSchedule_cluster.json")){
+            $PrimaryCronList=Get-Content $($Global:JsonPath+"Get-NcJobSchedule_cluster.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcJobSchedule_cluster.json") successfully imported"
         }else{
             $Return=$False
-            $filepath=$($Global:JsonPath+"Get-NcJobSchedule.json")
+            $filepath=$($Global:JsonPath+"Get-NcJobSchedule_cluster.json")
             Throw "ERROR: failed to read $filepath"
         }
     }
     if($Backup -eq $True){
-        $PrimaryCronList | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcJobSchedule.json") -Encoding ASCII -Width 65535
-        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcJobSchedule.json") -ErrorAction SilentlyContinue) ){
-            Write-LogDebug "$($Global:JsonPath+"Get-NcJobSchedule.json") saved successfully"
+        $PrimaryCronList | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcJobSchedule_cluster.json") -Encoding ASCII -Width 65535
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcJobSchedule_cluster.json") -ErrorAction SilentlyContinue) ){
+            Write-LogDebug "$($Global:JsonPath+"Get-NcJobSchedule_cluster.json") saved successfully"
         }else{
-            Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcJobSchedule.json")"
+            Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcJobSchedule_cluster.json")"
             $Return=$False
         }
     }
@@ -4650,13 +4738,17 @@ Try {
             foreach ( $Schedule in ( $PrimaryCronList | Skip-Null ) ) {
                 $PrimaryJobScheduleName = $Schedule.JobScheduleName
                 $PrimaryJobScheduleType = $Schedule.Type
+                $PrimaryJobScheduleScope = $Schedule.Scope
                 # Write-LogDebug "Schedule [$PrimaryJobScheduleName] is type [$PrimaryJobScheduleType]"
                 if($PrimaryJobScheduleType -eq "cron"){
                     if($Restore -eq $False){
-                        $cron=Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $myPrimaryController -JobScheduleCluster $PrimaryName
+                        Write-LogDebug "Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $myPrimaryController -JobScheduleCluster $SecondaryName"
+                        $cron=Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $myPrimaryController -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar
+                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcJobCronSchedule failed [$ErrorVar]" }
                     }else{
                         if(Test-Path $($Global:JsonPath+"Get-NcJobCronSchedule_cluster_"+$PrimaryJobScheduleName+".json")){
                             $cron=Get-Content $($Global:JsonPath+"Get-NcJobCronSchedule_cluster_"+$PrimaryJobScheduleName+".json") -Raw | ConvertFrom-Json
+                            Write-LogDebug "$($Global:JsonPath+"Get-NcJobCronSchedule_cluster_"+$PrimaryJobScheduleName+".json") successfully imported"
                         }else{
                             $Return=$False
                             $filepath=$($Global:JsonPath+"Get-NcJobCronSchedule_cluster_"+$PrimaryJobScheduleName+".json")
@@ -4680,10 +4772,13 @@ Try {
                     $PrimaryJobScheduleCronMinute = if($null -eq $cron.JobScheduleCronMinute){""}else{$cron.JobScheduleCronMinute}
                 }else{
                     if($Restore -eq $False){
-                        $interval=Get-NcJobIntervalSchedule -Name $PrimaryJobScheduleName -Controller $myPrimaryController -JobScheduleCluster $PrimaryName
+                        Write-LogDebug "Get-NcJobIntervalSchedule -Name $PrimaryJobScheduleName -Controller $myPrimaryController -JobScheduleCluster $PrimaryName"
+                        $interval=Get-NcJobIntervalSchedule -Name $PrimaryJobScheduleName -Controller $myPrimaryController -JobScheduleCluster $PrimaryName -ErrorVariable ErrorVar
+                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcJobIntervalSchedule failed [$ErrorVar]" }
                     }else{
                         if(Test-Path $($Global:JsonPath+"Get-NcJobIntervalSchedule_cluster_"+$PrimaryJobScheduleName+".json")){
                             $interval=Get-Content $($Global:JsonPath+"Get-NcJobIntervalSchedule_cluster_"+$PrimaryJobScheduleName+".json") -Raw | ConvertFrom-Json
+                            Write-LogDebug "$($Global:JsonPath+"Get-NcJobIntervalSchedule_cluster_"+$PrimaryJobScheduleName+".json") successfully imported"
                         }else{
                             $Return=$False
                             $filepath=$($Global:JsonPath+"Get-NcJobIntervalSchedule_cluster_"+$PrimaryJobScheduleName+".json")
@@ -4711,7 +4806,8 @@ Try {
                 if($Backup -eq $False){
                     Write-LogDebug "Working on [$PrimaryJobScheduleName] type [$PrimaryJobScheduleType]"
                     if($PrimaryJobScheduleType -eq "cron"){
-                        $SecondarySchedule = Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController  -ErrorVariable ErrorVar  -JobScheduleCluster $SecondaryName
+                        Write-LogDebug "Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController -JobScheduleCluster $SecondaryName  -ErrorVariable ErrorVar"
+                        $SecondarySchedule = Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar
                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcJobCronSchedule failed [$ErrorVar]" }
                         if($null -ne $SecondarySchedule){
                             $SecondaryJobScheduleDescription = if($null -eq $SecondarySchedule.JobScheduleDescription){""}else{$SecondarySchedule.JobScheduleDescription}
@@ -4722,13 +4818,13 @@ Try {
                             $SecondaryJobScheduleCronMinute = if($null -eq $SecondarySchedule.JobScheduleCronMinute){""}else{$SecondarySchedule.JobScheduleCronMinute}
                         }
                     }else{
-                        $SecondarySchedule = Get-NcJobIntervalSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController  -ErrorVariable ErrorVar  -JobScheduleCluster $SecondaryName
+                        Write-LogDebug "Get-NcJobIntervalSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController  -ErrorVariable ErrorVar"
+                        $SecondarySchedule = Get-NcJobIntervalSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController  -ErrorVariable ErrorVar
                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcJobIntervalSchedule failed [$ErrorVar]" }
                         $SecondaryJobScheduleInterval = $SecondarySchedule.Interval
                     }
                     
                     if ( $null -ne $SecondarySchedule ) {
-                        
                         if($Global:PSTKCall -ne "Rest"){
                             if ( $PrimaryJobScheduleDescription -ne $SecondaryJobScheduleDescription ) {
                                 if($PrimaryJobScheduleType -eq "cron"){
@@ -4738,12 +4834,12 @@ Try {
                                     $PrimaryJobScheduleCronHour = if("" -eq $cron.JobScheduleCronHour){$null}else{$cron.JobScheduleCronHour}
                                     $PrimaryJobScheduleCronMinute = if("" -eq $cron.JobScheduleCronMinute){$null}else{$cron.JobScheduleCronMinute}
                                     if($Global:PSTKCall -eq "Zapi"){
-                                        Write-LogDebug "Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar"
-                                        $out=Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar
+                                        Write-LogDebug "Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -JobScheduleCluster $SecondaryName"
+                                        $out=Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar
                                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobCronSchedule failed [$ErrorVar]" }
                                     }else{
-                                        Write-LogDebug "Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -ONTAPI"
-                                        $out=Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -ONTAPI
+                                        Write-LogDebug "Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar -ONTAPI"
+                                        $out=Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar -ONTAPI
                                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobCronSchedule failed [$ErrorVar]" }
                                     }
                                 }else{
@@ -4751,16 +4847,16 @@ Try {
                                     $PrimaryJobScheduleIntervalDays = if("" -eq $interval.JobScheduleIntervalDays){$null}else{$interval.JobScheduleIntervalDays}
                                     $PrimaryJobScheduleIntervalHours = if("" -eq $interval.JobScheduleIntervalHours){$null}else{$interval.JobScheduleIntervalHours}
                                     $PrimaryJobScheduleIntervalMinutes = if("" -eq $interval.JobScheduleIntervalMinutes){$null}else{$interval.JobScheduleIntervalMinutes}
-                                    Write-LogDebug "Set-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes  -ErrorVariable ErrorVar"
-                                    $out=Set-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes  -ErrorVariable ErrorVar
+                                    Write-LogDebug "Set-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar"
+                                    $out=Set-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar
                                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobIntervalSchedule failed [$ErrorVar]" }
                                 }
                             }
                         }else{
                             if($PrimaryJobScheduleType -eq "interval"){
                                 if($SecondaryJobScheduleInterval -ne $PrimaryJobScheduleInterval){
-                                    Write-LogDebug "Set-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Interval $PrimaryJobScheduleInterval -ErrorVariable ErrorVar"
-                                    $out=Set-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Interval $PrimaryJobScheduleInterval -ErrorVariable ErrorVar
+                                    Write-LogDebug "Set-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Interval $PrimaryJobScheduleInterval -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar"
+                                    $out=Set-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Interval $PrimaryJobScheduleInterval -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar
                                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobIntervalSchedule failed [$ErrorVar]" }
                                 }
                             }else{
@@ -4769,14 +4865,40 @@ Try {
                                 -or $PrimaryJobScheduleCronDay -ne $SecondaryJobScheduleCronDay `
                                 -or $PrimaryJobScheduleCronHour -ne $SecondaryJobScheduleCronHour `
                                 -or $PrimaryJobScheduleCronMinute -ne $SecondaryJobScheduleCronMinute){
-                                    $PrimaryJobScheduleCronMonth = if("" -eq $cron.JobScheduleCronMonth){$null}else{$cron.JobScheduleCronMonth}
+                                    <# $PrimaryJobScheduleCronMonth = if("" -eq $cron.JobScheduleCronMonth){$null}else{$cron.JobScheduleCronMonth}
                                     $PrimaryJobScheduleCronDayOfWeek = if("" -eq $cron.JobScheduleCronDayOfWeek){$null}else{$cron.JobScheduleCronDayOfWeek}
                                     $PrimaryJobScheduleCronDay = if("" -eq $cron.JobScheduleCronDay){$null}else{$cron.JobScheduleCronDay}
                                     $PrimaryJobScheduleCronHour = if("" -eq $cron.JobScheduleCronHour){$null}else{$cron.JobScheduleCronHour}
                                     $PrimaryJobScheduleCronMinute = if("" -eq $cron.JobScheduleCronMinute){$null}else{$cron.JobScheduleCronMinute}
-                                    Write-LogDebug "Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar"
-                                    $out=Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar
-                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobCronSchedule failed [$ErrorVar]" }
+                                    Write-LogDebug "Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar"
+                                    $out=Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar
+                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobCronSchedule failed [$ErrorVar]" } #>
+                                    $SecondaryScheduleUuid=$SecondarySchedule.Uuid
+                                    $url=$("https://"+$mySecondaryController.Name+"/api/cluster/schedules/"+$SecondaryScheduleUuid)
+                                    $CredSecondary=get_local_cDotcred($mySecondaryController)
+                                    $body=@{"cron"=@{}}
+                                    if($null -ne $cron.JobScheduleCronMonth -ne ""){
+                                        $body.cron.months=$cron.JobScheduleCronMonth
+                                    }
+                                    if($null -ne $cron.JobScheduleCronDayOfWeek -ne ""){
+                                        $body.cron.weekdays=$cron.JobScheduleCronDayOfWeek
+                                    }
+                                    if($null -ne $cron.JobScheduleCronDay -ne ""){
+                                        $body.cron.days=$cron.JobScheduleCronDay
+                                    }
+                                    if($null -ne $cron.JobScheduleCronHour -ne ""){
+                                        $body.cron.hours=$cron.JobScheduleCronHour
+                                    }
+                                    if($null -ne $cron.JobScheduleCronMinute -ne ""){
+                                        $body.cron.minutes=$cron.JobScheduleCronMinute
+                                    }
+                                    #$body.scope=$PrimaryJobScheduleScope
+                                    $body=$body | ConvertTo-Json
+                                    Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
+                                    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                    if($? -ne $True){
+                                        Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
+                                    }
                                 }
                             }
                         }
@@ -4789,32 +4911,60 @@ Try {
                                 $PrimaryJobScheduleCronHour = if("" -eq $cron.JobScheduleCronHour){$null}else{$cron.JobScheduleCronHour}
                                 $PrimaryJobScheduleCronMinute = if("" -eq $cron.JobScheduleCronMinute){$null}else{$cron.JobScheduleCronMinute}
                                 if($Global:PSTKCall -eq "Zapi"){
-                                    Write-LogDebug "Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -ErrorVariable ErrorVar"
-                                    $out=Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -ErrorAction SilentlyContinue
+                                    Write-LogDebug "Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar"
+                                    $out=Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar -ErrorAction SilentlyContinue
                                 }else{
-                                    Write-LogDebug "Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -ErrorVariable ErrorVar -ONTAPI"
-                                    $out=Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -ErrorAction SilentlyContinue -ONTAPI
+                                    Write-LogDebug "Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar -ONTAPI"
+                                    $out=Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar -ErrorAction SilentlyContinue -ONTAPI
                                 }
                             }else{
                                 $PrimaryJobScheduleIntervalSeconds = if("" -eq $interval.JobScheduleIntervalSeconds){$null}else{$interval.JobScheduleIntervalSeconds}
                                 $PrimaryJobScheduleIntervalDays = if("" -eq $interval.JobScheduleIntervalDays){$null}else{$interval.JobScheduleIntervalDays}
                                 $PrimaryJobScheduleIntervalHours = if("" -eq $interval.JobScheduleIntervalHours){$null}else{$interval.JobScheduleIntervalHours}
                                 $PrimaryJobScheduleIntervalMinutes = if("" -eq $interval.JobScheduleIntervalMinutes){$null}else{$interval.JobScheduleIntervalMinutes}
-                                Write-LogDebug "Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes -ErrorVariable ErrorVar"
-                                $out=Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes  -ErrorVariable ErrorVar -ErrorAction SilentlyContinue
+                                Write-LogDebug "Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar"
+                                $out=Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar -ErrorAction SilentlyContinue
                             }
                         }else{
                             if($PrimaryJobScheduleType -eq "interval"){
-                                Write-LogDebug "Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Interval $PrimaryJobScheduleInterval -ErrorVariable ErrorVar"
-                                $out=Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Interval $PrimaryJobScheduleInterval -ErrorVariable ErrorVar -ErrorAction SilentlyContinue
+                                Write-LogDebug "Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Interval $PrimaryJobScheduleInterval -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar"
+                                $out=Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Interval $PrimaryJobScheduleInterval -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar -ErrorAction SilentlyContinue
                             }else{
-                                $PrimaryJobScheduleCronMonth = if("" -eq $cron.JobScheduleCronMonth){$null}else{$cron.JobScheduleCronMonth}
+                                <# $PrimaryJobScheduleCronMonth = if("" -eq $cron.JobScheduleCronMonth){$null}else{$cron.JobScheduleCronMonth}
                                 $PrimaryJobScheduleCronDayOfWeek = if("" -eq $cron.JobScheduleCronDayOfWeek){$null}else{$cron.JobScheduleCronDayOfWeek}
                                 $PrimaryJobScheduleCronDay = if("" -eq $cron.JobScheduleCronDay){$null}else{$cron.JobScheduleCronDay}
                                 $PrimaryJobScheduleCronHour = if("" -eq $cron.JobScheduleCronHour){$null}else{$cron.JobScheduleCronHour}
                                 $PrimaryJobScheduleCronMinute = if("" -eq $cron.JobScheduleCronMinute){$null}else{$cron.JobScheduleCronMinute}
-                                Write-LogDebug "Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -ErrorVariable ErrorVar"
-                                $out=Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -ErrorAction SilentlyContinue
+                                Write-LogDebug "Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar"
+                                $out=Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar -ErrorAction SilentlyContinue #>
+                                #$SecondaryScheduleUuid=$SecondarySchedule.Uuid
+                                $url=$("https://"+$mySecondaryController.Name+"/api/cluster/schedules/")
+                                $CredSecondary=get_local_cDotcred($mySecondaryController)
+                                $body=@{"cron"=@{}}
+                                if($null -ne $cron.JobScheduleCronMonth -ne ""){
+                                    $body.cron.months=$cron.JobScheduleCronMonth
+                                }
+                                if($null -ne $cron.JobScheduleCronDayOfWeek -ne ""){
+                                    $body.cron.weekdays=$cron.JobScheduleCronDayOfWeek
+                                }
+                                if($null -ne $cron.JobScheduleCronDay -ne ""){
+                                    $body.cron.days=$cron.JobScheduleCronDay
+                                }
+                                if($null -ne $cron.JobScheduleCronHour -ne ""){
+                                    $body.cron.hours=$cron.JobScheduleCronHour
+                                }
+                                if($null -ne $cron.JobScheduleCronMinute -ne ""){
+                                    $body.cron.minutes=$cron.JobScheduleCronMinute
+                                }
+                                #$body.scope=$PrimaryJobScheduleScope
+                                $body.name=$PrimaryJobScheduleName
+                                #$body.svm=@{"name"=$mySecondaryVserver}
+                                $body=$body | ConvertTo-Json
+                                Write-LogDebug "Invoke-RestMethod -Method post -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
+                                $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                if($? -ne $True){
+                                    Write-LogError "ERROR: post request [$url] reason [$ErrorVar]"
+                                }
                             }
                         }
                     }
@@ -4823,24 +4973,25 @@ Try {
             if($Global:OntapPrimaryVersion -ge 9.10 -and $Global:OntapSecondaryVersion -ge 9.10){
                 if($Restore -eq $False){
                     # $PrimaryName=(Get-NcCluster -Controller $myPrimaryController).ClusterName
-                    Write-LogDebug "Get-NcJobSchedule -Controller $myPrimaryController -ErrorVariable ErrorVar -VserverContext $myPrimaryVserver"
-                    $PrimaryCronListVserver = Get-NcJobSchedule -Controller $myPrimaryController -ErrorVariable ErrorVar -VserverContext $myPrimaryVserver
+                    Write-LogDebug "Get-NcJobSchedule -Controller $myPrimaryController -ErrorVariable ErrorVar -VserverContext $myPrimaryVserver -Query @{scope=svm}"
+                    $PrimaryCronListVserver = Get-NcJobSchedule -Controller $myPrimaryController -ErrorVariable ErrorVar -VserverContext $myPrimaryVserver -Query @{scope="svm"}
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcJobSchedule failed [$ErrorVar]" }
                 }else{
-                    if(Test-Path $($Global:JsonPath+"Get-NcJobSchedule.json")){
-                        $PrimaryCronListVserver=Get-Content $($Global:JsonPath+"Get-NcJobSchedule.json") -Raw | ConvertFrom-Json
+                    if(Test-Path $($Global:JsonPath+"Get-NcJobSchedule_vserver.json")){
+                        $PrimaryCronListVserver=Get-Content $($Global:JsonPath+"Get-NcJobSchedule_vserver.json") -Raw | ConvertFrom-Json
+                        Write-LogDebug "$($Global:JsonPath+"Get-NcJobSchedule_vserver.json") successfully imported"
                     }else{
                         $Return=$False
-                        $filepath=$($Global:JsonPath+"Get-NcJobSchedule.json")
+                        $filepath=$($Global:JsonPath+"Get-NcJobSchedule_vserver.json")
                         Throw "ERROR: failed to read $filepath"
                     }
                 }
                 if($Backup -eq $True){
-                    $PrimaryCronListVserver | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcJobSchedule.json") -Encoding ASCII -Width 65535
-                    if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcJobSchedule.json") -ErrorAction SilentlyContinue) ){
-                        Write-LogDebug "$($Global:JsonPath+"Get-NcJobSchedule.json") saved successfully"
+                    $PrimaryCronListVserver | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcJobSchedule_vserver.json") -Encoding ASCII -Width 65535
+                    if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcJobSchedule_vserver.json") -ErrorAction SilentlyContinue) ){
+                        Write-LogDebug "$($Global:JsonPath+"Get-NcJobSchedule_vserver.json") saved successfully"
                     }else{
-                        Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcJobSchedule.json")"
+                        Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcJobSchedule_vserver.json")"
                         $Return=$False
                     }
                 }
@@ -4848,13 +4999,16 @@ Try {
                 foreach ( $Schedule in ( $PrimaryCronListVserver | Skip-Null ) ) {
                     $PrimaryJobScheduleName = $Schedule.JobScheduleName
                     $PrimaryJobScheduleType = $Schedule.Type
-                    # Write-LogDebug "Schedule [$PrimaryJobScheduleName] is type [$PrimaryJobScheduleType]"
+                    $PrimaryJobScheduleScope = $Schedule.Scope
+                    #Write-LogDebug "Working on [$PrimaryJobScheduleName] type [$PrimaryJobScheduleType]"
                     if($PrimaryJobScheduleType -eq "cron"){
                         if($Restore -eq $False){
+                            Write-LogDebug "Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $myPrimaryController -VserverContext $myPrimaryVserver"
                             $cron=Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $myPrimaryController -VserverContext $myPrimaryVserver
                         }else{
                             if(Test-Path $($Global:JsonPath+"Get-NcJobCronSchedule_vserver_"+$PrimaryJobScheduleName+".json")){
-                                $PrimaryCronListVserver=Get-Content $($Global:JsonPath+"Get-NcJobCronSchedule_vserver_"+$PrimaryJobScheduleName+".json") -Raw | ConvertFrom-Json
+                                $cron=Get-Content $($Global:JsonPath+"Get-NcJobCronSchedule_vserver_"+$PrimaryJobScheduleName+".json") -Raw | ConvertFrom-Json
+                                Write-LogDebug "$($Global:JsonPath+"Get-NcJobCronSchedule_vserver_"+$PrimaryJobScheduleName+".json") successfully imported"
                             }else{
                                 $Return=$False
                                 $filepath=$($Global:JsonPath+"Get-NcJobCronSchedule_vserver_"+$PrimaryJobScheduleName+".json")
@@ -4878,10 +5032,12 @@ Try {
                         $PrimaryJobScheduleCronMinute = if($null -eq $cron.JobScheduleCronMinute){""}else{$cron.JobScheduleCronMinute}
                     }else{
                         if($Restore -eq $False){
+                            Write-LogDebug "Get-NcJobIntervalSchedule -Name $PrimaryJobScheduleName -Controller $myPrimaryController -VserverContext $myPrimaryVserver"
                             $interval=Get-NcJobIntervalSchedule -Name $PrimaryJobScheduleName -Controller $myPrimaryController -VserverContext $myPrimaryVserver
                         }else{
                             if(Test-Path $($Global:JsonPath+"Get-NcJobIntervalSchedule_vserver_"+$PrimaryJobScheduleName+".json")){
-                                $PrimaryCronListVserver=Get-Content $($Global:JsonPath+"Get-NcJobIntervalSchedule_vserver_"+$PrimaryJobScheduleName+".json") -Raw | ConvertFrom-Json
+                                $interval=Get-Content $($Global:JsonPath+"Get-NcJobIntervalSchedule_vserver_"+$PrimaryJobScheduleName+".json") -Raw | ConvertFrom-Json
+                                Write-LogDebug "$($Global:JsonPath+"Get-NcJobIntervalSchedule_vserver_"+$PrimaryJobScheduleName+".json") successfully imported"
                             }else{
                                 $Return=$False
                                 $filepath=$($Global:JsonPath+"Get-NcJobIntervalSchedule_vserver_"+$PrimaryJobScheduleName+".json")
@@ -4909,6 +5065,7 @@ Try {
                     if($Backup -eq $False){
                         Write-LogDebug "Working on [$PrimaryJobScheduleName] type [$PrimaryJobScheduleType]"
                         if($PrimaryJobScheduleType -eq "cron"){
+                            Write-LogDebug "Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController  -ErrorVariable ErrorVar  -VserverContext $mySecondaryVserver"
                             $SecondarySchedule = Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController  -ErrorVariable ErrorVar  -VserverContext $mySecondaryVserver
                             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcJobCronSchedule failed [$ErrorVar]" }
                             if($null -ne $SecondarySchedule){
@@ -4920,6 +5077,7 @@ Try {
                                 $SecondaryJobScheduleCronMinute = if($null -eq $SecondarySchedule.JobScheduleCronMinute){""}else{$SecondarySchedule.JobScheduleCronMinute}
                             }
                         }else{
+                            Write-LogDebug "Get-NcJobIntervalSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController  -ErrorVariable ErrorVar  -VserverContext $mySecondaryVserver"
                             $SecondarySchedule = Get-NcJobIntervalSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController  -ErrorVariable ErrorVar  -VserverContext $mySecondaryVserver
                             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcJobIntervalSchedule failed [$ErrorVar]" }
                             $SecondaryJobScheduleInterval = $SecondarySchedule.Interval
@@ -4967,14 +5125,34 @@ Try {
                                     -or $PrimaryJobScheduleCronDay -ne $SecondaryJobScheduleCronDay `
                                     -or $PrimaryJobScheduleCronHour -ne $SecondaryJobScheduleCronHour `
                                     -or $PrimaryJobScheduleCronMinute -ne $SecondaryJobScheduleCronMinute){
-                                        $PrimaryJobScheduleCronMonth = if("" -eq $cron.JobScheduleCronMonth){$null}else{$cron.JobScheduleCronMonth}
-                                        $PrimaryJobScheduleCronDayOfWeek = if("" -eq $cron.JobScheduleCronDayOfWeek){$null}else{$cron.JobScheduleCronDayOfWeek}
-                                        $PrimaryJobScheduleCronDay = if("" -eq $cron.JobScheduleCronDay){$null}else{$cron.JobScheduleCronDay}
-                                        $PrimaryJobScheduleCronHour = if("" -eq $cron.JobScheduleCronHour){$null}else{$cron.JobScheduleCronHour}
-                                        $PrimaryJobScheduleCronMinute = if("" -eq $cron.JobScheduleCronMinute){$null}else{$cron.JobScheduleCronMinute}
-                                        Write-LogDebug "Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -VserverContext $mySecondaryVserver"
-                                        $out=Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -VserverContext $mySecondaryVserver
-                                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobCronSchedule failed [$ErrorVar]" }
+                                        
+                                        $SecondaryScheduleUuid=$SecondarySchedule.Uuid
+                                        $url=$("https://"+$mySecondaryController.Name+"/api/cluster/schedules/"+$SecondaryScheduleUuid)
+                                        $CredSecondary=get_local_cDotcred($mySecondaryController)
+                                        $body=@{"cron"=@{}}
+                                        if($null -ne $cron.JobScheduleCronMonth -ne ""){
+                                            $body.cron.months=$cron.JobScheduleCronMonth
+                                        }
+                                        if($null -ne $cron.JobScheduleCronDayOfWeek -ne ""){
+                                            $body.cron.weekdays=$cron.JobScheduleCronDayOfWeek
+                                        }
+                                        if($null -ne $cron.JobScheduleCronDay -ne ""){
+                                            $body.cron.days=$cron.JobScheduleCronDay
+                                        }
+                                        if($null -ne $cron.JobScheduleCronHour -ne ""){
+                                            $body.cron.hours=$cron.JobScheduleCronHour
+                                        }
+                                        if($null -ne $cron.JobScheduleCronMinute -ne ""){
+                                            $body.cron.minutes=$cron.JobScheduleCronMinute
+                                        }
+                                        $body.svm=@{"name"=$mySecondaryVserver}
+                                        #$body.scope=$PrimaryJobScheduleScope
+                                        $body=$body | ConvertTo-Json
+                                        Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
+                                        $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                        if($? -ne $True){
+                                            Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
+                                        }
                                     }
                                 }
                             }
@@ -5015,9 +5193,37 @@ Try {
                                     $PrimaryJobScheduleCronDay = if("" -eq $cron.JobScheduleCronDay){$null}else{$cron.JobScheduleCronDay}
                                     $PrimaryJobScheduleCronHour = if("" -eq $cron.JobScheduleCronHour){$null}else{$cron.JobScheduleCronHour}
                                     $PrimaryJobScheduleCronMinute = if("" -eq $cron.JobScheduleCronMinute){$null}else{$cron.JobScheduleCronMinute}
-                                    Write-LogDebug "Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -ErrorVariable ErrorVar -VserverContext $mySecondaryVserver"
+                                    <# Write-LogDebug "Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -ErrorVariable ErrorVar -VserverContext $mySecondaryVserver"
                                     $out=Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -ErrorAction SilentlyContinue -VserverContext $mySecondaryVserver
-                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcJobCronSchedule failed [$ErrorVar]" }
+                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcJobCronSchedule failed [$ErrorVar]" } #>
+                                    #$SecondaryScheduleUuid=$SecondarySchedule.Uuid
+                                    $url=$("https://"+$mySecondaryController.Name+"/api/cluster/schedules/")
+                                    $CredSecondary=get_local_cDotcred($mySecondaryController)
+                                    $body=@{"cron"=@{}}
+                                    if($null -ne $cron.JobScheduleCronMonth -ne ""){
+                                        $body.cron.months=$cron.JobScheduleCronMonth
+                                    }
+                                    if($null -ne $cron.JobScheduleCronDayOfWeek -ne ""){
+                                        $body.cron.weekdays=$cron.JobScheduleCronDayOfWeek
+                                    }
+                                    if($null -ne $cron.JobScheduleCronDay -ne ""){
+                                        $body.cron.days=$cron.JobScheduleCronDay
+                                    }
+                                    if($null -ne $cron.JobScheduleCronHour -ne ""){
+                                        $body.cron.hours=$cron.JobScheduleCronHour
+                                    }
+                                    if($null -ne $cron.JobScheduleCronMinute -ne ""){
+                                        $body.cron.minutes=$cron.JobScheduleCronMinute
+                                    }
+                                    #$body.scope=$PrimaryJobScheduleScope
+                                    $body.name=$PrimaryJobScheduleName
+                                    $body.svm=@{"name"=$mySecondaryVserver}
+                                    $body=$body | ConvertTo-Json
+                                    Write-LogDebug "Invoke-RestMethod -Method post -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
+                                    $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                    if($? -ne $True){
+                                        Write-LogError "ERROR: post request [$url] reason [$ErrorVar]"
+                                    }
                                 }
                             }
                         }
@@ -5071,6 +5277,7 @@ Try {
                     $PrimaryJobScheduleCronHour = $Cron.JobScheduleCronHour
                     $PrimaryJobScheduleCronMinute = $Cron.JobScheduleCronMinute
                     #Write-LogDebug "Working on [$PrimaryJobScheduleName]"
+                    Write-LogDebug "Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $($using:mySecondaryController)  -ErrorVariable ErrorVar"
                     $SecondaryCron = Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $using:mySecondaryController  -ErrorVariable ErrorVar
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcJobCronSchedule failed [$ErrorVar]" }
                     if ( $null -ne $SecondaryCron ) {
@@ -5083,7 +5290,7 @@ Try {
                         }
                     } else {
                         #Write-LogDebug "Set-AddJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar"
-                        
+                        Write-LogDebug "Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $($using:mySecondaryController)"
                         $ret=Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $using:mySecondaryController
                         if($null -eq $ret){
                             try{
@@ -5107,7 +5314,7 @@ Try {
     return $Return
 }
 Catch {
-	Error_Handling $_ $ctrlName
+	Error_Handling $_ $ctrlName -donotcleanlog4net
 	return $Return
 }
 }
@@ -5153,6 +5360,7 @@ Try {
     }else{
         if(Test-Path $($Global:JsonPath+"Get-NcVol.json")){
             $ListVolumes=Get-Content $($Global:JsonPath+"Get-NcVol.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcVol.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcVol.json")
@@ -5189,6 +5397,7 @@ Try {
         }else{
             if(Test-Path $($Global:JsonPath+"Get-NcSnapshotPolicy.json")){
                 $SnapShotPolicy=Get-Content $($Global:JsonPath+"Get-NcSnapshotPolicy.json") -Raw | ConvertFrom-Json
+                Write-LogDebug "$($Global:JsonPath+"Get-NcSnapshotPolicy.json") successfully imported"
                 if($Global:PSTKCall -eq "Rest"){
                     if($SnapShotPolicy.Scope -eq "Cluster"){
                         $isClusterSnapshotPolicy=$True
@@ -5507,6 +5716,7 @@ Function create_update_efficiency_policy_dr(
         }else{
             if(Test-Path $($Global:JsonPath+"Get-NcSisPolicy.json")){
                 $SisPolicyList=Get-Content $($Global:JsonPath+"Get-NcSisPolicy.json") -Raw | ConvertFrom-Json
+                Write-LogDebug "$($Global:JsonPath+"Get-NcSisPolicy.json") successfully imported"
             }else{
                 $Return=$False
                 $filepath=$($Global:JsonPath+"Get-NcSisPolicy.json")
@@ -5568,6 +5778,7 @@ Function create_update_efficiency_policy_dr(
                         if($Restore -eq $True){
                             if(Test-Path $($Global:JsonPath+"Get-NcSystemVersionInfo.json")){
                                 $PrimaryVersion=Get-Content $($Global:JsonPath+"Get-NcSystemVersionInfo.json") -Raw | ConvertFrom-Json
+                                Write-LogDebug "$($Global:JsonPath+"Get-NcSystemVersionInfo.json") successfully imported"
                             }else{
                                 $Return=$False
                                 $filepath=$($Global:JsonPath+"Get-NcSystemVersionInfo.json")
@@ -5662,6 +5873,7 @@ Try {
     }else{
         if(Test-Path $($Global:JsonPath+"Get-NcExportPolicy.json")){
             $ExportPolicyList=Get-Content $($Global:JsonPath+"Get-NcExportPolicy.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcExportPolicy.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcExportPolicy.json")
@@ -5698,6 +5910,7 @@ Try {
         }else{
             if(Test-Path $($Global:JsonPath+"Get-NcExportRule-"+$PolicyName+".json")){
                 $ExportPolicyRulesList=Get-Content $($Global:JsonPath+"Get-NcExportRule-"+$PolicyName+".json") -Raw | ConvertFrom-Json
+                Write-LogDebug "$($Global:JsonPath+"Get-NcExportRule-"+$PolicyName+".json") successfully imported"
             }else{
                 $Return=$False
                 $filepath=$($Global:JsonPath+"Get-NcExportRule-"+$PolicyName+".json")
@@ -5791,6 +6004,7 @@ Try {
     }else{
         if(Test-Path $($Global:JsonPath+"Get-NcIgroup.json")){
             $PrimaryIgroupList=Get-Content $($Global:JsonPath+"Get-NcIgroup.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcIgroup.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcIgroup.json")
@@ -5930,6 +6144,7 @@ Try {
         # }else{
             if(Test-Path $($Global:JsonPath+"Get-NcLun.json")){
                 $PrimaryLunList=Get-Content $($Global:JsonPath+"Get-NcLun.json") -Raw | ConvertFrom-Json
+                Write-LogDebug "$($Global:JsonPath+"Get-NcLun.json") successfully imported"
             }else{
                 $Return=$False
                 $filepath=$($Global:JsonPath+"Get-NcLun.json")
@@ -5949,8 +6164,9 @@ Try {
     #if($workOn -eq "DS_HV"){wait-debugger}
 	foreach ( $PrimaryLun in ( $PrimaryLunList | Skip-Null  ) ) {
 		if ( $PrimaryLun.Mapped -eq $True ) {
+            $PrimaryLunPath = $PrimaryLun.Path
             if($Restore -eq $False){
-                $PrimaryLunPath = $PrimaryLun.Path
+                
                 Write-LogDebug "Get-NcLunMap -Path $PrimaryLunPath -Vserver $myPrimaryVserver -Controller $myPrimaryController"
                 $PrimaryLunMapList = Get-NcLunMap -Path $PrimaryLunPath -Vserver $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcLunMap failed [$ErrorVar]" } 
@@ -5958,6 +6174,7 @@ Try {
                 $PrimaryLunPath_string=$PrimaryLunPath -replace "/","@"
                 if(Test-Path $($Global:JsonPath+"Get-NcLunMap_"+$PrimaryLunPath_string+".json")){
                     $PrimaryLunMapList=Get-Content $($Global:JsonPath+"Get-NcLunMap_"+$PrimaryLunPath_string+".json") -Raw | ConvertFrom-Json
+                    Write-LogDebug "$($Global:JsonPath+"Get-NcLunMap_"+$PrimaryLunPath_string+".json") successfully imported"
                 }else{
                     $Return=$False
                     $filepath=$($Global:JsonPath+"Get-NcLunMap_"+$PrimaryLunPath_string+".json")
@@ -6116,6 +6333,7 @@ Function set_serial_lundr (
             # }else{
                 if(Test-Path $($Global:JsonPath+"Get-NcLun.json")){
                     $PrimaryLunList=Get-Content $($Global:JsonPath+"Get-NcLun.json") -Raw | ConvertFrom-Json
+                    Write-LogDebug "$($Global:JsonPath+"Get-NcLun.json") successfully imported"
                 }else{
                     $Return=$False
                     $filepath=$($Global:JsonPath+"Get-NcLun.json")
@@ -6123,12 +6341,14 @@ Function set_serial_lundr (
                 }
             }
         # }
+        $VolImpacted=@()
         if($Backup -eq $False){
             # Check LUN serial need to be changed  on destination
             foreach ( $PrimaryLun in ( $PrimaryLunList | Skip-Null  ) ) 
             {
                 $PrimaryLunPath = $PrimaryLun.Path
                 $PrimaryLunSerialNumber = $PrimaryLun.SerialNumber
+                $PrimaryLunVol = $PrimaryLun.Volume
                 Write-LogDebug "Get-NcLun -Path $PrimaryLunPath -Vserver $mySecondaryVserver -Controller $mySecondaryController"
                 $SecondaryLun = Get-NcLun -Path $PrimaryLunPath -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcLun failed [$ErrorVar]" } 
@@ -6145,7 +6365,8 @@ Function set_serial_lundr (
                     {
                         Write-Log "[$workOn] Lun [$PrimaryLunPath] serial [$SecondaryLunSerialNumber] different [$PrimaryLunSerialNumber]"
                         $NeedChangeSerial = $True
-                        $VolList+=$PrimaryLunPath.split("/")[2]
+                        Write-LogDebug "Lun Change serial impacts volume [$PrimaryLunVol]"
+                        $VolImpacted+=$PrimaryLunVol
                     }
                 }
             }
@@ -6160,8 +6381,9 @@ Function set_serial_lundr (
                     $Return = $False
                     throw "ERROR: wait_snapmirror_dr failed"  
                 }
-                foreach($Volume in $VolList | Skip-Null){
-                    Write-LogDebug "Get-NcVol -Name $Volume -VserverContext $myPrimaryVserver -Controller $myPrimaryController"
+                foreach($Volume in $VolImpacted | Skip-Null){
+                    # ! No need to identify flexgroup, because of no SAN with flexgroup
+                    <# Write-LogDebug "Get-NcVol -Name $Volume -VserverContext $myPrimaryVserver -Controller $myPrimaryController"
                     $VolumeDetail=Get-NcVol -Name $Volume -VserverContext $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
                     if($? -ne $True){Throw "ERROR: Fail to get volume information reason [$ErrorVar"}
                     $SourceLocation=$($myPrimaryVserver+":"+$Volume)
@@ -6169,7 +6391,8 @@ Function set_serial_lundr (
                         $DestLocation=$($mySecondaryVserver+":"+$Volume+"_dst")
                     }else{
                         $DestLocation=$($mySecondaryVserver+":"+$Volume)
-                    }
+                    } #>
+                    $DestLocation=$($mySecondaryVserver+":"+$Volume)
                     if($Restore -eq $False -and $Backup -eq $False){
                         
                         # Break SnapMirror Relations
@@ -6209,11 +6432,9 @@ Function set_serial_lundr (
                             Write-LogDebug "Set-NcLun -Path $PrimaryLunPath  -Online -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
                             $out=Set-NcLun -Path $PrimaryLunPath  -Online -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
                             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcLun failed [$ErrorVar]" }
-                        }
-            
+                        }            
                     }
                 }
-
             }
         }
         Write-LogDebug "[$myPrimaryVserver]: end"
@@ -6338,6 +6559,7 @@ Try {
     }else{
         if(Test-Path $($Global:JsonPath+"Get-NcVserver.json")){
             $PrimaryVserver=Get-Content $($Global:JsonPath+"Get-NcVserver.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcVserver.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcVserver.json")
@@ -6434,6 +6656,7 @@ Try {
     }else{
         if(Test-Path $($Global:JsonPath+"Get-NcNameServiceNsSwitch.json")){
             $PrimaryNameServiceList=Get-Content $($Global:JsonPath+"Get-NcNameServiceNsSwitch.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcNameServiceNsSwitch.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcNameServiceNsSwitch.json")
@@ -6496,6 +6719,7 @@ Catch {
         # if in Restore mode get it from associated JSON file
         if(Test-Path $($Global:JsonPath+"Get-NcNetInterface.json")){
             $lifssource=Get-Content $($Global:JsonPath+"Get-NcNetInterface.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcNetInterface.json") successfully imported"
             if($null -eq $lifssource){
                 Write-LogDebug "No Lif on source vserver"
                 return $True
@@ -6629,6 +6853,7 @@ Try {
     }else{
         if(Test-Path $($Global:JsonPath+"Get-NcVserver.json")){
             $PrimaryRootVolumeName=Get-Content $($Global:JsonPath+"Get-NcVserver.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcVserver.json") successfully imported"
             $PrimaryRootVolumeName=$PrimaryRootVolumeName.RootVolume
         }else{
             $Return=$False
@@ -6665,6 +6890,7 @@ Try {
     }else{
         if(Test-Path $($Global:JsonPath+"Get-NcVol-root.json")){
             $PrimaryRootVolume=Get-Content $($Global:JsonPath+"Get-NcVol-root.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcVol-root.json") successfully imported"
             $PrimaryRootVolume=$PrimaryRootVolume | Where-Object {$_.Name -eq $PrimaryRootVolumeName}
         }else{
             $Return=$False
@@ -6691,7 +6917,7 @@ Try {
     if($Backup -eq $False){
         $PrimaryRootVolExportPolicy=$PrimaryRootVolume.VolumeExportAttributes.Policy
         $SecondaryRootVolExportPolicy=$SecondaryRootVolume.VolumeExportAttributes.Policy
-        $SecondaryVolUuid=$SecondaryRootVolume.VolumeIdAttributes.Uuid
+        $SecondaryVolUuid=$SecondaryRootVolume.Uuid
         $CredSecondary=get_local_cDotcred($mySecondaryController)
 
         Write-LogDebug "PrimaryRootVolumeName [$PrimaryRootVolumeName] SecondaryRootVolumeName [$SecondaryRootVolumeName] PrimaryRootVolExportPolicy [$PrimaryRootVolExportPolicy] SecondaryRootVolExportPolicy [$SecondaryRootVolExportPolicy]" 
@@ -6800,6 +7026,7 @@ Try {
         # }else{
             if(Test-Path $($Global:JsonPath+"Get-NcVol.json")){
                 $PrimaryVolList=Get-Content $($Global:JsonPath+"Get-NcVol.json") -Raw | ConvertFrom-Json
+                Write-LogDebug "$($Global:JsonPath+"Get-NcVol.json") successfully imported"
             }else{
                 $Return=$False
                 $filepath=$($Global:JsonPath+"Get-NcVol.json")
@@ -6941,7 +7168,7 @@ Try {
                                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol Failed: Failed to update volume $SecondaryVolName [$ErrorVar]" }
                             }
                         }else{
-                            $SecondaryVolUuid=$SecondaryVol.VolumeIdAttributes.Uuid
+                            $SecondaryVolUuid=$SecondaryVol.Uuid
                             $CredSecondary=get_local_cDotcred($mySecondaryController)
                             $body=@{
                                 nas=@{export_policy=@{name=$PrimaryVolExportPolicy}}
@@ -7023,7 +7250,7 @@ Try {
                             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Update-NcVol Failed: Failed to update volume $PrimaryVolName [$ErrorVar]" } 
                         }
                     }else{
-                        $SecondaryVolUuid=$SecondaryVol.VolumeIdAttributes.Uuid
+                        $SecondaryVolUuid=$SecondaryVol.Uuid
                         $CredSecondary=get_local_cDotcred($mySecondaryController)
                         $body=@{
                             space=@{snapshot=@{reserve_percent=$PrimaryVolExportPolicy}}
@@ -7257,6 +7484,7 @@ Try {
     }else{
         if(Test-Path $($Global:JsonPath+"Get-NcVol.json")){
             $PrimaryVolList=Get-Content $($Global:JsonPath+"Get-NcVol.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcVol.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcVol.json")
@@ -7337,7 +7565,7 @@ Try {
         if($Backup -eq $False){
             Write-LogDebug "PrimaryVol [$PrimaryVol]"
             
-            # $PrimaryVolUuid=$PrimaryVol.VolumeIdAttributes.Uuid
+            # $PrimaryVolUuid=$PrimaryVol.Uuid
             if($Global:PSTKCall -eq "Rest"){
                 # $Credential = get_local_cDotcred($myPrimaryController)
                 # $url=$("https://"+$myPrimaryController.Name+"/api/storage/volumes/"+$PrimaryVolUuid+"?fields=**,!metric,!statistics")
@@ -7635,43 +7863,45 @@ Try {
                             }
                         }
                         
+                        if($Global:PSTKCall -eq "Rest"){
+                            #! Force Direct Rest call because of burt with New-NcVol in REST mode with Type = DP
+                            $ForceRest=$True
+                        }
+                        if($ForceRest){
+                            $NewNcVolParameters+=@{
+                                "name"=$PrimaryVolName;
+                                "comment"=$SecondaryVolComment;
+                                "aggregates"=@(@{"name"=$myDataAggr});
+                                "nas"=@{"export_policy"=@{"name"=$PrimaryVolExportPolicy};"security_style"=$PrimaryVolStyle;};
+                                "space"=@{"snapshot"=@{"reserve_percent"=$PrimaryVolSnapshotReserve}};
+                                "guarantee"=@{"type"=$SpaceReserve};
+                                "language"=$PrimaryVolLang;
+                                "svm"=@{"name"=$mySecondaryVserver};
+                                "size"=$PrimaryVolSize;
+                                "tiering"=@{"policy"=$PrimaryVolTieringPolicy};
+                            }
+                            if(($null -ne $PrimaryVolTieringMinCoolDays) -and ($PrimaryVolTieringPolicy -match "auto|snapshot-only")){
+                                $NewNcVolParameters.tiering+=@{"min_cooling_days"=$PrimaryVolTieringMinCoolDays}
+                            }
+                            if($null -ne $PrimaryVolTieringObjectTags){
+                                $NewNcVolParameters.tiering+=@{"object_tags"=$PrimaryVolTieringObjectTags}
+                            }
+                            $NewNcVolParameters+=$option
+                            $CredSecondary=get_local_cDotcred($mySecondaryController)
+                            $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes")
+                        }
+                        $Encrypt=$Global:AllowEncryption
+                        if($Encrypt -eq "True"){
+                            $Encrypt=$True
+                            $NewNcVolParameters.encryption=@{"enabled"=$True}
+                        }else{
+                            $Encrypt=$False
+                        }
+
                         if($Restore -eq $False){
-                            if($Global:PSTKCall -eq "Rest"){
-                                #! Force Direct Rest call because of burt with New-NcVol in REST mode with Type = DP
-                                $ForceRest=$True
-                            }
-                            if($ForceRest){
-                                $NewNcVolParameters+=@{
-                                    "name"=$PrimaryVolName;
-                                    "comment"=$SecondaryVolComment;
-                                    "aggregates"=@(@{"name"=$myDataAggr});
-                                    "nas"=@{"export_policy"=@{"name"=$PrimaryVolExportPolicy};"security_style"=$PrimaryVolStyle;};
-                                    "space"=@{"snapshot"=@{"reserve_percent"=$PrimaryVolSnapshotReserve}};
-                                    "guarantee"=@{"type"=$SpaceReserve};
-                                    "language"=$PrimaryVolLang;
-                                    "svm"=@{"name"=$mySecondaryVserver};
-                                    "size"=$PrimaryVolSize;
-                                    "tiering"=@{"policy"=$PrimaryVolTieringPolicy};
-                                }
-                                if(($null -ne $PrimaryVolTieringMinCoolDays) -and ($PrimaryVolTieringPolicy -match "auto|snapshot-only")){
-                                    $NewNcVolParameters.tiering+=@{"min_cooling_days"=$PrimaryVolTieringMinCoolDays}
-                                }
-                                if($null -ne $PrimaryVolTieringObjectTags){
-                                    $NewNcVolParameters.tiering+=@{"object_tags"=$PrimaryVolTieringObjectTags}
-                                }
-                                $NewNcVolParameters+=$option
-                                $CredSecondary=get_local_cDotcred($mySecondaryController)
-                                $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes")
-                            }
-                            $Encrypt=$Global:AllowEncryption
-                            if($Encrypt -eq "True"){
-                                $Encrypt=$True
-                                $NewNcVolParameters.encryption=@{"enabled"=$True}
-                            }else{
-                                $Encrypt=$False
-                            }	
+                            	
                             Write-Log "[$workOn] Create new DR volume [$PrimaryVolName]"
-                            $NewNcVolParameters.type="dp"
+                            $NewNcVolParameters+=@{"type"="dp"}
                             if($ForceRest){
                                 $body=$NewNcVolParameters | ConvertTo-Json
                                 Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
@@ -7726,6 +7956,7 @@ Try {
                             Write-Log "[$workOn] Create new volume: [$PrimaryVolName]"
                             if(Test-Path $($Global:JsonPath+"Get-NcVol.json")){
                                 $VolList=Get-Content $($Global:JsonPath+"Get-NcVol.json") -Raw | ConvertFrom-Json
+                                Write-LogDebug "$($Global:JsonPath+"Get-NcVol.json") successfully imported"
                                 $VolDetail=$VolList | where-object {$_.Name -eq $PrimaryVolName}
                                 $EncryptedVolume=$VolDetail.Encrypt
                                 if($null -eq $EncryptedVolume){$EncryptedVolume=$False}
@@ -7791,7 +8022,11 @@ Try {
                                 }
                                 Write-LogDebug "Create DP volume"
                                 if($ForceRest){
-                                    $NewNcVolParameters.type="dp"
+                                    if($Global:VOLUME_TYPE -eq "RW"){
+                                        $NewNcVolParameters+=@{"type"="rw"}
+                                    }else{
+                                        $NewNcVolParameters+=@{"type"="dp"}
+                                    }
                                     $body=$NewNcVolParameters | ConvertTo-Json
                                     Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
                                     $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
@@ -8577,6 +8812,7 @@ Try {
     }else{
         if(Test-Path $($Global:JsonPath+"vol_junction.json")){
             $script:vol_junction=Get-Content $($Global:JsonPath+"vol_junction.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"vol_junction.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"vol_junction.json")
@@ -8691,6 +8927,7 @@ Try {
             if($Restore -eq $True){
                 if(Test-Path $($Global:JsonPath+"Get-NcVol.json")){
                     $relationList=Get-Content $($Global:JsonPath+"Get-NcVol.json") -Raw | ConvertFrom-Json
+                    Write-LogDebug "$($Global:JsonPath+"Get-NcVol.json") successfully imported"
                     $relationList = $relationList | Where-Object {$_.VolumeStateAttributes.IsVserverRoot -ne $True}
                 }else{
                     $Return=$False
@@ -8892,7 +9129,7 @@ Try {
 	return $Return 
 }
 Catch {
-    Error_Handling $_
+    Error_Handling $_ $myPrimaryCluster
 	return $Return
 }
 }
@@ -9053,6 +9290,7 @@ Try {
     if($Restore -eq $True){
         if(Test-Path $($Global:JsonPath+"Get-NcVserverPeer.json")){
             $PrimaryVserver=Get-Content $($Global:JsonPath+"Get-NcVserverPeer.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcVserverPeer.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcVserverPeer.json")
@@ -10273,6 +10511,7 @@ Try {
     }else{
         if(Test-Path $($Global:JsonPath+"Get-NcNetInterface.json")){
             $PrimaryInterfaceList=Get-Content $($Global:JsonPath+"Get-NcNetInterface.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcNetInterface.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcNetInterface.json")
@@ -10280,6 +10519,7 @@ Try {
         }
         if(Test-Path $($Global:JsonPath+"Get-NcNetPort.json")){
             $PrimaryNetPortList=Get-Content $($Global:JsonPath+"Get-NcNetPort.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcNetPort.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcNetPort.json")
@@ -10383,9 +10623,11 @@ Try {
         }else{
             if(Test-Path $($Global:JsonPath+"Get-NcNetRoute.json")){
                 $PrimaryDefaultRoute=Get-Content $($Global:JsonPath+"Get-NcNetRoute.json") -Raw | ConvertFrom-Json
+                Write-LogDebug "$($Global:JsonPath+"Get-NcNetRoute.json") successfully imported"
                 $PrimaryGateway=$PrimaryDefaultRoute.Gateway
             }elseif(Test-Path $($Global:JsonPath+"Get-NcNetRoutingGroupRoute.json")){
                 $PrimaryDefaultRoute=Get-Content $($Global:JsonPath+"Get-NcNetRoutingGroupRoute.json") -Raw | ConvertFrom-Json
+                Write-LogDebug "$($Global:JsonPath+"Get-NcNetRoutingGroupRoute.json") successfully imported"
                 $PrimaryGateway=$PrimaryDefaultRoute.GatewayAddress
             }else{
                 $Return=$False
@@ -10750,6 +10992,7 @@ Try {
     }else{
         if(Test-Path $($Global:JsonPath+"Get-NcNetDns.json")){
             $PrimaryDNS=Get-Content $($Global:JsonPath+"Get-NcNetDns.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcNetDns.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcNetDns.json")
@@ -10884,10 +11127,11 @@ Try {
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsSymlink failed [$ErrorVar]" }
         $PrimaryCifs=Get-NcCifsServer -VserverContext $myPrimaryVserver -controller $myPrimaryController  -ErrorVariable ErrorVar
         if($? -ne $True){$Return=$False;Throw "ERROR: Failed to Cifs server on [$myPrimaryVserver] reason [$ErrorVar]"}
-        $PrimaryCifs = $PrimaryCifs.CifsServer
+        $PrimaryCifsServerName = $PrimaryCifs.CifsServer
     }else{
         if(Test-Path $($Global:JsonPath+"Get-NcCifsSymlink.json")){
             $PrimaryCifsSymlinks=Get-Content $($Global:JsonPath+"Get-NcCifsSymlink.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcCifsSymlink.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcCifsSymlink.json")
@@ -10895,6 +11139,7 @@ Try {
         }
         if(Test-Path $($Global:JsonPath+"Get-NcCifsServer.json")){
             $PrimaryCifs=Get-Content $($Global:JsonPath+"Get-NcCifsServer.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcCifsServer.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcCifsServer.json")
@@ -10907,6 +11152,13 @@ Try {
             Write-LogDebug "$($Global:JsonPath+"Get-NcCifsSymlink.json") saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcCifsSymlink.json")"
+            $Return=$False
+        }
+        $PrimaryCifs | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcCifsServer.json") -Encoding ASCII -Width 65535
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcCifsServer.json") -ErrorAction SilentlyContinue) ){
+            Write-LogDebug "$($Global:JsonPath+"Get-NcCifsServer.json") saved successfully"
+        }else{
+            Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcCifsServer.json")"
             $Return=$False
         }
     }else{
@@ -10923,7 +11175,7 @@ Try {
             $PrimaryShareName                =$PrimarySymlink.ShareName
             $PrimaryUnixPath                 =$PrimarySymlink.UnixPath
 
-            if($PrimaryCifs -eq $PrimaryCifsServer){
+            if($PrimaryCifsServerName -eq $PrimaryCifsServer){
                 $PrimaryCifsServer = $SecondaryCifs
             }
             if($Global:Run_Mode -eq "RestoreObject"){
@@ -10994,6 +11246,7 @@ Try {
     }else{
         if(Test-Path $($Global:JsonPath+"Get-NcNIS.json")){
             $PrimaryNisList=Get-Content $($Global:JsonPath+"Get-NcNIS.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcNIS.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcNIS.json")
@@ -11002,7 +11255,7 @@ Try {
     }
     if($Backup -eq $True){
         $PrimaryNisList | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcNIS.json") -Encoding ASCII -Width 65535
-        if( ($ret=get-item $($Global:JsonPath+"Get-NcNIS.json") -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcNIS.json") -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$($Global:JsonPath+"Get-NcNIS.json") saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcNIS.json")"
@@ -11068,7 +11321,7 @@ Function compare_NFS_service (
     [object] $RefNfsService, 
 	[object] $NfsService ) {
 Try {
-	if ( ($RefNfsService -eq $null) -or ($NfsService -eq $null ) ) {
+	if ( ($null -eq $RefNfsService) -or ($null -eq $NfsService ) ) {
 		Write-LogError "ERROR: compare_NFS_service null entry"
 		return $true
 	}
@@ -11162,15 +11415,15 @@ Try {
 	return $NfsServiceDiff 
 }
 Catch {
-    Error_Handling $_ 
+    Error_Handling $_ "compare NFS services"
 	return $Return
 }
 }
 
 #############################################################################################
 Function compare_ISCSI_service (
-	[DataONTAP.C.Types.Iscsi.IscsiServiceInfo] $RefIscsiService, 
-	[DataONTAP.C.Types.Iscsi.IscsiServiceInfo] $IscsiService ) {
+	$RefIscsiService, 
+	$IscsiService ) {
 	
 	if ( ($null -eq $RefIscsiService) -or ($null -eq $IscsiService ) ) {
 		Write-LogError "ERROR: compare_ISCS_Service null entry" 
@@ -11205,6 +11458,7 @@ Try {
     }else{
         if(Test-Path $($Global:JsonPath+"Get-NcNfsService.json")){
             $PrimaryNfsService=Get-Content $($Global:JsonPath+"Get-NcNfsService.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcNfsService.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcNfsService.json")
@@ -11407,6 +11661,7 @@ Try {
     }else{
         if(Test-Path $($Global:JsonPath+"Get-NcCifsOption.json")){
             $primaryOptions=Get-Content $($Global:JsonPath+"Get-NcCifsOption.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcCifsOption.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcCifsOption.json")
@@ -11414,6 +11669,7 @@ Try {
         }
         if(Test-Path $($Global:JsonPath+"Get-NcSystemVersionInfo.json")){
             $PrimaryVersion=Get-Content $($Global:JsonPath+"Get-NcSystemVersionInfo.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcSystemVersionInfo.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcSystemVersionInfo.json")
@@ -11421,6 +11677,7 @@ Try {
         }
         if(Test-Path $($Global:JsonPath+"Get-NcCifsSecurity.json")){
             $PrimaryCIFSsecurity=Get-Content $($Global:JsonPath+"Get-NcCifsSecurity.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcCifsSecurity.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcCifsSecurity.json")
@@ -11433,6 +11690,7 @@ Try {
             Write-LogDebug "$($Global:JsonPath+"Get-NcCifsOption.json") saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcCifsOption.json")"
+            Write-LogDebug "[$workOn]: end"
             $Return=$False
         }
         $PrimaryVersion | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcSystemVersionInfo.json") -Encoding ASCII -Width 65535
@@ -11440,6 +11698,7 @@ Try {
             Write-LogDebug "$($Global:JsonPath+"Get-NcSystemVersionInfo.json") saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcSystemVersionInfo.json")"
+            Write-LogDebug "[$workOn]: end"
             $Return=$False
         }
         $PrimaryCIFSsecurity | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcCifsSecurity.json") -Encoding ASCII -Width 65535
@@ -11447,6 +11706,7 @@ Try {
             Write-LogDebug "$($Global:JsonPath+"Get-NcCifsSecurity.json") saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcCifsSecurity.json")"
+            Write-LogDebug "[$workOn]: end"
             $Return=$False
         }
     } 
@@ -11493,6 +11753,7 @@ Try {
                 $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
                 if($TimeSpend -gt $Global:STOP_TIMEOUT){
                     Write-LogWarn "[$workOn] Patch CIFS server job. Check in Ontap its status"
+                    Write-LogDebug "[$workOn]: end"
                     return $False
                 }
                 Start-Sleep 5
@@ -11510,6 +11771,7 @@ Try {
                 $secondaryOptionsSorted=$secondaryOptions | sort-object
                 if( ($null -eq $primaryOptionsSorted) -or ($null -eq $secondaryOptionsSorted)){
                     Write-LogDebug "nothing to compare with CIFS options. check primary CIFS or secondary CIFS"
+                    Write-LogDebug "[$workOn]: end"
                     break
                 }
                 $Differences=Compare-Object -ReferenceObject $primaryOptionsSorted -DifferenceObject $secondaryOptionsSorted -Property "$Property"
@@ -11545,6 +11807,7 @@ Try {
                                 }catch{
                                     $ErrorVar = $_.Exception.Message
                                     Write-LogWarn "[$myPrimaryVserver] ERROR : Failed to set CIFS option [$option] : [$ErrorVar]" 
+                                    Write-LogDebug "[$workOn]: end"
                                 }
                             }
                             if($isSecondarySpecified -match "false"){
@@ -11569,6 +11832,7 @@ Try {
                             }catch{
                                 $ErrorVar = $_.Exception.Message
                                 Write-LogWarn "[$myPrimaryVserver] Failed to set CIFS options reason : [$ErrorVar]" 
+                                Write-LogDebug "[$workOn]: end"
                             }
                         }
                     }
@@ -11639,10 +11903,9 @@ Try {
                 }
             }
         }
-        
-        Write-LogDebug "[$myPrimaryVserver]: end"
-        return $Return
     }
+    Write-LogDebug "[$myPrimaryVserver]: end"
+    return $Return
 }
 Catch {
     Error_Handling $_ $myPrimaryVserver
@@ -11693,6 +11956,7 @@ Try {
     }else{
         if(Test-Path $($Global:JsonPath+"Get-NcQtree.json")){
             $PrimaryQtrees=Get-Content $($Global:JsonPath+"Get-NcQtree.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcQtree.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcQtree.json")
@@ -11700,6 +11964,7 @@ Try {
         }
         if(Test-Path $($Global:JsonPath+"Get-NcVol.json")){
             $PrimaryVolsDetails=Get-Content $($Global:JsonPath+"Get-NcVol.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcVol.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcVole.json")
@@ -11805,6 +12070,7 @@ Try {
     }else{
         if(Test-Path $($Global:JsonPath+"Get-NcQtree.json")){
             $PrimaryQtrees=Get-Content $($Global:JsonPath+"Get-NcQtree.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcQtree.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcQtree.json")
@@ -11885,6 +12151,7 @@ Try {
     }else{
         if(Test-Path $($Global:JsonPath+"Get-NcLdapConfig.json")){
             $PrimaryLDAP=Get-Content $($Global:JsonPath+"Get-NcLdapConfig.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcLdapConfig.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcLdapConfig.json")
@@ -11911,6 +12178,7 @@ Try {
         }else{
             if(Test-Path $($Global:JsonPath+"Get-NcLdapClient.json")){
                 $PrimaryLDAPclient=Get-Content $($Global:JsonPath+"Get-NcLdapClient.json") -Raw | ConvertFrom-Json
+                Write-LogDebug "$($Global:JsonPath+"Get-NcLdapClient.json") successfully imported"
             }else{
                 $Return=$False
                 $filepath=$($Global:JsonPath+"Get-NcLdapClient.json")
@@ -11939,6 +12207,7 @@ Try {
         }else{
             if(Test-Path $($Global:JsonPath+"Get-NcLdapClientSchema.json")){
                 $PrimarySchema=Get-Content $($Global:JsonPath+"Get-NcLdapClientSchema.json") -Raw | ConvertFrom-Json
+                Write-LogDebug "$($Global:JsonPath+"Get-NcLdapClientSchema.json") successfully imported"
             }else{
                 $Return=$False
                 $filepath=$($Global:JsonPath+"Get-NcLdapClientSchema.json")
@@ -12571,6 +12840,7 @@ Try {
     }else{
         if(Test-Path $($Global:JsonPath+"Get-NcCifsServer.json")){
             $PrimaryCifsServerInfos=Get-Content $($Global:JsonPath+"Get-NcCifsServer.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcCifsServer.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcCifsServer.json")
@@ -12578,6 +12848,7 @@ Try {
         }   
         if(Test-Path $($Global:JsonPath+"Get-NcNetInterface.json")){
             $PrimaryInterfaceList=Get-Content $($Global:JsonPath+"Get-NcNetInterface.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcNetInterface.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcNetInterface.json")
@@ -12585,6 +12856,7 @@ Try {
         }
         if(Test-Path $($Global:JsonPath+"Get-NcCifsSecurity.json")){
             $PrimaryCIFSsecurity=Get-Content $($Global:JsonPath+"Get-NcCifsSecurity.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcCifsSecurity.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcCifsSecurity.json")
@@ -12696,7 +12968,8 @@ Try {
                         while ( $ANS -ne 'y' ) {
                             $SecondaryCifsServer = Read-HostDefault  -question "[$mySecondaryVserver] Please Enter your default Secondary CIFS server Name" -default $SecondaryCifsServer
                             if ( ( $SecondaryDomain -eq $PrimaryCifsServerInfos.Domain ) -and ( $SecondaryCifsServer -eq $PrimaryCifsServerInfos.CifsServer ) -and ($Global:RESTORE_ORIGINAL -ne $True)) { 
-                                Write-LogError "ERROR: Secondary CIFS server cannot use the same name has primary CIFS server in the same domain"
+                                Write-LogError "ERROR: Secondary CIFS server cannot use the same name has primary CIFS server in the same domain to prevent duplicate entry"
+                                Write-LogError "ERROR: Or you need to use the RESTORE_ORIGINAL"
                             } else {
                                     Write-Log "[$workOn] Default Secondary CIFS Name:      [$SecondaryCifsServer]"
                                 Write-Log ""
@@ -12932,10 +13205,10 @@ Try {
                                 #Write-LogDebug "job detail [$($JobDetail | out-string)]"
                             }
                             if($created -ne $True){
-                                Throw "ERROR: Failed to get Add-NcCifsServer Job Details with reason [$ErroVar]"
+                                Throw "ERROR: Failed to Post new CIFS server Job Details with reason [$JobDetail]"
                             }else{
                                 if($JobDetail.JobState -ne "success"){
-                                    Throw "ERROR : Failed to Add-NcCifsServer with reason [$($JobDetail.JobCompletion)] [$($JobDetail.Error)]"
+                                    Throw "ERROR : Failed Post new CIFS server with reason [$($JobDetail.JobCompletion)] [$($JobDetail.Error)]"
                                 }else{
                                     Write-Log "[$workOn] Cifs server is joined"
                                 }
@@ -13061,7 +13334,7 @@ Try {
 	return $True 
 }
 Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -13110,6 +13383,7 @@ Try {
     }else{
         if(Test-Path $($Global:JsonPath+"Get-NcCifsServer.json")){
             $PrimaryCifsServerInfos=Get-Content $($Global:JsonPath+"Get-NcCifsServer.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcCifsServer.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcCifsServer.json")
@@ -13238,6 +13512,7 @@ Try {
     }else{
         if(Test-Path $($Global:JsonPath+"Get-NcSystemVersionInfo.json")){
             $PrimaryVersion=Get-Content $($Global:JsonPath+"Get-NcSystemVersionInfo.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcSystemVersionInfo.json") successfully imported"
             $PrimaryVersion=$PrimaryVersion[0].VersionTuple
         }else{
             $Return=$False
@@ -13273,8 +13548,8 @@ Try {
             Write-LogDebug "set_all_lif -mySecondaryVserver $mySecondaryVserver -myPrimaryVserver $myPrimaryVserver -mySecondaryController $mySecondaryController  -myPrimaryController $myPrimaryController -state up"
             if ((-not $Global:SecondaryCifsLifCreated) -and ($null -eq $NcCifsServerInfos)){
                 if (($ret=set_all_lif -mySecondaryVserver $mySecondaryVserver -myPrimaryVserver $myPrimaryVserver -mySecondaryController $mySecondaryController  -myPrimaryController $myPrimaryController -state up) -ne $True ) {
-                        Write-LogError "ERROR: Failed to set all lif up on [$mySecondaryVserver]"
-                        clean_and_exit 1
+                    Write-LogError "ERROR: Failed to set all lif up on [$mySecondaryVserver]"
+                    clean_and_exit 1
                 }
             }
         }
@@ -13311,11 +13586,22 @@ Try {
     }else{
         if(Test-Path $($Global:JsonPath+"Get-NcCifsServer.json")){
             $PrimaryCifsServerInfos=Get-Content $($Global:JsonPath+"Get-NcCifsServer.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcCifsServer.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcCifsServer.json")
             Throw "ERROR: failed to read $filepath"
         }
+    }
+    if($Backup -eq $True){
+        $PrimaryCifsServerInfos | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcCifsServer.json") -Encoding ASCII -Width 65535
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcCifsServer.json") -ErrorAction SilentlyContinue) ){
+            Write-LogDebug "$($Global:JsonPath+"Get-NcCifsServer.json") saved successfully"
+        }else{
+            Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcCifsServer.json")"
+            $Return=$False
+        }
+        $PrimaryServer=$PrimaryCifsServerInfos.CifsServer
     }
     if($Backup -eq $False){
         Write-LogDebug "Get-NcCifsServer -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
@@ -13394,6 +13680,7 @@ Try {
     }else{
         if(Test-Path $($Global:JsonPath+"Get-NcCifsHomeDirectorySearchPath.json")){
             $CifsHomeSearchList=Get-Content $($Global:JsonPath+"Get-NcCifsHomeDirectorySearchPath.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcCifsHomeDirectorySearchPath.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcCifsHomeDirectorySearchPath.json")
@@ -13421,11 +13708,12 @@ Try {
             foreach ( $CifsHomeSearch in ( $CifsHomeSearchList | Skip-Null ) ) {
                 $myCifsHomeSearch = $CifsHomeSearch.path
                 $out=Remove-NcCifsHomeDirectorySearchPath -Controller $mySecondaryController -VserverContext $mySecondaryVserver -Path $myCifsHomeSearch  -ErrorVariable ErrorVar
-                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcCifsHomeDirectorySearchPath failed [$myCifsHomeSearch] [$ErrorVar]" }
+                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Remove-NcCifsHomeDirectorySearchPath failed [$myCifsHomeSearch] [$ErrorVar]" }
             }
             # Recreate All Cifs Home Search Dir
             if($Restore -eq $True){
                 $CifsHomeSearchList=Get-Content $($Global:JsonPath+"Get-NcCifsHomeDirectorySearchPath.json") -Raw | ConvertFrom-Json
+                Write-LogDebug "$($Global:JsonPath+"Get-NcCifsHomeDirectorySearchPath.json") successfully imported"
             }else{
                 if($null -eq $NcCifsHomeDirectorySearchPath){
                     $CifsHomeSearchList=Get-NcCifsHomeDirectorySearchPath -Controller $myPrimaryController -VserverContext $myPrimaryVserver  -ErrorVariable ErrorVar 
@@ -13440,9 +13728,13 @@ Try {
                 $CheckCifsHomeSearch=Get-NcCifsHomeDirectorySearchPath -Controller $mySecondaryController -VserverContext $mySecondaryVserver -Path $myCifsHomeSearch  -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsHomeDirectorySearchPath failed [$ErrorVar]" }
                 if ( $null -eq $CheckCifsHomeSearch ) {
-                    Write-LogDebug "Add-NcCifsHomeDirectorySearchPath -Controller $mySecondaryController -VserverContext $mySecondaryVserver -Path $myCifsHomeSearch"
-                    $out=Add-NcCifsHomeDirectorySearchPath -Controller $mySecondaryController -VserverContext $mySecondaryVserver -Path $myCifsHomeSearch  -ErrorVariable ErrorVar
-                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcCifsHomeDirectorySearchPath failed [$myCifsHomeSearch] [$ErrorVar]" }
+                    if($Restore -eq $True -and $Global:VOLUME_TYPE -eq "DP"){
+                        Write-LogWarn "WARNING: with DP volumes junction-path cannot be restored and so CIFS Home Directocry Search path neither."
+                    }else{
+                        Write-LogDebug "Add-NcCifsHomeDirectorySearchPath -Controller $mySecondaryController -VserverContext $mySecondaryVserver -Path $myCifsHomeSearch"
+                        $out=Add-NcCifsHomeDirectorySearchPath -Controller $mySecondaryController -VserverContext $mySecondaryVserver -Path $myCifsHomeSearch  -ErrorVariable ErrorVar
+                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcCifsHomeDirectorySearchPath failed [$myCifsHomeSearch] [$ErrorVar]" }
+                    }
                 }
             }
         }
@@ -13468,6 +13760,7 @@ Try {
     }else{
         if(Test-Path $($Global:JsonPath+"Get-NcCifsShare.json")){
             $SharesListSource=Get-Content $($Global:JsonPath+"Get-NcCifsShare.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcCifsShare.json") successfully imported"
             $ShareCount=$SharesListSource.Count
             Write-LogDebug "[$workon] there is [$ShareCount] share(s) availabe in source backup files"
         }else{
@@ -13477,6 +13770,7 @@ Try {
         }
         if(Test-Path $($Global:JsonPath+"Get-NcCifsShareAcl.json")){
             $PrimaryAllAclList=Get-Content $($Global:JsonPath+"Get-NcCifsShareAcl.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcCifsShareAcl.json") successfully imported"
             $ACLCount=$PrimaryAllAclList.Count
             Write-LogDebug "[$workon] there is [$ACLCount] ACL(s) availabe in source backup files"
         }else{
@@ -13501,29 +13795,37 @@ Try {
             $Return=$False
         }
     }
+    $SharesListDest=$null
+    if($Backup -eq $True){
+        $SharesListDest=$SharesListSource
+    }
     if($Backup -eq $False){
         $SharesListDest=Get-NcCifsShare -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
+        $CredSecondary=get_local_cDotcred($mySecondaryController)
+    }
         if($null -ne $SharesListSource -and $null -ne $SharesListDest){
             Write-LogDebug "Check CIFS shares list"
             # if selectvolume.db exist filter list of source cifs share to create with selected volume list
-            $NcCluster = Get-NcCluster -Controller $mySecondaryController
-            $DestinationCluster = $NcCluster.ClusterName
-            $SVMTOOL_DB_DST_CLUSTER=$Global:SVMTOOL_DB + '\' + $DestinationCluster + '.cluster'
-            $SVMTOOL_DB_DST_VSERVER=$SVMTOOL_DB_DST_CLUSTER + '\' +$mySecondaryVserver + '.vserver'
-            $SELECTVOL_DB_DST_FILE=$SVMTOOL_DB_DST_VSERVER + '\selectvolume.db' 
-            if( ( Test-Path $SELECTVOL_DB_DST_FILE ) -eq $true ) {
-                Write-LogDebug "Filter source CIFS share from selected volume available on Destination"
-                $SelectedVolumes=Get-Content $SELECTVOL_DB_DST_FILE 
-                if($SelectedVolumes.count -ge 1){
-                    $SVMRootVolume = (Get-NcVol -Vservercontext $mySecondaryVserver -Controller $mySecondaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$True}}).Name
-                    $SelectedVolumes+=$SVMRootVolume
-                    $SharesListSource=$SharesListSource | Where-Object {$_.Volume -in $SelectedVolumes -or $_.ShareName -in ("c$","ipc$","ONTAP_ADMIN$")}
+            if($Backup -eq $False){
+                $NcCluster = Get-NcCluster -Controller $mySecondaryController
+                $DestinationCluster = $NcCluster.ClusterName
+                $SVMTOOL_DB_DST_CLUSTER=$Global:SVMTOOL_DB + '\' + $DestinationCluster + '.cluster'
+                $SVMTOOL_DB_DST_VSERVER=$SVMTOOL_DB_DST_CLUSTER + '\' +$mySecondaryVserver + '.vserver'
+                $SELECTVOL_DB_DST_FILE=$SVMTOOL_DB_DST_VSERVER + '\selectvolume.db' 
+                if( ( Test-Path $SELECTVOL_DB_DST_FILE ) -eq $true ) {
+                    Write-LogDebug "Filter source CIFS share from selected volume available on Destination"
+                    $SelectedVolumes=Get-Content $SELECTVOL_DB_DST_FILE 
+                    if($SelectedVolumes.count -ge 1){
+                        $SVMRootVolume = (Get-NcVol -Vservercontext $mySecondaryVserver -Controller $mySecondaryController -Query @{VolumeStateAttributes=@{IsVserverRoot=$True}}).Name
+                        $SelectedVolumes+=$SVMRootVolume
+                        $SharesListSource=$SharesListSource | Where-Object {$_.Volume -in $SelectedVolumes -or $_.ShareName -in ("c$","ipc$","ONTAP_ADMIN$")}
+                    }
                 }
             }
             $SharesListSource=$SharesListSource | sort-object
             $SharesListDest=$SharesListDest | sort-object
             if(($null -eq $SharesListSource) -or ($null -eq $SharesListDest)){
-                Write-Log ""
+                Write-LogDebug "both ShareListSource and SharesListDest are null"
             }
             $diff=Compare-Object -ReferenceObject $SharesListSource -DifferenceObject $SharesListDest `
             -Property Acl,AttributeCacheTtl,Comment,DirUmask,FileUmask,ForceGroupForCreate,MaxConnectionPerShare,OfflineFilesMode,Path,ShareName,ShareProperties,SymlinkProperties,Volume,VscanFileopProfile `
@@ -13531,18 +13833,23 @@ Try {
             $diff_text=$diff | Select-Object sideindicator,ShareNameAcl,Volume,AttributeCacheTtl,Comment,DirUmask,FileUmask,ForceGroupForCreate,MaxConnectionPerShare,OfflineFilesMode,Path,ShareProperties,SymlinkProperties,VscanFileopProfile | Format-Table | Out-String
             if($null -ne $diff){Write-LogDebug "Check CIFS shares differences [$diff_text]"}
             else{Write-LogDebug "There is no CIFS shares differences"}
-            
+            if($Backup -eq $True){
+                $diff=$SharesListSource
+            }
             foreach($sharediff in $diff){
                 $secshare=$SharesListDest | Where-Object {$_.ShareName -eq $sharediff.ShareName}
                 if($sharediff.SideIndicator -eq "=>"){
                     # delete share on dest only if not in c$,admin$,ipc$
                     $sharename=$sharediff.ShareName
                     if($sharename -notin @("c$","admin$","ipc$","ONTAP_ADMIN$") -and $Global:DeleteDestShares -eq $True){
-                        Write-LogDebug "Remove Share [$sharename]"
-                        $ret=Remove-NcCifsShare -Name $sharename -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
-                        if($? -ne $true){$Return=$False;Write-Error "ERROR: Failed to remove share [$sharename] reason [$ErrorVar]"}
+                        if($Backup -eq $False){
+                            Write-LogDebug "Remove Share [$sharename]"
+                            $ret=Remove-NcCifsShare -Name $sharename -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
+                            if($? -ne $true){$Return=$False;Write-Error "ERROR: Failed to remove share [$sharename] reason [$ErrorVar]"}
+                        }
                     }
-                }else{
+                }
+                if($Backup -eq $True -or $sharediff.SideIndicator -ne "=>"){
                     # modify share on dest only if share is in c$,admin$ or ipc$
                     # or create it, if not c$, admin$ or ipc$ shares that are create automaticaly when CIFS server is deployed
                     # in some case admin$ share is not automaticaly create during CIFS share deployement, so we will create this share too
@@ -13568,147 +13875,40 @@ Try {
                     if($null -eq $PrimarySymlinkPropertiesList){$PrimarySymlinkPropertiesList=''}
                     if($null -eq $PrimaryForceGroupForCreate){$PrimaryForceGroupForCreate=''}
                     if($null -eq $PrimaryAttributeCacheTtl){$PrimaryAttributeCacheTtl=10}
-                    if($PrimaryShareName -eq "admin$" -and ($null -eq (Get-NcCifsShare -Name $PrimaryShareName -VserverContext $mySecondaryVserver -Controller $mySecondaryController))){
-                        Write-Log "[$workOn] Create share [$PrimaryShareName]"
-                        if($Global:PSTKCall -eq "Zapi"){
-                            Write-LogDebug "Add-NcCifsShare -Name  $PrimaryShareName -Path $PrimaryPath -DisablePathValidation `
-                            -ShareProperties $PrimarySharePropertiesList -SymlinkProperties $PrimarySymlinkPropertiesList -Comment $PrimaryComment `
-                            -OfflineFilesMode $PrimaryOfflineFilesMode -AttributeCacheTtl $PrimaryAttributeCacheTtl -VscanProfile $PrimaryVscanFileopProfile `
-                            -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare -ForceGroupForCreate $PrimaryForceGroupForCreate `
-                            -Vservercontext $mySecondaryVserver -Controller $mySecondaryController"
-                            $out = Add-NcCifsShare -Name  $PrimaryShareName -Path $PrimaryPath -DisablePathValidation `
-                            -ShareProperties $PrimarySharePropertiesList -SymlinkProperties $PrimarySymlinkPropertiesList `
-                            -Comment $PrimaryComment -OfflineFilesMode $PrimaryOfflineFilesMode -AttributeCacheTtl $PrimaryAttributeCacheTtl `
-                            -VscanProfile $PrimaryVscanFileopProfile -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare `
-                            -ForceGroupForCreate $PrimaryForceGroupForCreate -Vservercontext $mySecondaryVserver `
-                            -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                            if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShare failed [$ErrorVar]" }
-                        }else{
-                            Write-LogDebug "Add-NcCifsShare -Name  $PrimaryShareName -Path $PrimaryPath -DisablePathValidation `
-                            -ShareProperties $PrimarySharePropertiesList -SymlinkProperties $PrimarySymlinkPropertiesList -Comment $PrimaryComment `
-                            -OfflineFilesMode $PrimaryOfflineFilesMode -VscanProfile $PrimaryVscanFileopProfile `
-                            -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare -ForceGroupForCreate $PrimaryForceGroupForCreate `
-                            -Vservercontext $mySecondaryVserver -Controller $mySecondaryController"
-                            $out = Add-NcCifsShare -Name  $PrimaryShareName -Path $PrimaryPath -DisablePathValidation `
-                            -ShareProperties $PrimarySharePropertiesList -SymlinkProperties $PrimarySymlinkPropertiesList `
-                            -Comment $PrimaryComment -OfflineFilesMode $PrimaryOfflineFilesMode `
-                            -VscanProfile $PrimaryVscanFileopProfile -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare `
-                            -ForceGroupForCreate $PrimaryForceGroupForCreate -Vservercontext $mySecondaryVserver `
-                            -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                            if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShare failed [$ErrorVar]" }
-                        }
-                        #$SecondaryShare=Get-NcCifsShare -Name $PrimaryShareName -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
-                        #if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsShare failed [$ErrorVar]" }
-                        $SecondaryAclList=Get-NcCifsShareAcl -Share $PrimaryShareName -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
-						if($? -ne $True){$Return=$False;Write-Error "ERROR: Failed to Get-NcCifsShareAcl on $PrimaryShareName [$ErrorVar]"}
-                        foreach($acl in $SecondaryAclList){
-                            $aclUser=$acl.UserOrGroup
-                            $acltype=$acl.UserGroupType
-                            Write-LogDebug "Remove-NcCifsShareAcl -Share $PrimaryShareName -UserOrGroup $aclUser -UserGroupType $acltype `
-                            -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                            $out=Remove-NcCifsShareAcl -Share $PrimaryShareName -UserOrGroup $aclUser -UserGroupType $acltype `
-                            -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErroVar -confirm:$False
-                            if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Remove-NcCifsShareAcl failed [$ErrorVar]" }
-                        }
-                        $PrimaryAclList=$PrimaryAllAclList | Where-Object {$_.Share -eq "$PrimaryShareName"}
-                        #$PrimaryAclList=Get-NcCifsShareAcl -Share $PrimaryShareName -VserverContext $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErroVar
-                        foreach($acl in $PrimaryAclList){
-                            $aclPermission=$acl.Permission    
-                            $aclShare=$acl.Share
-                            $aclUnixid=$acl.Unixid
-                            $aclUserGroupType=$acl.UserGroupType
-                            $aclUserOrGroup=$acl.UserOrGroup
-                            $aclWinsid=$acl.Winsid
-                            $aclUnixidSpecified=$acl.UnixidSpecified
-                            if($aclUnixidSpecified -eq $true)
-                            {
-$request=@"
-<cifs-share-access-control-create>
-<permission>$aclPermission</permission>
-<return-record>true</return-record>
-<share>{0}</share>
-<user-group-type>$aclUserGroupType</user-group-type>
-<user-or-group>$aclUnixid</user-or-group>
-</cifs-share-access-control-create>                            
-"@
-								$request = ("$request" -f (xmlEncode -text $aclShare))					  
-                                if($WinSIDCompatible -eq $True){
-                                    Write-LogDebug "Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                                    $out=Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
-                                    if($? -ne $True){$Return=$False;Write-Error "ERROR: Failed to set access-control for share [$aclShare] display [$out]"}
-                                }else{
-                                    Write-LogDebug "Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUnixid -Permission $aclPermission -UserGroupType  $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $myController"
-                                    $out=Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUnixid -Permission $aclPermission -UserGroupType  $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
-                                    if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShareAcl failed [$ErrorVar]" }
-                                }
-                            }elseif($aclUserGroupType -eq "windows"){
-$request=@"
-<cifs-share-access-control-create>
-<permission>$aclPermission</permission>
-<return-record>true</return-record>
-<share>{0}</share>
-<user-group-type>$aclUserGroupType</user-group-type>
-<user-or-group>$aclUserOrGroup</user-or-group>
-<winsid>$aclWinsid</winsid>
-</cifs-share-access-control-create>                            
-"@
-								$request = ("$request" -f (xmlEncode -text $aclShare))
-                                if($WinSIDCompatible -eq $True){
-                                    Write-LogDebug "Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                                    $out=Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
-                                    if($? -ne $True){$Return=$False;Write-Error "ERROR: Failed to set access-control for share [$aclShare] display [$out]"}
-                                }else{
-                                    $SecondaryServer=(Get-NcCifsServer -VserverContext $mySecondaryVserver -controller $mySecondaryController).CifsServer
-                                    $domain=$aclUserOrGroup.split("\")[0]
-                                    $user=$aclUserOrGroup.split("\")[1]
-                                    $domain=$domain -replace $PrimaryServer,$SecondaryServer
-                                    if($null -ne $user){
-                                        $aclUserOrGroup= @($domain,$user) -join "\" 
-                                    }else{
-                                        $aclUserOrGroup=$domain    
-                                    }
-                                    Write-LogDebug "Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUserOrGroup -Permission $aclPermission -UserGroupType $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $myController"
-                                    $out=Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUserOrGroup -Permission $aclPermission -UserGroupType $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
-                                    if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShareAcl failed [$ErrorVar]" }
-                                }
-                            }elseif($aclUserGroupType -match "unix"){
-$request=@"
-<cifs-share-access-control-create>
-<permission>$aclPermission</permission>
-<return-record>true</return-record>
-<share>{0}</share>
-<user-group-type>$aclUserGroupType</user-group-type>
-<user-or-group>$aclUserOrGroup</user-or-group>
-</cifs-share-access-control-create>                            
-"@
-								$request = ("$request" -f (xmlEncode -text $aclShare))
-                                if($WinSIDCompatible -eq $True){
-                                    Write-LogDebug "Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                                    $out=Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
-                                    if($? -ne $True){$Return=$False;Write-Error "ERROR: Failed to set access-control for share [$aclShare] display [$out]"}
-                                }else{
-                                    Write-LogDebug "Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUserOrGroup -Permission $aclPermission -UserGroupType $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $myController"
-                                    $out=Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUserOrGroup -Permission $aclPermission -UserGroupType $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
-                                    if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShareAcl failed [$ErrorVar]" }
-                                }
+                    if($Backup -eq $False){
+                        if($PrimaryShareName -eq "admin$" -and ($null -eq (Get-NcCifsShare -Name $PrimaryShareName -VserverContext $mySecondaryVserver -Controller $mySecondaryController))){
+                            if($Backup -eq $True){
+                                Write-Log "[$workOn] Backup share [$PrimaryShareName]"
+                            }else{
+                                Write-Log "[$workOn] Create share [$PrimaryShareName]"
                             }
-                        }                        
-                    }
-                    if($PrimaryShareName -notin @("c$","admin$","ipc$","ONTAP_ADMIN$")){
-                        Write-Log "[$workOn] Create share [$PrimaryShareName]"
-                        if($Global:PSTKCall -eq "Zapi"){
-                            Write-LogDebug "Add-NcCifsShare -Name  $PrimaryShareName -Path $PrimaryPath -DisablePathValidation `
-                            -ShareProperties $PrimarySharePropertiesList -SymlinkProperties $PrimarySymlinkPropertiesList -Comment $PrimaryComment `
-                            -OfflineFilesMode $PrimaryOfflineFilesMode -AttributeCacheTtl $PrimaryAttributeCacheTtl -VscanProfile $PrimaryVscanFileopProfile `
-                            -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare -ForceGroupForCreate $PrimaryForceGroupForCreate `
-                            -Vservercontext $mySecondaryVserver -Controller $mySecondaryController"
-                            $out = Add-NcCifsShare -Name  $PrimaryShareName -Path $PrimaryPath -DisablePathValidation `
-                            -ShareProperties $PrimarySharePropertiesList -SymlinkProperties $PrimarySymlinkPropertiesList `
-                            -Comment $PrimaryComment -OfflineFilesMode $PrimaryOfflineFilesMode -AttributeCacheTtl $PrimaryAttributeCacheTtl `
-                            -VscanProfile $PrimaryVscanFileopProfile -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare `
-                            -ForceGroupForCreate $PrimaryForceGroupForCreate -Vservercontext $mySecondaryVserver `
-                            -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                            if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShare failed [$ErrorVar]" }
+                            if($Global:PSTKCall -eq "Zapi"){
+                                Write-LogDebug "Add-NcCifsShare -Name  $PrimaryShareName -Path $PrimaryPath -DisablePathValidation `
+                                -ShareProperties $PrimarySharePropertiesList -SymlinkProperties $PrimarySymlinkPropertiesList -Comment $PrimaryComment `
+                                -OfflineFilesMode $PrimaryOfflineFilesMode -AttributeCacheTtl $PrimaryAttributeCacheTtl -VscanProfile $PrimaryVscanFileopProfile `
+                                -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare -ForceGroupForCreate $PrimaryForceGroupForCreate `
+                                -Vservercontext $mySecondaryVserver -Controller $mySecondaryController"
+                                $out = Add-NcCifsShare -Name  $PrimaryShareName -Path $PrimaryPath -DisablePathValidation `
+                                -ShareProperties $PrimarySharePropertiesList -SymlinkProperties $PrimarySymlinkPropertiesList `
+                                -Comment $PrimaryComment -OfflineFilesMode $PrimaryOfflineFilesMode -AttributeCacheTtl $PrimaryAttributeCacheTtl `
+                                -VscanProfile $PrimaryVscanFileopProfile -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare `
+                                -ForceGroupForCreate $PrimaryForceGroupForCreate -Vservercontext $mySecondaryVserver `
+                                -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShare failed [$ErrorVar]" }
+                            }else{
+                                Write-LogDebug "Add-NcCifsShare -Name  $PrimaryShareName -Path $PrimaryPath -DisablePathValidation `
+                                -ShareProperties $PrimarySharePropertiesList -SymlinkProperties $PrimarySymlinkPropertiesList -Comment $PrimaryComment `
+                                -OfflineFilesMode $PrimaryOfflineFilesMode -VscanProfile $PrimaryVscanFileopProfile `
+                                -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare -ForceGroupForCreate $PrimaryForceGroupForCreate `
+                                -Vservercontext $mySecondaryVserver -Controller $mySecondaryController"
+                                $out = Add-NcCifsShare -Name  $PrimaryShareName -Path $PrimaryPath -DisablePathValidation `
+                                -ShareProperties $PrimarySharePropertiesList -SymlinkProperties $PrimarySymlinkPropertiesList `
+                                -Comment $PrimaryComment -OfflineFilesMode $PrimaryOfflineFilesMode `
+                                -VscanProfile $PrimaryVscanFileopProfile -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare `
+                                -ForceGroupForCreate $PrimaryForceGroupForCreate -Vservercontext $mySecondaryVserver `
+                                -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShare failed [$ErrorVar]" }
+                            }
                             #$SecondaryShare=Get-NcCifsShare -Name $PrimaryShareName -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
                             #if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsShare failed [$ErrorVar]" }
                             $SecondaryAclList=Get-NcCifsShareAcl -Share $PrimaryShareName -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
@@ -13804,34 +14004,171 @@ $request=@"
                                         if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShareAcl failed [$ErrorVar]" }
                                     }
                                 }
+                            }                        
+                        }
+                    }
+                    if($PrimaryShareName -notin @("c$","admin$","ipc$","ONTAP_ADMIN$")){
+                        Write-Log "[$workOn] Create share [$PrimaryShareName]"
+                        if($Global:PSTKCall -eq "Zapi"){
+                            if($Backup -eq $False){
+                                Write-LogDebug "Add-NcCifsShare -Name  $PrimaryShareName -Path $PrimaryPath -DisablePathValidation `
+                                -ShareProperties $PrimarySharePropertiesList -SymlinkProperties $PrimarySymlinkPropertiesList -Comment $PrimaryComment `
+                                -OfflineFilesMode $PrimaryOfflineFilesMode -AttributeCacheTtl $PrimaryAttributeCacheTtl -VscanProfile $PrimaryVscanFileopProfile `
+                                -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare -ForceGroupForCreate $PrimaryForceGroupForCreate `
+                                -Vservercontext $mySecondaryVserver -Controller $mySecondaryController"
+                                $out = Add-NcCifsShare -Name  $PrimaryShareName -Path $PrimaryPath -DisablePathValidation `
+                                -ShareProperties $PrimarySharePropertiesList -SymlinkProperties $PrimarySymlinkPropertiesList `
+                                -Comment $PrimaryComment -OfflineFilesMode $PrimaryOfflineFilesMode -AttributeCacheTtl $PrimaryAttributeCacheTtl `
+                                -VscanProfile $PrimaryVscanFileopProfile -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare `
+                                -ForceGroupForCreate $PrimaryForceGroupForCreate -Vservercontext $mySecondaryVserver `
+                                -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShare failed [$ErrorVar]" }
+                                #$SecondaryShare=Get-NcCifsShare -Name $PrimaryShareName -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
+                                #if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsShare failed [$ErrorVar]" }
+                                $SecondaryAclList=Get-NcCifsShareAcl -Share $PrimaryShareName -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                if($? -ne $True){$Return=$False;Write-Error "ERROR: Failed to Get-NcCifsShareAcl on $PrimaryShareName [$ErrorVar]"}
+                                foreach($acl in $SecondaryAclList){
+                                    $aclUser=$acl.UserOrGroup
+                                    $acltype=$acl.UserGroupType
+                                    Write-LogDebug "Remove-NcCifsShareAcl -Share $PrimaryShareName -UserOrGroup $aclUser -UserGroupType $acltype `
+                                    -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                                    $out=Remove-NcCifsShareAcl -Share $PrimaryShareName -UserOrGroup $aclUser -UserGroupType $acltype `
+                                    -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErroVar -confirm:$False
+                                    if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Remove-NcCifsShareAcl failed [$ErrorVar]" }
+                                }
+                                $PrimaryAclList=$PrimaryAllAclList | Where-Object {$_.Share -eq "$PrimaryShareName"}
+                                #$PrimaryAclList=Get-NcCifsShareAcl -Share $PrimaryShareName -VserverContext $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErroVar
+                                foreach($acl in $PrimaryAclList){
+                                    $aclPermission=$acl.Permission    
+                                    $aclShare=$acl.Share
+                                    $aclUnixid=$acl.Unixid
+                                    $aclUserGroupType=$acl.UserGroupType
+                                    $aclUserOrGroup=$acl.UserOrGroup
+                                    $aclWinsid=$acl.Winsid
+                                    $aclUnixidSpecified=$acl.UnixidSpecified
+                                    if($aclUnixidSpecified -eq $true)
+                                    {
+$request=@"
+<cifs-share-access-control-create>
+<permission>$aclPermission</permission>
+<return-record>true</return-record>
+<share>{0}</share>
+<user-group-type>$aclUserGroupType</user-group-type>
+<user-or-group>$aclUnixid</user-or-group>
+</cifs-share-access-control-create>                            
+"@
+                                        $request = ("$request" -f (xmlEncode -text $aclShare))					  
+                                        if($WinSIDCompatible -eq $True){
+                                            Write-LogDebug "Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                                            $out=Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                            if($? -ne $True){$Return=$False;Write-Error "ERROR: Failed to set access-control for share [$aclShare] display [$out]"}
+                                        }else{
+                                            Write-LogDebug "Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUnixid -Permission $aclPermission -UserGroupType  $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $myController"
+                                            $out=Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUnixid -Permission $aclPermission -UserGroupType  $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
+                                            if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShareAcl failed [$ErrorVar]" }
+                                        }
+                                    }elseif($aclUserGroupType -eq "windows"){
+$request=@"
+<cifs-share-access-control-create>
+<permission>$aclPermission</permission>
+<return-record>true</return-record>
+<share>{0}</share>
+<user-group-type>$aclUserGroupType</user-group-type>
+<user-or-group>$aclUserOrGroup</user-or-group>
+<winsid>$aclWinsid</winsid>
+</cifs-share-access-control-create>                            
+"@
+                                        $request = ("$request" -f (xmlEncode -text $aclShare))
+                                        if($WinSIDCompatible -eq $True){
+                                            Write-LogDebug "Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                                            $out=Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                            if($? -ne $True){$Return=$False;Write-Error "ERROR: Failed to set access-control for share [$aclShare] display [$out]"}
+                                        }else{
+                                            $SecondaryServer=(Get-NcCifsServer -VserverContext $mySecondaryVserver -controller $mySecondaryController).CifsServer
+                                            $domain=$aclUserOrGroup.split("\")[0]
+                                            $user=$aclUserOrGroup.split("\")[1]
+                                            $domain=$domain -replace $PrimaryServer,$SecondaryServer
+                                            if($null -ne $user){
+                                                $aclUserOrGroup= @($domain,$user) -join "\" 
+                                            }else{
+                                                $aclUserOrGroup=$domain    
+                                            }
+                                            Write-LogDebug "Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUserOrGroup -Permission $aclPermission -UserGroupType $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $myController"
+                                            $out=Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUserOrGroup -Permission $aclPermission -UserGroupType $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
+                                            if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShareAcl failed [$ErrorVar]" }
+                                        }
+                                    }elseif($aclUserGroupType -match "unix"){
+$request=@"
+<cifs-share-access-control-create>
+<permission>$aclPermission</permission>
+<return-record>true</return-record>
+<share>{0}</share>
+<user-group-type>$aclUserGroupType</user-group-type>
+<user-or-group>$aclUserOrGroup</user-or-group>
+</cifs-share-access-control-create>                            
+"@
+                                        $request = ("$request" -f (xmlEncode -text $aclShare))
+                                        if($WinSIDCompatible -eq $True){
+                                            Write-LogDebug "Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                                            $out=Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                            if($? -ne $True){$Return=$False;Write-Error "ERROR: Failed to set access-control for share [$aclShare] display [$out]"}
+                                        }else{
+                                            Write-LogDebug "Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUserOrGroup -Permission $aclPermission -UserGroupType $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $myController"
+                                            $out=Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUserOrGroup -Permission $aclPermission -UserGroupType $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
+                                            if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShareAcl failed [$ErrorVar]" }
+                                        }
+                                    }
+                                }
                             } 
                         }else{
                             # ! need to switch to Direct REST request to include all ACL during the creation of a CIFS share
-                            $CredSecondary=get_local_cDotcred($mySecondaryController)
-                            $CredPrimary=get_local_cDotcred($myPrimaryController)
-                            $url=$("https://"+$myPrimaryController.Name+"/api/protocols/cifs/shares?svm.name="+$myPrimaryVserver+"&fields=**,!volume.uuid,!_links&name="+$PrimaryShareName)
-                            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $CredPrimary -SkipCertificateCheck"
-                            $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $CredPrimary -SkipCertificateCheck -ErrorVariable ErrorVar
-                            if($? -ne $True){
-                                Write-LogError "ERROR: Unable to get cifs share [$PrimaryShareName] details from source. Reason [$ErrorVar]" 
-                                continue
-                            }elseif($ret.num_records -eq 1){
-                                $PrimaryShareDetails=$ret.records[0]
+                            
+                            if($Restore -eq $False){
+                                $CredPrimary=get_local_cDotcred($myPrimaryController)
+                                $url=$("https://"+$myPrimaryController.Name+"/api/protocols/cifs/shares?svm.name="+$myPrimaryVserver+"&fields=**,!volume.uuid,!_links&name="+$PrimaryShareName)
+                                Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $CredPrimary -SkipCertificateCheck"
+                                $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $CredPrimary -SkipCertificateCheck -ErrorVariable ErrorVar
+                                if($? -ne $True){
+                                    Write-LogError "ERROR: Unable to get cifs share [$PrimaryShareName] details from source. Reason [$ErrorVar]" 
+                                    continue
+                                }elseif($ret.num_records -eq 1){
+                                    $PrimaryShareDetails=$ret.records[0]
+                                }else{
+                                    Write-LogError "ERROR failed to get cifs share [$PrimaryShareName] details from source"
+                                    continue
+                                }
                             }else{
-                                Write-LogError "ERROR failed to get cifs share [$PrimaryShareName] details from source"
-                                continue
+                                if(Test-Path $($Global:JsonPath+"Get-RESTCifsShare_"+$PrimaryShareName+".json")){
+                                    $PrimaryShareDetails=Get-Content $($Global:JsonPath+"Get-RESTCifsShare_"+$PrimaryShareName+".json") -Raw | ConvertFrom-Json
+                                    Write-LogDebug "$($Global:JsonPath+"Get-RESTCifsShare_"+$PrimaryShareName+".json") successfully imported"
+                                }else{
+                                    $Return=$False
+                                    $filepath=$($Global:JsonPath+"Get-RESTCifsShare_"+$PrimaryShareName+".json")
+                                    Throw "ERROR: failed to read $filepath"
+                                }
                             }
-                            $url=$("https://"+$mySecondaryController.Name+"/api/protocols/cifs/shares?return_records=true")
-                            $DestinationShareDetails=$PrimaryShareDetails | Select-Object -ExcludeProperty svm,volume,browsable,show_previous_versions
-                            $DestinationShareDetails | Add-Member -MemberType NoteProperty -name "svm" -value @{"name"=$mySecondaryVserver}
-                            #$DestinationShareDetails=$DestinationShareDetails | Select-Object -Property * -ExcludeProperty browsable,show_previous_version
-                            $body=$DestinationShareDetails | ConvertTo-Json
-                            Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
-                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
-                            if($? -eq $True -and $ret.num_records -eq 1){
-                                Write-Log "[$workOn] Share [$PrimaryShareName] created successfully"
-                            }else{
-                                Write-LogError "ERROR [$workOn] Failed to create share [$PrimaryShareName] reason [$ErrorVar]"
+                            if($Backup -eq $True){
+                                $PrimaryShareDetails | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-RESTCifsShare_"+$PrimaryShareName+".json") -Encoding ASCII -Width 65535
+                                if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-RESTCifsShare_"+$PrimaryShareName+".json") -ErrorAction SilentlyContinue) ){
+                                    Write-LogDebug "$($Global:JsonPath+"Get-RESTCifsShare_"+$PrimaryShareName+".json") saved successfully"
+                                }else{
+                                    Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-RESTCifsShare_"+$PrimaryShareName+".json")"
+                                    $Return=$False
+                                }
+                            }
+                            if($Backup -eq $False){
+                                $url=$("https://"+$mySecondaryController.Name+"/api/protocols/cifs/shares?return_records=true")
+                                $DestinationShareDetails=$PrimaryShareDetails | Select-Object -ExcludeProperty svm,volume,browsable,show_previous_versions
+                                $DestinationShareDetails | Add-Member -MemberType NoteProperty -name "svm" -value @{"name"=$mySecondaryVserver}
+                                #$DestinationShareDetails=$DestinationShareDetails | Select-Object -Property * -ExcludeProperty browsable,show_previous_version
+                                $body=$DestinationShareDetails | ConvertTo-Json
+                                Write-LogDebug "Invoke-RestMethod -Method post -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
+                                $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                if($? -eq $True -and $ret.num_records -eq 1){
+                                    Write-Log "[$workOn] Share [$PrimaryShareName] created successfully"
+                                }else{
+                                    Write-LogError "ERROR [$workOn] Failed to create share [$PrimaryShareName] reason [$ErrorVar]"
+                                }
                             }
                             # Write-LogDebug "Add-NcCifsShare -Name  $PrimaryShareName -Path $PrimaryPath -DisablePathValidation `
                             # -ShareProperties $PrimarySharePropertiesList -SymlinkProperties $PrimarySymlinkPropertiesList -Comment $PrimaryComment `
@@ -13851,63 +14188,64 @@ $request=@"
                         # for that kind of non-data share share-properties and symlinkProperties are not modifiable
                         # so exclude them from the Set-NcCifsShare
                         if($PrimaryShareName -eq "ipc$"){
-                            Write-Log "[$workOn] Ignoring modification on CIFS share [$PrimaryShareName]"
+                            Write-LogDebug "[$workOn] Ignoring modification on CIFS share [$PrimaryShareName]"
                             continue
                         }
-                        Write-Log "[$workOn] Modify share [$PrimaryShareName]"
-                        if($Global:PSTKCall -eq "Zapi"){
-                            Write-LogDebug "Set-NcCifsShare -Name $PrimaryShareName `
-                            -FileUmask $PrimaryFileUmask `
-                            -DirUmask $PrimaryDirUmask -Comment $PrimaryComment -AttributeCacheTtl $PrimaryAttributeCacheTtl `
-                            -OfflineFilesMode $PrimaryOfflineFilesMode -VscanProfile $PrimaryVscanFileopProfile `
-                            -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare -ForceGroupForCreate $PrimaryForceGroupForCreate `
-                            -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                            $out=Set-NcCifsShare -Name $PrimaryShareName `
-                            -FileUmask $PrimaryFileUmask `
-                            -DirUmask $PrimaryDirUmask -Comment $PrimaryComment -AttributeCacheTtl $PrimaryAttributeCacheTtl `
-                            -OfflineFilesMode $PrimaryOfflineFilesMode -VscanProfile $PrimaryVscanFileopProfile `
-                            -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare -ForceGroupForCreate $PrimaryForceGroupForCreate `
-                            -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
-                            if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Set-NcCifsShare failed [$ErrorVar] display [$out]" }
-                        }else{
-                            Write-LogDebug "Set-NcCifsShare -Name $PrimaryShareName `
-                            -FileUmask $PrimaryFileUmask `
-                            -DirUmask $PrimaryDirUmask -Comment $PrimaryComment `
-                            -OfflineFilesMode $PrimaryOfflineFilesMode -VscanProfile $PrimaryVscanFileopProfile `
-                            -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare -ForceGroupForCreate $PrimaryForceGroupForCreate `
-                            -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                            $out=Set-NcCifsShare -Name $PrimaryShareName `
-                            -FileUmask $PrimaryFileUmask `
-                            -DirUmask $PrimaryDirUmask -Comment $PrimaryComment `
-                            -OfflineFilesMode $PrimaryOfflineFilesMode -VscanProfile $PrimaryVscanFileopProfile `
-                            -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare -ForceGroupForCreate $PrimaryForceGroupForCreate `
-                            -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
-                            if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Set-NcCifsShare failed [$ErrorVar] display [$out]" }
-                        }
-                        if($secshare.Acl -ne $PrimaryAclList){
-                            $SecondaryAclList=Get-NcCifsShareAcl -Share $PrimaryShareName -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
-                            foreach($acl in $SecondaryAclList){
-                                $aclUser=$acl.UserOrGroup
-                                $acltype=$acl.UserGroupType
-                                Write-LogDebug "Remove-NcCifsShareAcl -Share $PrimaryShareName -UserOrGroup $aclUser -UserGroupType $acltype `
+                        if($Backup -eq $False){
+                            Write-Log "[$workOn] Modify share [$PrimaryShareName]"
+                            if($Global:PSTKCall -eq "Zapi"){
+                                Write-LogDebug "Set-NcCifsShare -Name $PrimaryShareName `
+                                -FileUmask $PrimaryFileUmask `
+                                -DirUmask $PrimaryDirUmask -Comment $PrimaryComment -AttributeCacheTtl $PrimaryAttributeCacheTtl `
+                                -OfflineFilesMode $PrimaryOfflineFilesMode -VscanProfile $PrimaryVscanFileopProfile `
+                                -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare -ForceGroupForCreate $PrimaryForceGroupForCreate `
                                 -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                                $out=Remove-NcCifsShareAcl -Share $PrimaryShareName -UserOrGroup $aclUser -UserGroupType $acltype `
-                                -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErroVar -confirm:$False
-                                if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Remove-NcCifsShare failed [$ErrorVar]" }
+                                $out=Set-NcCifsShare -Name $PrimaryShareName `
+                                -FileUmask $PrimaryFileUmask `
+                                -DirUmask $PrimaryDirUmask -Comment $PrimaryComment -AttributeCacheTtl $PrimaryAttributeCacheTtl `
+                                -OfflineFilesMode $PrimaryOfflineFilesMode -VscanProfile $PrimaryVscanFileopProfile `
+                                -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare -ForceGroupForCreate $PrimaryForceGroupForCreate `
+                                -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Set-NcCifsShare failed [$ErrorVar] display [$out]" }
+                            }else{
+                                Write-LogDebug "Set-NcCifsShare -Name $PrimaryShareName `
+                                -FileUmask $PrimaryFileUmask `
+                                -DirUmask $PrimaryDirUmask -Comment $PrimaryComment `
+                                -OfflineFilesMode $PrimaryOfflineFilesMode -VscanProfile $PrimaryVscanFileopProfile `
+                                -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare -ForceGroupForCreate $PrimaryForceGroupForCreate `
+                                -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                                $out=Set-NcCifsShare -Name $PrimaryShareName `
+                                -FileUmask $PrimaryFileUmask `
+                                -DirUmask $PrimaryDirUmask -Comment $PrimaryComment `
+                                -OfflineFilesMode $PrimaryOfflineFilesMode -VscanProfile $PrimaryVscanFileopProfile `
+                                -MaxConnectionsPerShare $PrimaryMaxConnectionsPerShare -ForceGroupForCreate $PrimaryForceGroupForCreate `
+                                -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Set-NcCifsShare failed [$ErrorVar] display [$out]" }
                             }
-                            Write-Log "[$workOn] Modify Acces-Control for share [$PrimaryShareName]"
-                            $PrimaryAclList=$PrimaryAllAclList | Where-Object {$_.Share -eq "$PrimaryShareName"}
-                            #$PrimaryAclList=Get-NcCifsShareAcl -Share $PrimaryShareName -VserverContext $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
-                            foreach($acl in $PrimaryAclList){
-                                $aclPermission=$acl.Permission    
-                                $aclShare=$acl.Share
-                                $aclUnixid=$acl.Unixid
-                                $aclUserGroupType=$acl.UserGroupType
-                                $aclUserOrGroup=$acl.UserOrGroup
-                                $aclWinsid=$acl.Winsid
-                                $aclUnixidSpecified=$acl.UnixidSpecified
-                                if($aclUnixidSpecified -eq $true)
-                                {
+                            if($secshare.Acl -ne $PrimaryAclList){
+                                $SecondaryAclList=Get-NcCifsShareAcl -Share $PrimaryShareName -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                foreach($acl in $SecondaryAclList){
+                                    $aclUser=$acl.UserOrGroup
+                                    $acltype=$acl.UserGroupType
+                                    Write-LogDebug "Remove-NcCifsShareAcl -Share $PrimaryShareName -UserOrGroup $aclUser -UserGroupType $acltype `
+                                    -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                                    $out=Remove-NcCifsShareAcl -Share $PrimaryShareName -UserOrGroup $aclUser -UserGroupType $acltype `
+                                    -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErroVar -confirm:$False
+                                    if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Remove-NcCifsShare failed [$ErrorVar]" }
+                                }
+                                Write-Log "[$workOn] Modify Acces-Control for share [$PrimaryShareName]"
+                                $PrimaryAclList=$PrimaryAllAclList | Where-Object {$_.Share -eq "$PrimaryShareName"}
+                                #$PrimaryAclList=Get-NcCifsShareAcl -Share $PrimaryShareName -VserverContext $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
+                                foreach($acl in $PrimaryAclList){
+                                    $aclPermission=$acl.Permission    
+                                    $aclShare=$acl.Share
+                                    $aclUnixid=$acl.Unixid
+                                    $aclUserGroupType=$acl.UserGroupType
+                                    $aclUserOrGroup=$acl.UserOrGroup
+                                    $aclWinsid=$acl.Winsid
+                                    $aclUnixidSpecified=$acl.UnixidSpecified
+                                    if($aclUnixidSpecified -eq $true)
+                                    {
 $request=@"
 <cifs-share-access-control-create>
 <permission>$aclPermission</permission>
@@ -13917,17 +14255,17 @@ $request=@"
 <user-or-group>$aclUnixid</user-or-group>
 </cifs-share-access-control-create>                            
 "@
-									$request = ("$request" -f (xmlEncode -text $aclShare))
-                                    if($WinSIDCompatible -eq $True){
-                                        Write-LogDebug "Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                                        $out=Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
-                                        if($? -ne $True){$Return=$False;Write-Error "ERROR: Failed to set access-control for share [$aclShare] display [$out]"}
-                                    }else{
-                                        Write-LogDebug "Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUnixid -Permission $aclPermission -UserGroupType  $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False"
-                                        $out=Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUnixid -Permission $aclPermission -UserGroupType  $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
-                                        if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShareAcl failed [$ErrorVar]" }
-                                    }
-                                }elseif($aclUserGroupType -eq "windows"){
+                                        $request = ("$request" -f (xmlEncode -text $aclShare))
+                                        if($WinSIDCompatible -eq $True){
+                                            Write-LogDebug "Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                                            $out=Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                            if($? -ne $True){$Return=$False;Write-Error "ERROR: Failed to set access-control for share [$aclShare] display [$out]"}
+                                        }else{
+                                            Write-LogDebug "Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUnixid -Permission $aclPermission -UserGroupType  $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False"
+                                            $out=Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUnixid -Permission $aclPermission -UserGroupType  $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
+                                            if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShareAcl failed [$ErrorVar]" }
+                                        }
+                                    }elseif($aclUserGroupType -eq "windows"){
 $request=@"
 <cifs-share-access-control-create>
 <permission>$aclPermission</permission>
@@ -13938,32 +14276,32 @@ $request=@"
 <winsid>$aclWinsid</winsid>
 </cifs-share-access-control-create>                            
 "@
-									$request = ("$request" -f (xmlEncode -text $aclShare))		   
-                                    #if($aclWinsid -notmatch "S-1-1-0|S-1-5-32"){
-                                        $request = ("$request" -f (xmlEncode -text $aclShare))
-                                        if($WinSIDCompatible -eq $True){
-                                            Write-LogDebug "Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                                            $out=Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
-                                            if($? -ne $True){$Return=$False;Write-Error "ERROR: Failed to set access-control for share [$aclShare] display [$out]"}
-                                        }else{
-                                            $SecondaryServer=(Get-NcCifsServer -VserverContext $mySecondaryVserver -controller $mySecondaryController).CifsServer
-											if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Get-NcCifsServer failed [$ErrorVar]" }																  
-                                            $domain=$aclUserOrGroup.split("\")[0]
-                                            $user=$aclUserOrGroup.split("\")[1]
-                                            $domain=$domain -replace $PrimaryServer,$SecondaryServer
-                                            if($null -ne $user){
-                                                $aclUserOrGroup= @($domain,$user) -join "\" 
+                                        $request = ("$request" -f (xmlEncode -text $aclShare))		   
+                                        #if($aclWinsid -notmatch "S-1-1-0|S-1-5-32"){
+                                            $request = ("$request" -f (xmlEncode -text $aclShare))
+                                            if($WinSIDCompatible -eq $True){
+                                                Write-LogDebug "Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                                                $out=Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                                if($? -ne $True){$Return=$False;Write-Error "ERROR: Failed to set access-control for share [$aclShare] display [$out]"}
                                             }else{
-                                                $aclUserOrGroup=$domain    
+                                                $SecondaryServer=(Get-NcCifsServer -VserverContext $mySecondaryVserver -controller $mySecondaryController).CifsServer
+                                                if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Get-NcCifsServer failed [$ErrorVar]" }																  
+                                                $domain=$aclUserOrGroup.split("\")[0]
+                                                $user=$aclUserOrGroup.split("\")[1]
+                                                $domain=$domain -replace $PrimaryServer,$SecondaryServer
+                                                if($null -ne $user){
+                                                    $aclUserOrGroup= @($domain,$user) -join "\" 
+                                                }else{
+                                                    $aclUserOrGroup=$domain    
+                                                }
+                                                Write-LogDebug "Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUserOrGroup -Permission $aclPermission -UserGroupType  $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False"
+                                                $out=Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUserOrGroup -Permission $aclPermission -UserGroupType  $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
+                                                if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShareAcl failed [$ErrorVar]" }
                                             }
-                                            Write-LogDebug "Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUserOrGroup -Permission $aclPermission -UserGroupType  $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False"
-                                            $out=Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUserOrGroup -Permission $aclPermission -UserGroupType  $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
-                                            if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShareAcl failed [$ErrorVar]" }
-                                        }
-                                    #}else{
-                                    #    Write-LogDebug "Ignore ACL [$aclUserOrGroup]"
-                                    #}
-                                }elseif($aclUserGroupType -match "unix"){
+                                        #}else{
+                                        #    Write-LogDebug "Ignore ACL [$aclUserOrGroup]"
+                                        #}
+                                    }elseif($aclUserGroupType -match "unix"){
 $request=@"
 <cifs-share-access-control-create>
 <permission>$aclPermission</permission>
@@ -13973,15 +14311,16 @@ $request=@"
 <user-or-group>$aclUserOrGroup</user-or-group>
 </cifs-share-access-control-create>                            
 "@
-									$request = ("$request" -f (xmlEncode -text $aclShare))
-                                    if($WinSIDCompatible -eq $True){
-                                        Write-LogDebug "Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                                        $out=Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
-                                        if($? -ne $True){$Return=$False;Write-Error "ERROR: Failed to set access-control for share [$aclShare] display [$out]"}
-                                    }else{
-                                        Write-LogDebug "Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUserOrGroup -Permission $aclPermission -UserGroupType $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $myController"
-                                        $out=Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUserOrGroup -Permission $aclPermission -UserGroupType $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
-                                        if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShareAcl failed [$ErrorVar]" }
+                                        $request = ("$request" -f (xmlEncode -text $aclShare))
+                                        if($WinSIDCompatible -eq $True){
+                                            Write-LogDebug "Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                                            $out=Invoke-NcSystemApi -Request $request -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                            if($? -ne $True){$Return=$False;Write-Error "ERROR: Failed to set access-control for share [$aclShare] display [$out]"}
+                                        }else{
+                                            Write-LogDebug "Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUserOrGroup -Permission $aclPermission -UserGroupType $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $myController"
+                                            $out=Add-NcCifsShareAcl -Share $aclShare  -UserOrGroup $aclUserOrGroup -Permission $aclPermission -UserGroupType $aclUserGroupType -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
+                                            if ( $? -ne $True ) { $Return = $False ; Write-Error "ERROR: Add-NcCifsShareAcl failed [$ErrorVar]" }
+                                        }
                                     }
                                 }
                             }
@@ -14000,7 +14339,7 @@ $request=@"
                 }
             }
         }
-    }
+    #}
     Write-LogDebug "[$workOn]: end"
 	return $True
 }
@@ -14033,6 +14372,7 @@ Try {
     }else{
         if(Test-Path $($Global:JsonPath+"Get-NcIscsiService.json")){
             $PrimaryIscsiService=Get-Content $($Global:JsonPath+"Get-NcIscsiService.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcIscsiService.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcIscsiService.json")
@@ -15175,6 +15515,7 @@ Try {
         # Read JSON file for this SVM
         if(Test-Path $($Global:JsonPath+"Get-NcVserver.json")){
             $PrimaryVserver=Get-Content $($Global:JsonPath+"Get-NcVserver.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcVserver.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcVserver.json")
@@ -15338,7 +15679,7 @@ Try {
     if ( ( $ret=create_update_DNS_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create DNS service" ; $Return = $False }
     if ( ( $ret=create_update_ISCSI_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create iSCSI service" ; $Return = $False }
     if ( ( $ret=create_update_CIFS_server_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore -TemporarySecondaryCifsIp $TemporarySecondaryCifsIp -SecondaryCifsLifMaster $SecondaryCifsLifMaster -SecondaryCifsLifCustomVlan $SecondaryCifsLifCustomVlan -ActiveDirectoryCustomOU $ActiveDirectoryCustomOU) -ne $True ) {Write-LogError "ERROR: create_update_CIFS_server_dr" ; $Return = $False } 
-    if ( ( $ret=update_CIFS_server_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogWarn "[$workOn] Some CIFS options has not been set on" }
+    if ( ( update_CIFS_server_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogWarn "[$workOn] Some CIFS options has not been set. Reason [$ret]" }
     if ( ( $ret=create_update_LDAP_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create LDAP config" ; $Return = $False }
     if ( ( $ret=create_update_NIS_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create NIS service" ; $Return = $False }
     if ( ( $ret=create_update_NFS_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create NFS service" ; $Return = $False }
@@ -15401,8 +15742,14 @@ Try {
                     }
                 }
             }
-            if ( ( $ret=create_update_CIFS_shares_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: create_update_CIFS_share" ; $Return = $False }
-            if ( ( $ret=create_update_cifs_symlink_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all cifs symlinks" ; $Return = $False }
+            if($Restore -eq $True -and $Global:VOLUME_TYPE -eq "DP"){
+                Write-Log "CIFS share cannot be restored if volumes are restored as DP volume. You will have to mount them once data restored through snapmirror"
+                Write-Log "Or restore with RW volume type forced"
+                Write-LogDebug "CIFS shares and Symlinks cannot be restored for DP volume"
+            }else{
+                if ( ( $ret=create_update_CIFS_shares_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: create_update_CIFS_share" ; $Return = $False }
+                if ( ( $ret=create_update_cifs_symlink_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all cifs symlinks" ; $Return = $False }
+            }
         }
 		
         <# if($Global:SecondaryCifsLifCreated){
@@ -15710,9 +16057,9 @@ Function remove_vserver_source (
 Try {	
 	$Return = $false
     Write-LogDebug "start"
-	$out = Get-NcVserver  -Name $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar 
+	$myVserver = Get-NcVserver  -Name $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar 
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" }
-	if ( $out -eq $null ) {
+	if ( $null -eq $myVserver ) {
 		Write-LogDebug "Vserver [$myPrimaryVserver] does not exist" 
 		return $true
 	}
@@ -15753,14 +16100,57 @@ Try {
 	$myCifsServer = Get-NcCifsServer -VserverContext  $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsServer failed [$ErrorVar]" }
 	if ( $null -ne $myCifsServer ) {
-        Write-LogDebug "Stop-NcCifsServer -VserverContext  $myPrimaryVserver -Controller $myPrimaryController"
-		$out=Stop-NcCifsServer -VserverContext  $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar -Confirm:$False
-        Write-LogDebug "Remove-NcCifsServer -VserverContext  $myPrimaryVserver -Controller $myPrimaryController"
-		$out=Remove-NcCifsServer -VserverContext  $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar -ForceAccountDelete -Confirm:$False
-		if ( $? -ne $True ) {
-			Write-LogError "ERROR: Unable to Remove Service CIFS" 
-			#return $false
-		}
+        if($Global:PSTKCall -ne "Rest"){
+            Write-LogDebug "Stop-NcCifsServer -VserverContext  $myPrimaryVserver -Controller $myPrimaryController"
+            $out=Stop-NcCifsServer -VserverContext  $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar -Confirm:$False
+            Write-LogDebug "Remove-NcCifsServer -VserverContext  $myPrimaryVserver -Controller $myPrimaryController"
+            $out=Remove-NcCifsServer -VserverContext  $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar -ForceAccountDelete -Confirm:$False
+            if ( $? -ne $True ) {
+                Write-LogError "ERROR: Unable to Remove Service CIFS" 
+                #return $false
+            }
+        }else{
+            $Cred=get_local_cDotcred($myPrimaryController)
+            $ADCred = get_local_cred -myCredential $myCifsServer.Domain -Adcred
+            $body=@{
+                ad_domain=@{
+                    password=[Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($ADcred.Password))
+                    user=$ADcred.UserName}
+            } | ConvertTo-Json
+            $VserverUUID=$myVserver.Uuid
+            $url=$("https://"+$myPrimaryController.Name+"/api/protocols/cifs/services/"+$VserverUUID+"?force=true")
+            Write-LogDebug "Invoke-RestMethod -Method delete -Uri $url -Credential $Cred -SkipCertificateCheck   (body is intentionally hidden)"
+            $ret=Invoke-RestMethod -Method 'delete' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+            if($? -ne $True){
+                Write-LogError "ERROR: delete request [$url] reason [$ErrorVar]"
+            }
+            $JobUuid=$ret.job.uuid
+            $StartTime=Get-date
+            $Timeout=$False
+            $JobDone=$False
+            While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+                $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $myPrimaryController
+                if($JobDetail.JobCompletion -eq "success"){
+                    $JobDone=$True
+                    break
+                }else{
+                    $JobStatus=$JobDetail.JobState
+                    Write-LogDebug "[$workOn] Remove CIFS server status [$JobStatus]"
+                    if($JobStatus -eq "failure"){
+                        $JobCompletion=$JobDetail.JobCompletion
+                        Write-LogError "[$workOn] Vol creation failed [$JobCompletion]"
+                        break
+                    }
+                }
+                $CurrentTime=Get-date
+                $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+                if($TimeSpend -gt $Global:STOP_TIMEOUT){
+                    Write-LogWarn "[$workOn] Remove CIFS server take too much time. Check in Ontap its status"
+                    $Timeout=$True
+                }
+                Start-Sleep 5
+            }
+        }
     }
     if(-not ($RemoveCIFSOnly.IsPresent)){
         $DeleteSourceSVM=$True
@@ -15790,10 +16180,10 @@ Try {
         if($DeleteSourceSVM -eq $True){
             $out = Get-NcVserver  -Name $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar 
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" }
-            if ( $out -ne $null ) {
+            if ( $null -ne $out ) {
                 Remove-NcVserver -Name $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar  -confirm:$False
                 if ( $? -ne $True ) {
-                    Write-LogError "ERROR: Unable to Remove  vserver [$myPrimaryVserver]" 
+                    Write-LogError "ERROR: Unable to Remove vserver [$myPrimaryVserver]" 
                     #return $false
                 }
             }
@@ -15821,7 +16211,7 @@ Try {
 	$Return = $true
     $out = Get-NcVserver  -Name $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" }
-	if ( $out -eq $null ) {
+	if ( $null -eq $out ) {
 		Write-LogWarn "Vserver [$mySecondaryVserver] does not exist" 
 		Write-LogWarn "exit"
 		return $true
@@ -15840,7 +16230,7 @@ Try {
     }
 	$myCifsServer = Get-NcCifsServer -VserverContext  $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsServer failed [$ErrorVar]" }
-	if ( $myCifsServer -ne $null ) { 
+	if ( $null -ne $myCifsServer ) { 
         Write-Log "[$mySecondaryVserver] Remove CIFS server"
 		$out=Stop-NcCifsServer -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -Confirm:$False
 		$out=Remove-NcCifsServer -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -Confirm:$False
@@ -15861,11 +16251,11 @@ Try {
 	}
 	$out = Get-NcVserver  -Name $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" }
-	if ( $out -ne $null ) {
+	if ( $null -ne $out ) {
         Write-Log "[$mySecondaryVserver] Remove SVM"
 		$out=Remove-NcVserver -Name $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar  -confirm:$False
 		if ( $? -ne $True ) {
-			Write-LogError "ERROR: Unable to Remove  vserver [$mySecondaryVserver]" 
+			Write-LogError "ERROR: Unable to Remove vserver [$mySecondaryVserver]" 
 			return $false
 		}
 	}
@@ -15966,17 +16356,17 @@ Try {
                     break
                 }else{
                     $JobStatus=$JobDetail.JobState
-                    Write-LogDebug "[$workOn] Update Vol job status [$JobStatus]"
+                    Write-LogDebug "[$workOn] Remove CIFS server job status [$JobStatus]"
                     if($JobStatus -eq "failure"){
                         $JobCompletion=$JobDetail.JobCompletion
-                        Write-LogError "[$workOn] Vol creation failed [$JobCompletion]"
+                        Write-LogError "[$workOn] Remove CIFS server failed [$JobCompletion]"
                         break
                     }
                 }
                 $CurrentTime=Get-date
                 $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
                 if($TimeSpend -gt $Global:STOP_TIMEOUT){
-                    Write-LogWarn "[$workOn] Update Vol job take too much time. Check in Ontap its status"
+                    Write-LogWarn "[$workOn] Remove CIFS server take too much time. Check in Ontap its status"
                     $Timeout=$True
                 }
                 Start-Sleep 5
@@ -16010,7 +16400,7 @@ Try {
 	if ( $null -ne $out ) {
 		$out=Remove-NcVserver -Name $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar  -confirm:$False
 		if ( $? -ne $True ) {
-			Write-LogError "ERROR: Unable to Remove  vserver [$mySecondaryVserver] reason [$ErrorVar]" 
+			Write-LogError "ERROR: Unable to Remove vserver [$mySecondaryVserver] reason [$ErrorVar]" 
 			return $False
 		}
     }
@@ -17106,7 +17496,7 @@ Function update_cifs_usergroup (
 try{    
     #wait-debugger
     $Return = $True
-    Write-Log "[$workOn] Update CIFS Local User & Local Group"
+    Write-Log "[$workOn] Check CIFS Local User & Local Group"
     Write-LogDebug "[$myPrimaryVserver]: start"
     if($Backup -eq $True){Write-LogDebug "run in Backup mode [$myPrimaryVserver]"}
     if($Restore -eq $True){Write-LogDebug "run in Restore mode [$myPrimaryVserver]"}
@@ -17236,6 +17626,7 @@ try{
     }else{
         if(Test-Path $($Global:JsonPath+"Get-NcCifsServer.json")){
             $PrimaryCifs=Get-Content $($Global:JsonPath+"Get-NcCifsServer.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcCifsServer.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcCifsServer.json")
@@ -17296,6 +17687,7 @@ try{
     }else{
         if(Test-Path $($Global:JsonPath+"Get-NcCifsLocalUser.json")){
             $PrimaryUserList=Get-Content $($Global:JsonPath+"Get-NcCifsLocalUser.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcCifsLocalUser.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcCifsLocalUser.json")
@@ -17319,6 +17711,16 @@ try{
                 $UserDisabled=$User.Disabled
                 $UserDescription=$User.Description
                 $UserFullname=$User.FullName
+                if($Restore -eq $True){
+                    if(Test-Path $($Global:JsonPath+"Get-NcCifsServer.json")){
+                        $PrimaryCifsServer=Get-Content $($Global:JsonPath+"Get-NcCifsServer.json") -Raw | ConvertFrom-Json
+                        Write-LogDebug "$($Global:JsonPath+"Get-NcCifsServer.json") successfully imported"
+                    }else{
+                        $Return=$False
+                        $filepath=$($Global:JsonPath+"Get-NcCifsServer.json")
+                        Throw "ERROR: failed to read $filepath"
+                    }
+                }
                 if($PrimaryCifsServer -ne $SecondaryCifsServer){$UserName=$UserName -replace $PrimaryCifsServer,$SecondaryCifsServer}
                 if($UserFullname.length -eq 0 -or $UserFullname.count -eq 0){$UserFullname=""}
                 Write-LogDebug "Work on [$UserName] [$UserDisabled] [$UserDescription] [$UserFullname] from Primary "
@@ -17433,6 +17835,7 @@ try{
     }else{
         if(Test-Path $($Global:JsonPath+"Get-NcCifsLocalGroup.json")){
             $PrimaryGroupList=Get-Content $($Global:JsonPath+"Get-NcCifsLocalGroup.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcCifsLocalGroup.json") successfully imported"
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcCifsLocalGroup.json")
@@ -17500,6 +17903,7 @@ try{
                 $PrimaryGroupName_string=$PrimaryGroupName -replace "\\","_"
                 if(Test-Path $($Global:JsonPath+"Get-NcCifsLocalGroupMember-"+$PrimaryGroupName_string+".json")){
                     $PrimaryMemberList=Get-Content $($Global:JsonPath+"Get-NcCifsLocalGroupMember-"+$PrimaryGroupName_string+".json") -Raw | ConvertFrom-Json
+                    Write-LogDebug "$($Global:JsonPath+"Get-NcCifsLocalGroupMember-"+$PrimaryGroupName_string+".json") successfully imported"
                 }else{
                     $Return=$False
                     $filepath=$($Global:JsonPath+"Get-NcCifsLocalGroupMember-"+$PrimaryGroupName_string+".json")
@@ -19094,7 +19498,7 @@ Function create_subdir (
                 }else{
                     if(Test-Path $($Global:JsonPath+"Read-NcDirectory-"+$dir+".json")){
                         $PrimDirDetails=Get-Content $($Global:JsonPath+"Read-NcDirectory-"+$dir+".json") -Raw | ConvertFrom-Json
-                        
+                        Write-LogDebug "$($Global:JsonPath+"Read-NcDirectory-"+$dir+".json") successfully imported"
                         $PrimDirPerm=$PrimDirDetails.Perm
                         $PrimDirType=$PrimDirDetails.Type
                     }else{
@@ -20329,7 +20733,7 @@ Function Restore_Cifs_Symlink_from_Json (
         }
         
         $CifsSymlinkInfos=Get-Content $CIFSSYMLINKINFO_FILE -Raw | ConvertFrom-Json
-
+        
         foreach($CifsSymlink in $CifsSymlinkInfos){
             $SymlinkCifsPath=$CifsSymlink.CifsPath
             $SymlinkCifsServer=$NewCifsServerName
@@ -21201,6 +21605,7 @@ Function set_vol_options_from_voldb (
         if($Restore.IsPresent -or $Restore -eq $True){
             if(Test-Path $($Global:JsonPath+"Get-NcVserver.json")){
                 $PrimaryVserver=Get-Content $($Global:JsonPath+"Get-NcVserver.json") -Raw | ConvertFrom-Json
+                Write-LogDebug "$($Global:JsonPath+"Get-NcVserver.json") successfully imported"
             }else{
                 $Return=$False
                 $filepath=$($Global:JsonPath+"Get-NcVserver.json")
@@ -21208,6 +21613,7 @@ Function set_vol_options_from_voldb (
             }
             if(Test-Path $($Global:JsonPath+"Get-NcVol.json")){
                 $PrimaryVolumes=Get-Content $($Global:JsonPath+"Get-NcVol.json") -Raw | ConvertFrom-Json
+                Write-LogDebug "$($Global:JsonPath+"Get-NcVol.json") successfully imported"
             }else{
                 $Return=$False
                 $filepath=$($Global:JsonPath+"Get-NcVol.json")
@@ -21215,6 +21621,7 @@ Function set_vol_options_from_voldb (
             }
             if(Test-Path $($Global:JsonPath+"Get-NcSis.json")){
                 $PrimarySis=Get-Content $($Global:JsonPath+"Get-NcSis.json") -Raw | ConvertFrom-Json
+                Write-LogDebug "$($Global:JsonPath+"Get-NcSis.json") successfully imported"
             }else{
                 $Return=$False
                 $filepath=$($Global:JsonPath+"Get-NcSis.json")
@@ -22034,6 +22441,7 @@ Function restore_quota (
         $VolumeListToRestartQuota= @()
         if(Test-Path $($Global:JsonPath+"Get-NcVol.json")){
             $VolumeList=Get-Content $($Global:JsonPath+"Get-NcVol.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcVol.json") successfully imported"
         }else{
             $filepath=$($Global:JsonPath+"Get-NcVol.json")
             Write-LogDebug "ERROR: failed to read $filepath"
@@ -22041,6 +22449,7 @@ Function restore_quota (
         }
         if(Test-Path $($Global:JsonPath+"Get-NcQuotaPolicy.json")){
             $QuotaPolicyList=Get-Content $($Global:JsonPath+"Get-NcQuotaPolicy.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcQuotaPolicy.json") successfully imported"
         }else{
             $filepath=$($Global:JsonPath+"Get-NcQuotaPolicy.json")
             Write-LogDebug "ERROR: failed to read $filepath"
@@ -22048,6 +22457,7 @@ Function restore_quota (
         }
         if(Test-Path $($Global:JsonPath+"Get-NcQuota.json")){
             $QuotaRulesList=Get-Content $($Global:JsonPath+"Get-NcQuota.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcQuota.json") successfully imported"
         }else{
             $filepath=$($Global:JsonPath+"Get-NcQuota.json")
             Write-LogDebug "ERROR: failed to read $filepath"
@@ -22055,6 +22465,7 @@ Function restore_quota (
         }
         if(Test-Path $($Global:JsonPath+"Get-NcVserver.json")){
             $SourceVserver=Get-Content $($Global:JsonPath+"Get-NcVserver.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcVserver.json") successfully imported"
         }else{
             $filepath=$($Global:JsonPath+"Get-NcVserver.json")
             Write-LogDebug "ERROR: failed to read $filepath"
@@ -23125,6 +23536,7 @@ Function create_update_servicepolicy_dr(
         }else{
             if(Test-Path $($Global:JsonPath+"Get-NcNetServicePolicy.json")){
                 $PrimaryServicePolicies=Get-Content $($Global:JsonPath+"Get-NcNetServicePolicy.json") -Raw | ConvertFrom-Json
+                Write-LogDebug "$($Global:JsonPath+"Get-NcNetServicePolicy.json") successfully imported"
             }else{
                 $Return=$False
                 $filepath=$($Global:JsonPath+"Get-NcNetServicePolicy.json")
@@ -23199,6 +23611,7 @@ Function create_update_servicepolicy_dr(
                 }else{
                     if(Test-Path $($Global:JsonPath+"Get-RESTServicePolicy_Policy_"+$PolicyName+".json")){
                         $PrimaryServiceAllowedAddresses=Get-Content $($Global:JsonPath+"Get-RESTServicePolicy_Policy_"+$PolicyName+".json") -Raw | ConvertFrom-Json
+                        Write-LogDebug "$($Global:JsonPath+"Get-RESTServicePolicy_Policy_"+$PolicyName+".json") successfully imported"
                     }else{
                         $Return=$False
                         $filepath=$($Global:JsonPath+"Get-RESTServicePolicy_Policy_"+$PolicyName+".json")

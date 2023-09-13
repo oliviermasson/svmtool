@@ -2065,6 +2065,9 @@ function Remove-SvmDrSource {
         # Enables OnCommand Workflow Automation (WFA) Integration
         [switch]$WfaIntegration,
 
+        #Enables Force Delete source event if dest does not exists
+        [switch]$ForceDelete,
+
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
         [switch]$ForceZapi,

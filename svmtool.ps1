@@ -837,6 +837,9 @@ Param (
     [Parameter(Mandatory = $false, ParameterSetName = 'UpdateReverse')]
     [switch]$ForceDeleteQuota,
 
+    [Parameter(Mandatory = $true, ParameterSetName = 'DeleteSource')]
+    [switch]$ForceDelete,
+
     [Parameter(Mandatory = $false, ParameterSetName = 'CloneDR')]
     [Parameter(Mandatory = $false, ParameterSetName = 'UpdateDR')]
     [Parameter(Mandatory = $false, ParameterSetName = 'UpdateReverse')]
@@ -1227,6 +1230,11 @@ if($DeleteSource.IsPresent){
     $Global:DeleteSource=$true
 }else{
     $Global:DeleteSource=$False
+}
+if($ForceDelete.IsPresent){
+    $Global:ForceDelete=$true
+}else{
+    $Global:ForceDelete=$False
 }
 if($DeleteDestShares.IsPresent){
     $Global:DeleteDestShares=$True
@@ -1657,6 +1665,11 @@ if ( $Backup ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$Backup]" 
         clean_and_exit 1
     }
+
+    $Global:OntapPrimaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $myPrimaryController)[0].VersionTuple.Generation)+','+[string]((Get-NcSystemVersionInfo -Controller $myPrimaryController)[0].VersionTuple.Major)))
+    $PrimaryVersion=(Get-NcSystemVersionInfo -Controller $myPrimaryController)[0].VersionTuple | Join-String
+    Write-LogDebug "ONTAP Version       [$PrimaryVersion]"  
+
     check_create_dir -FullPath $LOGFILE -Vserver $Vserver | Out-Null
     Write-Log "[$Vserver] Log File is [$LOGFILE]"
     $Global:SVMTOOL_DB = $SVMTOOL_DB
@@ -2145,6 +2158,11 @@ if ( $Restore ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$Destination]" 
         clean_and_exit 1
     }
+
+    $Global:OntapSecondaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $DestinationController)[0].VersionTuple.Generation)+','+[string]((Get-NcSystemVersionInfo -Controller $DestinationController)[0].VersionTuple.Major)))
+    $SecondaryVersion=(Get-NcSystemVersionInfo -Controller $DestinationController)[0].VersionTuple | Join-String
+    Write-LogDebug "ONTAP Version       [$SecondaryVersion]"
+
     if ($RESTOREALLSVM -eq $True) {
         if ($null -eq ($ALLSVM = (Get-ChildItem $SVMTOOL_DB).Name)) {
             $Return = $False ; throw "ERROR: Get-ChildItem failed for [$SVMTOOL_DB]`nERROR: no Backup available"
@@ -2834,12 +2852,18 @@ if ( $RestoreObject ){
         Write-LogError "ERROR: Unable to Connect to NcController [$RESTORE_SRC_CLUSTER]" 
         clean_and_exit 1
     }
+    $Global:OntapPrimaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $NcPrimaryCtrl)[0].VersionTuple.Generation)+','+[string]((Get-NcSystemVersionInfo -Controller $NcPrimaryCtrl)[0].VersionTuple.Major)))
+    $PrimaryVersion=(Get-NcSystemVersionInfo -Controller $NcPrimaryCtrl)[0].VersionTuple | Join-String
+
     $myCred = get_local_cDotcred ($RESTORE_DST_CLUSTER) 
     Write-LogDebug "connect_cluster -myController $RESTORE_DST_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout"
     if ( ( $NcSecondaryCtrl = connect_cluster -myController $RESTORE_DST_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$RESTORE_DST_CLUSTER]" 
         clean_and_exit 1
-    } 
+    }
+    $Global:OntapSecondaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Generation)+','+[string]((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Major)))
+    $SecondaryVersion=(Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple | Join-String
+    
 
     # if restore volumes to Origin, force restore volumes as RW volumes
     if ($RW -eq $True) {
@@ -3032,7 +3056,7 @@ Write-LogDebug "QUOTA DR                            [$Global:AllowQuotaDr]"
 Write-LogDebug "SVMTOOL DB                          [$Global:SVMTOOL_DB]"
 Write-LogDebug "OPTION IgnoreQuotaOff               [$Global:IgnoreQuotaOff]"
 Write-LogDebug "OPTION CorrectQuotaError            [$Global:CorrectQuotaError]"
-Write-LogDebug "OPTION ForceDelete                  [$Global:ForceDeleteQuota]"
+Write-LogDebug "OPTION ForceDeleteQuota             [$Global:ForceDeleteQuota]"
 Write-LogDebug "OPTION ForceActivate                [$Global:ForceActivate]"
 Write-LogDebug "OPTION ForceRecreate                [$Global:ForceRecreate]"
 Write-LogDebug "OPTION ForceRestart                 [$Global:ForceRestart]"
@@ -3041,6 +3065,7 @@ Write-LogDebug "OPTION AlwaysChooseDataAggr         [$Global:AlwaysChooseDataAgg
 Write-LogDebug "OPTION SelectVolume                 [$Global:SelectVolume]"
 Write-LogDebug "OPTION IgnoreQtreeExportPolicy      [$Global:IgnoreQtreeExportPolicy]"
 Write-LogDebug "OPTION DeleteDestShares             [$Global:DeleteDestShares]"
+Write-LogDebug "OPTION ForceDelete                  [$Global:ForceDelete]"
 ####################################################################################################
 
 if ( $ShowDR ) {
@@ -3473,12 +3498,13 @@ if ( $DeleteSource ) {
     $DestState = $DestVserver.State
     Write-LogDebug "[$VserverDR] state [$DestState]"
 
-    if ($SourceState -ne "stopped" -or $DestState -ne "running") {
+    if ( ($SourceState -ne "stopped" -or $DestState -ne "running") -and $Global:ForceDelete -eq $False) {
         Write-LogError "ERROR : SVM [$Vserver] not correctly migrated to destination [$SecondaryClusterName]. Failed to delete on source"
         clean_and_exit 1
     }
     else {
         Write-LogWarn "[$Vserver] Delete Source SVM cannot be interrupted or rolled back"
+        Write-LogWarn "[$Vserver] SVM must already be in stopped state"
         $ASK_WAIT = Read-HostOptions -question "Do you want to completely delete [$Vserver] on [$PrimaryClusterName] ?" -options "y/n" -default "y"
         if ($ASK_WAIT -eq 'y'){
             if ( ( $ret = remove_snapmirror_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR) -ne $True ) {
@@ -3505,7 +3531,7 @@ if ( $DeleteSource ) {
             Write-Log "[$Vserver] will be deleted on cluster [$PrimaryClusterName]"
             Write-LogDebug "remove_vserver_source -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $Vserver"
             if ( ( $ret = remove_vserver_source -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $Vserver ) -eq $False ) {
-                Write-LogError "ERROR: remove_vserver_dr: Unable to remove vserver [$VserverDR]" 
+                Write-LogError "ERROR: Unable to remove vserver [$VserverDR]" 
                 clean_and_exit 1
             }
 
