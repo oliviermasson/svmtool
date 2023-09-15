@@ -14,7 +14,6 @@ filter Skip-Null { $_|Where-Object{ $_ -ne $null } }
 
 #############################################################################################
 $Global:MOUNT_RETRY_COUNT = 100
-$Global:VOLUME_TYPE="DP"
 $WarningPreference="SilentlyContinue"
 
 #############################################################################################
@@ -358,8 +357,10 @@ function Write-LogDebug ([string]$mess) {
     } 
     $stack=Get-PSCallStack
     $caller1=$stack[1].Command
+    $lineCaller1=$stack[1].ScriptLineNumber
     $caller2=$stack[2].Command
-    $mess=$($caller2+":"+$caller1+":"+$mess)
+    $lineCaller2=$stack[2].ScriptLineNumber
+    $mess=$($caller2+"("+$lineCaller2+"):"+$caller1+"("+$lineCaller1+"):"+$mess)
     $Global:ConsoleLog.Debug($mess)
     #write-host $mess
 }
@@ -4199,7 +4200,7 @@ Function create_update_qospolicy_dr(
                                     # if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcQosPolicyGroup failed [$ErrorVar]" }
                                     # if($null -eq $ExistingQOS){
                                         Write-LogDebug "New-NcQosPolicyGroup -Name $QosPolicyGroupName -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -Vserver $mySecondaryVserver -controller $mySecondaryController"
-                                        New-NcQosPolicyGroup -Name $QosPolicyGroupName -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -Vserver $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar 
+                                        $out=New-NcQosPolicyGroup -Name $QosPolicyGroupName -MaxThroughput $PrimaryQosGroupMaxThroughput -MinThroughput $PrimaryQosGroupMinThroughput -IsShared $PrimaryQosGroupIsShared -Vserver $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar 
                                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcQosPolicyGroup failed [$ErrorVar]" }
                                     # }
                                 }
@@ -4765,11 +4766,11 @@ Try {
                         }
                     }
                     $PrimaryJobScheduleDescription = if($null -eq $cron.JobScheduleDescription){""}else{$cron.JobScheduleDescription}
-                    $PrimaryJobScheduleCronMonth = if($null -eq $cron.JobScheduleCronMonth){""}else{$cron.JobScheduleCronMonth}
-                    $PrimaryJobScheduleCronDayOfWeek = if($null -eq $cron.JobScheduleCronDayOfWeek){""}else{$cron.JobScheduleCronDayOfWeek}
-                    $PrimaryJobScheduleCronDay = if($null -eq $cron.JobScheduleCronDay){""}else{$cron.JobScheduleCronDay}
-                    $PrimaryJobScheduleCronHour = if($null -eq $cron.JobScheduleCronHour){""}else{$cron.JobScheduleCronHour}
-                    $PrimaryJobScheduleCronMinute = if($null -eq $cron.JobScheduleCronMinute){""}else{$cron.JobScheduleCronMinute}
+                    $PrimaryJobScheduleCronMonth = if($null -eq $cron.JobScheduleCronMonth){"";$PrimaryJobScheduleCronMonth_string=""}else{$cron.JobScheduleCronMonth;$PrimaryJobScheduleCronMonth_string=$cron.JobScheduleCronMonth | out-string}
+                    $PrimaryJobScheduleCronDayOfWeek = if($null -eq $cron.JobScheduleCronDayOfWeek){"";$PrimaryJobScheduleCronDayOfWeek_string=""}else{$cron.JobScheduleCronDayOfWeek;$PrimaryJobScheduleCronDayOfWeek_string=$cron.JobScheduleCronMonth | out-string}
+                    $PrimaryJobScheduleCronDay = if($null -eq $cron.JobScheduleCronDay){"";$PrimaryJobScheduleCronDay_string=""}else{$cron.JobScheduleCronDay;$PrimaryJobScheduleCronDay_string=$cron.JobScheduleCronMonth | out-string}
+                    $PrimaryJobScheduleCronHour = if($null -eq $cron.JobScheduleCronHour){"";$PrimaryJobScheduleCronHour_string=""}else{$cron.JobScheduleCronHour;$PrimaryJobScheduleCronHour_string=$cron.JobScheduleCronMonth | out-string}
+                    $PrimaryJobScheduleCronMinute = if($null -eq $cron.JobScheduleCronMinute){"";$PrimaryJobScheduleCronMinute_string=""}else{$cron.JobScheduleCronMinute;$PrimaryJobScheduleCronMinute_string=$cron.JobScheduleCronMonth | out-string}
                 }else{
                     if($Restore -eq $False){
                         Write-LogDebug "Get-NcJobIntervalSchedule -Name $PrimaryJobScheduleName -Controller $myPrimaryController -JobScheduleCluster $PrimaryName"
@@ -4795,10 +4796,10 @@ Try {
                         }
                     }
                     $PrimaryJobScheduleDescription = if($null -eq $interval.JobScheduleDescription){""}else{$interval.JobScheduleDescription}
-                    $PrimaryJobScheduleIntervalSeconds = if($null -eq $interval.JobScheduleIntervalSeconds){""}else{$interval.JobScheduleIntervalSeconds}
-                    $PrimaryJobScheduleIntervalDays = if($null -eq $interval.JobScheduleIntervalDays){""}else{$interval.JobScheduleIntervalDays}
-                    $PrimaryJobScheduleIntervalHours = if($null -eq $interval.JobScheduleIntervalHours){""}else{$interval.JobScheduleIntervalHours}
-                    $PrimaryJobScheduleIntervalMinutes = if($null -eq $interval.JobScheduleIntervalMinutes){""}else{$interval.JobScheduleIntervalMinutes}
+                    $PrimaryJobScheduleIntervalSeconds = if($null -eq $interval.JobScheduleIntervalSeconds){"";$PrimaryJobScheduleIntervalSeconds_string=""}else{$interval.JobScheduleIntervalSeconds;$PrimaryJobScheduleIntervalSeconds_string=$interval.JobScheduleIntervalSeconds |out-string}
+                    $PrimaryJobScheduleIntervalDays = if($null -eq $interval.JobScheduleIntervalDays){"";$PrimaryJobScheduleIntervalDays_string=""}else{$interval.JobScheduleIntervalDays;$PrimaryJobScheduleIntervalDays_string=$interval.JobScheduleIntervalSeconds |out-string}
+                    $PrimaryJobScheduleIntervalHours = if($null -eq $interval.JobScheduleIntervalHours){"";$PrimaryJobScheduleIntervalHours_string=""}else{$interval.JobScheduleIntervalHours;$PrimaryJobScheduleIntervalHours_string=$interval.JobScheduleIntervalSeconds |out-string}
+                    $PrimaryJobScheduleIntervalMinutes = if($null -eq $interval.JobScheduleIntervalMinutes){"";$PrimaryJobScheduleIntervalMinutes_string=""}else{$interval.JobScheduleIntervalMinutes;$PrimaryJobScheduleIntervalMinutes_string=$interval.JobScheduleIntervalSeconds |out-string}
                     if($Global:PSTKCall -eq "Rest"){
                         $PrimaryJobScheduleInterval = $interval.Interval
                     }
@@ -4811,11 +4812,11 @@ Try {
                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcJobCronSchedule failed [$ErrorVar]" }
                         if($null -ne $SecondarySchedule){
                             $SecondaryJobScheduleDescription = if($null -eq $SecondarySchedule.JobScheduleDescription){""}else{$SecondarySchedule.JobScheduleDescription}
-                            $SecondaryJobScheduleCronMonth = if($null -eq $SecondarySchedule.JobScheduleCronMonth){""}else{$SecondarySchedule.JobScheduleCronMonth}
-                            $SecondaryJobScheduleCronDayOfWeek = if($null -eq $SecondarySchedule.JobScheduleCronDayOfWeek){""}else{$SecondarySchedule.JobScheduleCronDayOfWeek}
-                            $SecondaryJobScheduleCronDay = if($null -eq $SecondarySchedule.JobScheduleCronDay){""}else{$SecondarySchedule.JobScheduleCronDay}
-                            $SecondaryJobScheduleCronHour = if($null -eq $SecondarySchedule.JobScheduleCronHour){""}else{$SecondarySchedule.JobScheduleCronHour}
-                            $SecondaryJobScheduleCronMinute = if($null -eq $SecondarySchedule.JobScheduleCronMinute){""}else{$SecondarySchedule.JobScheduleCronMinute}
+                            $SecondaryJobScheduleCronMonth = if($null -eq $SecondarySchedule.JobScheduleCronMonth){"";$SecondaryJobScheduleCronMonth_string=""}else{$SecondarySchedule.JobScheduleCronMonth;$SecondaryJobScheduleCronMonth_string=$SecondarySchedule.JobScheduleCronMonth | out-string}
+                            $SecondaryJobScheduleCronDayOfWeek = if($null -eq $SecondarySchedule.JobScheduleCronDayOfWeek){"";$SecondaryJobScheduleCronDayOfWeek_string=""}else{$SecondarySchedule.JobScheduleCronDayOfWeek;$SecondaryJobScheduleCronDayOfWeek_string=$SecondarySchedule.JobScheduleCronMonth | out-string}
+                            $SecondaryJobScheduleCronDay = if($null -eq $SecondarySchedule.JobScheduleCronDay){"";$SecondaryJobScheduleCronDay_string=""}else{$SecondarySchedule.JobScheduleCronDay;$SecondaryJobScheduleCronDay_string=$SecondarySchedule.JobScheduleCronMonth | out-string}
+                            $SecondaryJobScheduleCronHour = if($null -eq $SecondarySchedule.JobScheduleCronHour){"";$SecondaryJobScheduleCronHour_string=""}else{$SecondarySchedule.JobScheduleCronHour;$SecondaryJobScheduleCronHour_string=$SecondarySchedule.JobScheduleCronMonth | out-string}
+                            $SecondaryJobScheduleCronMinute = if($null -eq $SecondarySchedule.JobScheduleCronMinute){"";$SecondaryJobScheduleCronMinute_string=""}else{$SecondarySchedule.JobScheduleCronMinute;$SecondaryJobScheduleCronMinute_string=$SecondarySchedule.JobScheduleCronMonth | out-string}
                         }
                     }else{
                         Write-LogDebug "Get-NcJobIntervalSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController  -ErrorVariable ErrorVar"
@@ -4828,11 +4829,6 @@ Try {
                         if($Global:PSTKCall -ne "Rest"){
                             if ( $PrimaryJobScheduleDescription -ne $SecondaryJobScheduleDescription ) {
                                 if($PrimaryJobScheduleType -eq "cron"){
-                                    $PrimaryJobScheduleCronMonth = if("" -eq $cron.JobScheduleCronMonth){$null}else{$cron.JobScheduleCronMonth}
-                                    $PrimaryJobScheduleCronDayOfWeek = if("" -eq $cron.JobScheduleCronDayOfWeek){$null}else{$cron.JobScheduleCronDayOfWeek}
-                                    $PrimaryJobScheduleCronDay = if("" -eq $cron.JobScheduleCronDay){$null}else{$cron.JobScheduleCronDay}
-                                    $PrimaryJobScheduleCronHour = if("" -eq $cron.JobScheduleCronHour){$null}else{$cron.JobScheduleCronHour}
-                                    $PrimaryJobScheduleCronMinute = if("" -eq $cron.JobScheduleCronMinute){$null}else{$cron.JobScheduleCronMinute}
                                     if($Global:PSTKCall -eq "Zapi"){
                                         Write-LogDebug "Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -JobScheduleCluster $SecondaryName"
                                         $out=Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar
@@ -4843,10 +4839,6 @@ Try {
                                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobCronSchedule failed [$ErrorVar]" }
                                     }
                                 }else{
-                                    $PrimaryJobScheduleIntervalSeconds = if("" -eq $interval.JobScheduleIntervalSeconds){$null}else{$interval.JobScheduleIntervalSeconds}
-                                    $PrimaryJobScheduleIntervalDays = if("" -eq $interval.JobScheduleIntervalDays){$null}else{$interval.JobScheduleIntervalDays}
-                                    $PrimaryJobScheduleIntervalHours = if("" -eq $interval.JobScheduleIntervalHours){$null}else{$interval.JobScheduleIntervalHours}
-                                    $PrimaryJobScheduleIntervalMinutes = if("" -eq $interval.JobScheduleIntervalMinutes){$null}else{$interval.JobScheduleIntervalMinutes}
                                     Write-LogDebug "Set-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar"
                                     $out=Set-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar
                                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobIntervalSchedule failed [$ErrorVar]" }
@@ -4860,19 +4852,11 @@ Try {
                                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobIntervalSchedule failed [$ErrorVar]" }
                                 }
                             }else{
-                                if($PrimaryJobScheduleCronMonth -ne $SecondaryJobScheduleCronMonth `
-                                -or $PrimaryJobScheduleCronDayOfWeek -ne $SecondaryJobScheduleCronDayOfWeek `
-                                -or $PrimaryJobScheduleCronDay -ne $SecondaryJobScheduleCronDay `
-                                -or $PrimaryJobScheduleCronHour -ne $SecondaryJobScheduleCronHour `
-                                -or $PrimaryJobScheduleCronMinute -ne $SecondaryJobScheduleCronMinute){
-                                    <# $PrimaryJobScheduleCronMonth = if("" -eq $cron.JobScheduleCronMonth){$null}else{$cron.JobScheduleCronMonth}
-                                    $PrimaryJobScheduleCronDayOfWeek = if("" -eq $cron.JobScheduleCronDayOfWeek){$null}else{$cron.JobScheduleCronDayOfWeek}
-                                    $PrimaryJobScheduleCronDay = if("" -eq $cron.JobScheduleCronDay){$null}else{$cron.JobScheduleCronDay}
-                                    $PrimaryJobScheduleCronHour = if("" -eq $cron.JobScheduleCronHour){$null}else{$cron.JobScheduleCronHour}
-                                    $PrimaryJobScheduleCronMinute = if("" -eq $cron.JobScheduleCronMinute){$null}else{$cron.JobScheduleCronMinute}
-                                    Write-LogDebug "Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar"
-                                    $out=Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar
-                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobCronSchedule failed [$ErrorVar]" } #>
+                                if($PrimaryJobScheduleCronMonth_string -ne $SecondaryJobScheduleCronMonth_string `
+                                -or $PrimaryJobScheduleCronDayOfWeek_string -ne $SecondaryJobScheduleCronDayOfWeek_string `
+                                -or $PrimaryJobScheduleCronDay_string -ne $SecondaryJobScheduleCronDay_string `
+                                -or $PrimaryJobScheduleCronHour_string -ne $SecondaryJobScheduleCronHour_string `
+                                -or $PrimaryJobScheduleCronMinute_string -ne $SecondaryJobScheduleCronMinute_string){
                                     $SecondaryScheduleUuid=$SecondarySchedule.Uuid
                                     $url=$("https://"+$mySecondaryController.Name+"/api/cluster/schedules/"+$SecondaryScheduleUuid)
                                     $CredSecondary=get_local_cDotcred($mySecondaryController)
@@ -4903,13 +4887,10 @@ Try {
                             }
                         }
                     } else {
-                        if($Global:PSTKCall -ne "Rest"){
+                        #! do not add any new job schedule in cluster scope
+                        Write-LogDebug "do not add any new job schedule in cluster scope"
+                        <# if($Global:PSTKCall -ne "Rest"){
                             if($PrimaryJobScheduleType -eq "cron"){
-                                $PrimaryJobScheduleCronMonth = if("" -eq $cron.JobScheduleCronMonth){$null}else{$cron.JobScheduleCronMonth}
-                                $PrimaryJobScheduleCronDayOfWeek = if("" -eq $cron.JobScheduleCronDayOfWeek){$null}else{$cron.JobScheduleCronDayOfWeek}
-                                $PrimaryJobScheduleCronDay = if("" -eq $cron.JobScheduleCronDay){$null}else{$cron.JobScheduleCronDay}
-                                $PrimaryJobScheduleCronHour = if("" -eq $cron.JobScheduleCronHour){$null}else{$cron.JobScheduleCronHour}
-                                $PrimaryJobScheduleCronMinute = if("" -eq $cron.JobScheduleCronMinute){$null}else{$cron.JobScheduleCronMinute}
                                 if($Global:PSTKCall -eq "Zapi"){
                                     Write-LogDebug "Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar"
                                     $out=Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar -ErrorAction SilentlyContinue
@@ -4918,10 +4899,6 @@ Try {
                                     $out=Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar -ErrorAction SilentlyContinue -ONTAPI
                                 }
                             }else{
-                                $PrimaryJobScheduleIntervalSeconds = if("" -eq $interval.JobScheduleIntervalSeconds){$null}else{$interval.JobScheduleIntervalSeconds}
-                                $PrimaryJobScheduleIntervalDays = if("" -eq $interval.JobScheduleIntervalDays){$null}else{$interval.JobScheduleIntervalDays}
-                                $PrimaryJobScheduleIntervalHours = if("" -eq $interval.JobScheduleIntervalHours){$null}else{$interval.JobScheduleIntervalHours}
-                                $PrimaryJobScheduleIntervalMinutes = if("" -eq $interval.JobScheduleIntervalMinutes){$null}else{$interval.JobScheduleIntervalMinutes}
                                 Write-LogDebug "Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar"
                                 $out=Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar -ErrorAction SilentlyContinue
                             }
@@ -4930,14 +4907,6 @@ Try {
                                 Write-LogDebug "Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Interval $PrimaryJobScheduleInterval -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar"
                                 $out=Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Interval $PrimaryJobScheduleInterval -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar -ErrorAction SilentlyContinue
                             }else{
-                                <# $PrimaryJobScheduleCronMonth = if("" -eq $cron.JobScheduleCronMonth){$null}else{$cron.JobScheduleCronMonth}
-                                $PrimaryJobScheduleCronDayOfWeek = if("" -eq $cron.JobScheduleCronDayOfWeek){$null}else{$cron.JobScheduleCronDayOfWeek}
-                                $PrimaryJobScheduleCronDay = if("" -eq $cron.JobScheduleCronDay){$null}else{$cron.JobScheduleCronDay}
-                                $PrimaryJobScheduleCronHour = if("" -eq $cron.JobScheduleCronHour){$null}else{$cron.JobScheduleCronHour}
-                                $PrimaryJobScheduleCronMinute = if("" -eq $cron.JobScheduleCronMinute){$null}else{$cron.JobScheduleCronMinute}
-                                Write-LogDebug "Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar"
-                                $out=Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar -ErrorAction SilentlyContinue #>
-                                #$SecondaryScheduleUuid=$SecondarySchedule.Uuid
                                 $url=$("https://"+$mySecondaryController.Name+"/api/cluster/schedules/")
                                 $CredSecondary=get_local_cDotcred($mySecondaryController)
                                 $body=@{"cron"=@{}}
@@ -4966,7 +4935,7 @@ Try {
                                     Write-LogError "ERROR: post request [$url] reason [$ErrorVar]"
                                 }
                             }
-                        }
+                        } #>
                     }
                 }
             }
@@ -5025,11 +4994,12 @@ Try {
                             }
                         }
                         $PrimaryJobScheduleDescription = if($null -eq $cron.JobScheduleDescription){""}else{$cron.JobScheduleDescription}
-                        $PrimaryJobScheduleCronMonth = if($null -eq $cron.JobScheduleCronMonth){""}else{$cron.JobScheduleCronMonth}
-                        $PrimaryJobScheduleCronDayOfWeek = if($null -eq $cron.JobScheduleCronDayOfWeek){""}else{$cron.JobScheduleCronDayOfWeek}
-                        $PrimaryJobScheduleCronDay = if($null -eq $cron.JobScheduleCronDay){""}else{$cron.JobScheduleCronDay}
-                        $PrimaryJobScheduleCronHour = if($null -eq $cron.JobScheduleCronHour){""}else{$cron.JobScheduleCronHour}
-                        $PrimaryJobScheduleCronMinute = if($null -eq $cron.JobScheduleCronMinute){""}else{$cron.JobScheduleCronMinute}
+                        $PrimaryJobScheduleCronMonth = if($null -eq $cron.JobScheduleCronMonth){"";$PrimaryJobScheduleCronMonth_string=""}else{$cron.JobScheduleCronMonth;$PrimaryJobScheduleCronMonth_string=$cron.JobScheduleCronMonth | out-string}
+                        $PrimaryJobScheduleCronDayOfWeek = if($null -eq $cron.JobScheduleCronDayOfWeek){"";$PrimaryJobScheduleCronDayOfWeek_string=""}else{$cron.JobScheduleCronDayOfWeek;$PrimaryJobScheduleCronDayOfWeek_string=$cron.JobScheduleCronMonth | out-string}
+                        $PrimaryJobScheduleCronDay = if($null -eq $cron.JobScheduleCronDay){"";$PrimaryJobScheduleCronDay_string=""}else{$cron.JobScheduleCronDay;$PrimaryJobScheduleCronDay_string=$cron.JobScheduleCronMonth | out-string}
+                        $PrimaryJobScheduleCronHour = if($null -eq $cron.JobScheduleCronHour){"";$PrimaryJobScheduleCronHour_string=""}else{$cron.JobScheduleCronHour;$PrimaryJobScheduleCronHour_string=$cron.JobScheduleCronMonth | out-string}
+                        $PrimaryJobScheduleCronMinute = if($null -eq $cron.JobScheduleCronMinute){"";$PrimaryJobScheduleCronMinute_string=""}else{$cron.JobScheduleCronMinute;$PrimaryJobScheduleCronMinute_string=$cron.JobScheduleCronMonth | out-string}
+
                     }else{
                         if($Restore -eq $False){
                             Write-LogDebug "Get-NcJobIntervalSchedule -Name $PrimaryJobScheduleName -Controller $myPrimaryController -VserverContext $myPrimaryVserver"
@@ -5054,10 +5024,11 @@ Try {
                             }
                         }
                         $PrimaryJobScheduleDescription = if($null -eq $interval.JobScheduleDescription){""}else{$interval.JobScheduleDescription}
-                        $PrimaryJobScheduleIntervalSeconds = if($null -eq $interval.JobScheduleIntervalSeconds){""}else{$interval.JobScheduleIntervalSeconds}
-                        $PrimaryJobScheduleIntervalDays = if($null -eq $interval.JobScheduleIntervalDays){""}else{$interval.JobScheduleIntervalDays}
-                        $PrimaryJobScheduleIntervalHours = if($null -eq $interval.JobScheduleIntervalHours){""}else{$interval.JobScheduleIntervalHours}
-                        $PrimaryJobScheduleIntervalMinutes = if($null -eq $interval.JobScheduleIntervalMinutes){""}else{$interval.JobScheduleIntervalMinutes}
+                        $PrimaryJobScheduleIntervalSeconds = if($null -eq $interval.JobScheduleIntervalSeconds){"";$PrimaryJobScheduleIntervalSeconds_string=""}else{$interval.JobScheduleIntervalSeconds;$PrimaryJobScheduleIntervalSeconds_string=$interval.JobScheduleIntervalSeconds |out-string}
+                        $PrimaryJobScheduleIntervalDays = if($null -eq $interval.JobScheduleIntervalDays){"";$PrimaryJobScheduleIntervalDays_string=""}else{$interval.JobScheduleIntervalDays;$PrimaryJobScheduleIntervalDays_string=$interval.JobScheduleIntervalSeconds |out-string}
+                        $PrimaryJobScheduleIntervalHours = if($null -eq $interval.JobScheduleIntervalHours){"";$PrimaryJobScheduleIntervalHours_string=""}else{$interval.JobScheduleIntervalHours;$PrimaryJobScheduleIntervalHours_string=$interval.JobScheduleIntervalSeconds |out-string}
+                        $PrimaryJobScheduleIntervalMinutes = if($null -eq $interval.JobScheduleIntervalMinutes){"";$PrimaryJobScheduleIntervalMinutes_string=""}else{$interval.JobScheduleIntervalMinutes;$PrimaryJobScheduleIntervalMinutes_string=$interval.JobScheduleIntervalSeconds |out-string}
+
                         if($Global:PSTKCall -eq "Rest"){
                             $PrimaryJobScheduleInterval = $interval.Interval
                         }
@@ -5070,11 +5041,12 @@ Try {
                             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcJobCronSchedule failed [$ErrorVar]" }
                             if($null -ne $SecondarySchedule){
                                 $SecondaryJobScheduleDescription = if($null -eq $SecondarySchedule.JobScheduleDescription){""}else{$SecondarySchedule.JobScheduleDescription}
-                                $SecondaryJobScheduleCronMonth = if($null -eq $SecondarySchedule.JobScheduleCronMonth){""}else{$SecondarySchedule.JobScheduleCronMonth}
-                                $SecondaryJobScheduleCronDayOfWeek = if($null -eq $SecondarySchedule.JobScheduleCronDayOfWeek){""}else{$SecondarySchedule.JobScheduleCronDayOfWeek}
-                                $SecondaryJobScheduleCronDay = if($null -eq $SecondarySchedule.JobScheduleCronDay){""}else{$SecondarySchedule.JobScheduleCronDay}
-                                $SecondaryJobScheduleCronHour = if($null -eq $SecondarySchedule.JobScheduleCronHour){""}else{$SecondarySchedule.JobScheduleCronHour}
-                                $SecondaryJobScheduleCronMinute = if($null -eq $SecondarySchedule.JobScheduleCronMinute){""}else{$SecondarySchedule.JobScheduleCronMinute}
+                                $SecondaryJobScheduleCronMonth = if($null -eq $SecondarySchedule.JobScheduleCronMonth){"";$SecondaryJobScheduleCronMonth_string=""}else{$SecondarySchedule.JobScheduleCronMonth;$SecondaryJobScheduleCronMonth_string=$SecondarySchedule.JobScheduleCronMonth | out-string}
+                                $SecondaryJobScheduleCronDayOfWeek = if($null -eq $SecondarySchedule.JobScheduleCronDayOfWeek){"";$SecondaryJobScheduleCronDayOfWeek_string=""}else{$SecondarySchedule.JobScheduleCronDayOfWeek;$SecondaryJobScheduleCronDayOfWeek_string=$SecondarySchedule.JobScheduleCronMonth | out-string}
+                                $SecondaryJobScheduleCronDay = if($null -eq $SecondarySchedule.JobScheduleCronDay){"";$SecondaryJobScheduleCronDay_string=""}else{$SecondarySchedule.JobScheduleCronDay;$SecondaryJobScheduleCronDay_string=$SecondarySchedule.JobScheduleCronMonth | out-string}
+                                $SecondaryJobScheduleCronHour = if($null -eq $SecondarySchedule.JobScheduleCronHour){"";$SecondaryJobScheduleCronHour_string=""}else{$SecondarySchedule.JobScheduleCronHour;$SecondaryJobScheduleCronHour_string=$SecondarySchedule.JobScheduleCronMonth | out-string}
+                                $SecondaryJobScheduleCronMinute = if($null -eq $SecondarySchedule.JobScheduleCronMinute){"";$SecondaryJobScheduleCronMinute_string=""}else{$SecondarySchedule.JobScheduleCronMinute;$SecondaryJobScheduleCronMinute_string=$SecondarySchedule.JobScheduleCronMonth | out-string}
+
                             }
                         }else{
                             Write-LogDebug "Get-NcJobIntervalSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController  -ErrorVariable ErrorVar  -VserverContext $mySecondaryVserver"
@@ -5120,11 +5092,11 @@ Try {
                                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcJobIntervalSchedule failed [$ErrorVar]" }
                                     }
                                 }else{
-                                    if($PrimaryJobScheduleCronMonth -ne $SecondaryJobScheduleCronMonth `
-                                    -or $PrimaryJobScheduleCronDayOfWeek -ne $SecondaryJobScheduleCronDayOfWeek `
-                                    -or $PrimaryJobScheduleCronDay -ne $SecondaryJobScheduleCronDay `
-                                    -or $PrimaryJobScheduleCronHour -ne $SecondaryJobScheduleCronHour `
-                                    -or $PrimaryJobScheduleCronMinute -ne $SecondaryJobScheduleCronMinute){
+                                    if($PrimaryJobScheduleCronMonth_string -ne $SecondaryJobScheduleCronMonth_string `
+                                    -or $PrimaryJobScheduleCronDayOfWeek_string -ne $SecondaryJobScheduleCronDayOfWeek_string `
+                                    -or $PrimaryJobScheduleCronDay_string -ne $SecondaryJobScheduleCronDay_string `
+                                    -or $PrimaryJobScheduleCronHour_string -ne $SecondaryJobScheduleCronHour_string `
+                                    -or $PrimaryJobScheduleCronMinute_string -ne $SecondaryJobScheduleCronMinute_string){
                                         
                                         $SecondaryScheduleUuid=$SecondarySchedule.Uuid
                                         $url=$("https://"+$mySecondaryController.Name+"/api/cluster/schedules/"+$SecondaryScheduleUuid)
@@ -5156,7 +5128,7 @@ Try {
                                     }
                                 }
                             }
-                        } else {
+                        }else{
                             if($Global:PSTKCall -ne "Rest"){
                                 if($PrimaryJobScheduleType -eq "cron"){
                                     $PrimaryJobScheduleCronMonth = if("" -eq $cron.JobScheduleCronMonth){$null}else{$cron.JobScheduleCronMonth}
@@ -5188,15 +5160,6 @@ Try {
                                     $out=Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Interval $PrimaryJobScheduleInterval -ErrorVariable ErrorVar -ErrorAction SilentlyContinue -VserverContext $mySecondaryVserver
                                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcJobIntervalSchedule failed [$ErrorVar]" }
                                 }else{
-                                    $PrimaryJobScheduleCronMonth = if("" -eq $cron.JobScheduleCronMonth){$null}else{$cron.JobScheduleCronMonth}
-                                    $PrimaryJobScheduleCronDayOfWeek = if("" -eq $cron.JobScheduleCronDayOfWeek){$null}else{$cron.JobScheduleCronDayOfWeek}
-                                    $PrimaryJobScheduleCronDay = if("" -eq $cron.JobScheduleCronDay){$null}else{$cron.JobScheduleCronDay}
-                                    $PrimaryJobScheduleCronHour = if("" -eq $cron.JobScheduleCronHour){$null}else{$cron.JobScheduleCronHour}
-                                    $PrimaryJobScheduleCronMinute = if("" -eq $cron.JobScheduleCronMinute){$null}else{$cron.JobScheduleCronMinute}
-                                    <# Write-LogDebug "Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -ErrorVariable ErrorVar -VserverContext $mySecondaryVserver"
-                                    $out=Add-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -ErrorAction SilentlyContinue -VserverContext $mySecondaryVserver
-                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Add-NcJobCronSchedule failed [$ErrorVar]" } #>
-                                    #$SecondaryScheduleUuid=$SecondarySchedule.Uuid
                                     $url=$("https://"+$mySecondaryController.Name+"/api/cluster/schedules/")
                                     $CredSecondary=get_local_cDotcred($mySecondaryController)
                                     $body=@{"cron"=@{}}
@@ -5315,7 +5278,7 @@ Try {
 }
 Catch {
 	Error_Handling $_ $ctrlName -donotcleanlog4net
-	return $Return
+	return $False
 }
 }
 
@@ -7830,7 +7793,7 @@ Try {
                         
                         if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapSecondaryVersion -ge 9.10)){
                             # * Rest POST method does not support to set anti-ransomware state on DP volume
-                            if(($PrimaryVolAntiRansomware -eq "enabled") -and ($Global:VOLUME_TYPE -eq "RW")){
+                            if(($PrimaryVolAntiRansomware -eq "enabled") -and ($Global:VOLUME_TYPE -eq "rw")){
                                 $NewNcVolParameters.anti_ransomware=@{"state"="enabled"}
                                 $ForceRest=$True
                             }
@@ -7845,14 +7808,14 @@ Try {
                             # }
                         }
                         # * Rest POST method does not support to set analytics state on DP volume
-                        if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapSecondaryVersion -ge 9.08) -and ($Global:VOLUME_TYPE -eq "RW")){
+                        if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapSecondaryVersion -ge 9.08) -and ($Global:VOLUME_TYPE -eq "rw")){
                             if($PrimaryVolAnalyticsState -eq "on"){
                                 $NewNcVolParameters.analytics=@{"state"="on"}
                                 $ForceRest=$True
                             }
                         }
                         # * Rest POST method does not support to set analytics state on DP volume
-                        if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapPrimaryVersion -ge 9.11) -and ($Global:VOLUME_TYPE -eq "RW")){
+                        if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapPrimaryVersion -ge 9.11) -and ($Global:VOLUME_TYPE -eq "rw")){
                             if($PrimaryVolAsyncDeleteClientState -eq $True){
                                 $NewNcVolParameters.asynchronous_directory_delete=@{"enabled"=$True}
                                 $ForceRest=$True
@@ -7964,7 +7927,7 @@ Try {
                                 Write-LogWarn "Failed to read Get-NcVol.json backup file"
                                 Write-LogWarn "Will restore with basic options"
                             }
-                            if($Global:VOLUME_TYPE -eq "RW"){
+                            if($Global:VOLUME_TYPE -eq "rw"){
                                 Write-LogDebug "Create RW volume"
                                 if($ForceRest){
                                     $body=$NewNcVolParameters | ConvertTo-Json
@@ -8022,7 +7985,7 @@ Try {
                                 }
                                 Write-LogDebug "Create DP volume"
                                 if($ForceRest){
-                                    if($Global:VOLUME_TYPE -eq "RW"){
+                                    if($Global:VOLUME_TYPE -eq "rw"){
                                         $NewNcVolParameters+=@{"type"="rw"}
                                     }else{
                                         $NewNcVolParameters+=@{"type"="dp"}
@@ -8312,7 +8275,7 @@ Try {
                         }
                     }
                 }else{
-                    Write-LogWarn "[$workOn] Ignore Flexgroup [$PrimaryVolName] verification in Restore Mode. If missing, currently you must recreate Flexgroup manualy"
+                    Write-LogWarn "Warning: Ignore Flexgroup [$PrimaryVolName] verification in Restore Mode. If missing, currently you must recreate Flexgroup manualy"
                 }
             }
             else {
@@ -8926,9 +8889,11 @@ Try {
             }
             if($Restore -eq $True){
                 if(Test-Path $($Global:JsonPath+"Get-NcVol.json")){
+                    # * there is no snapmirror relationship json file, so for the purpose of the restoration we can works with the list of volumes available through Get-NcVol.json
                     $relationList=Get-Content $($Global:JsonPath+"Get-NcVol.json") -Raw | ConvertFrom-Json
                     Write-LogDebug "$($Global:JsonPath+"Get-NcVol.json") successfully imported"
                     $relationList = $relationList | Where-Object {$_.VolumeStateAttributes.IsVserverRoot -ne $True}
+                    $relationList = $relationList | Where-Object {$_.Name -eq $volume} 
                 }else{
                     $Return=$False
                     $filepath=$($Global:JsonPath+"Get-NcVol.json")
@@ -8987,11 +8952,18 @@ Try {
                             Write-Log "[$workOn] Modify Junction Path for [$DestinationVolume]: from [$CurrentJunctionPath] to [$RequestedJunctionPath]"
                             $ret=umount_volume -myController $mySecondaryController -myVserver $mySecondaryVserver -myVolumeName $DestinationVolume
                             if($ret -ne $True){$Return=$False;Throw "ERROR: Failed to umount volume [$DestinationVolume] on [$mySecondaryVserver] because [$ErrorVar]"}
+                            <# if($Restore -eq $True){
+                                if($relation.style -eq "flexgroup"){
+                                    $IsFlexgroup=$True
+                                }else{
+                                    $IsFlexgroup=$False
+                                }
+                            } #>
                             if($Restore -eq $False){
                                 $ret=mount_volume -myController $mySecondaryController -myVserver $mySecondaryVserver -myVolumeName $DestinationVolume -IsFlexgroup ($vol.IsFlexgroup) -myPrimaryController $myPrimaryController -myPrimaryVserver $myPrimaryVserver
                                 if($ret -ne $True){$Return=$False;Throw "ERROR: Failed to mount volume [$DestinationVolume] on [$mySecondaryVserver] because [$ErrorVar]"}
                             }else{
-                                $ret=mount_volume -myController $mySecondaryController -myVserver $mySecondaryVserver -myVolumeName $DestinationVolume -Restore -IsFlexgroup ($vol.IsFlexgroup) 
+                                $ret=mount_volume -myController $mySecondaryController -myVserver $mySecondaryVserver -myVolumeName $DestinationVolume -Restore -IsFlexgroup ($vol.IsFlexgroup) -myPrimaryController $mySecondaryController -myPrimaryVserver $mySecondaryVserver
                                 if($ret -ne $True){$Return=$False;Throw "ERROR: Failed to mount volume [$DestinationVolume] on [$mySecondaryVserver] because [$ErrorVar]"}    
                             }
                         }
@@ -10684,8 +10656,12 @@ Try {
                                 $APIPA_Mode=$True
                             }
                         }else{
+                            $Global:ForceNonInteractive=$False
                             if( ($Global:RESTORE_ORIGINAL -eq $True) -or ( ($Global:Run_Mode -eq "Migrate") -and ($Global:InsideMCC -eq $True) ) ){
                                 $forceAsk=$False
+                                Write-LogDebug "Force NonInteractive mode to True only for create_lif_dr"
+                                $Global:ForceNonInteractive=$True
+                                $Global:PreviousNonInteractiveMode=$Global:NonInteractive
                                 $Global:NonInteractive=$True
                             }
                             $lifRestored+=$PrimaryInterfaceName
@@ -10712,7 +10688,7 @@ Try {
                             }else{
                                 $myIpAddr=ask_IpAddr_from_cli -myIpAddr $PrimaryAddress -workOn $workOn -forceAsk $forceAsk
                                 if($Global:PSTKCall -eq "Rest"){
-                                    $myNetMask=ask_NetMask_from_cli -myNetMask $("netmask length /" + $PrimaryNetMaskLength) -workOn $workOn -forceAsk $forceAsk
+                                    $myNetMask=ask_NetMask_from_cli -myNetMask $PrimaryNetMaskLength -workOn $workOn -forceAsk $forceAsk
                                 }else{
                                     $myNetMask=ask_NetMask_from_cli -myNetMask $PrimaryNetMask -workOn $workOn -forceAsk $forceAsk
                                 }
@@ -11928,7 +11904,7 @@ Try {
     Write-LogDebug "[$myPrimaryVserver]: start"
     if($Backup -eq $True){Write-LogDebug "run in Backup mode [$myPrimaryVserver]"}
     if($Restore -eq $True -and $Global:VOLUME_TYPE){Write-LogDebug "run in Restore mode [$myPrimaryVserver]"}
-    if($Restore -eq $True -and $Global:VOLUME_TYPE -eq "DP"){
+    if($Restore -eq $True -and $Global:VOLUME_TYPE -eq "dp"){
         Write-Log "[$workOn] Qtree will be automaticaly created when data will be restored through SnapMirror"
         Write-Log "[$workOn] If Needed, Update Qtree Export Policy manualy, after restore the data back"
         return $True
@@ -13728,7 +13704,7 @@ Try {
                 $CheckCifsHomeSearch=Get-NcCifsHomeDirectorySearchPath -Controller $mySecondaryController -VserverContext $mySecondaryVserver -Path $myCifsHomeSearch  -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsHomeDirectorySearchPath failed [$ErrorVar]" }
                 if ( $null -eq $CheckCifsHomeSearch ) {
-                    if($Restore -eq $True -and $Global:VOLUME_TYPE -eq "DP"){
+                    if($Restore -eq $True -and $Global:VOLUME_TYPE -eq "dp"){
                         Write-LogWarn "WARNING: with DP volumes junction-path cannot be restored and so CIFS Home Directocry Search path neither."
                     }else{
                         Write-LogDebug "Add-NcCifsHomeDirectorySearchPath -Controller $mySecondaryController -VserverContext $mySecondaryVserver -Path $myCifsHomeSearch"
@@ -14727,7 +14703,7 @@ Function show_vserver_dr (
 
         if ( $null -eq $SecondaryVserver ) {
             Write-LogError "ERROR: vserverDR [$mySecondaryVserver] does not exist on Destination Cluster [$mySecondaryController]. Create it with New-SvmDr"
-            clean_and_exit 1
+            #clean_and_exit 1
         }
         elseif ( $SecondaryVserver.OperationalState -eq "stopped" ) {
             Write-LogError "ERROR: vserverDR [$mySecondaryVserver] is in stopped state. Please restart it before running svmtool"
@@ -14915,7 +14891,7 @@ Function show_vserver_dr (
                 if ( $null -eq $SecondaryVserver ) {
                     $PrimaryVolAttr="${PrimaryVolName}:${PrimaryVolStyle}:${PrimaryVolLang}:${PrimaryVolExportPolicy}:${PrimaryVolJunctionPath}"
                     Format-ColorBrackets "Primary:   [$PrimaryVolAttr]"
-                    Format-ColorBrackets "Secondary: [$SecondaryVolAttr]`n"
+                    #Format-ColorBrackets "Secondary: [$SecondaryVolAttr]`n"
                 } 
                 else  
                 {
@@ -15332,6 +15308,10 @@ Try {
     }else{
         if ($ret -ne $True){ Write-LogError "ERROR: Failed to create all LIF" ; $Return = $True }
     }
+    if($Global:ForceNonInteractive -eq $True){
+        Write-LogDebug "Reset NonInteractive Mode to its previous mode [$Global:PreviousNonInteractiveMode]"
+        $Global:NonInteractive=$Global:PreviousNonInteractiveMode
+    }
     if ( ( $ret=create_update_localuser_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all local user"}
     if ( ( $ret=create_update_localunixgroupanduser_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all Local Unix User and Group"}
     if ( ( $ret=create_update_usermapping_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create User Mapping"}
@@ -15667,7 +15647,10 @@ Try {
     }else{
         if ($ret -ne $True){ Write-LogError "ERROR: Failed to create all LIF" ; $Return = $True }
     }
-    
+    if($Global:ForceNonInteractive -eq $True){
+        Write-LogDebug "Reset NonInteractive Mode to its previous mode [$Global:PreviousNonInteractiveMode]"
+        $Global:NonInteractive=$Global:PreviousNonInteractiveMode
+    }
     #if((-not $Global:NonInteractive) -or ($null -ne $Global:DefaultLocalUserCredentials)){
     if( $null -ne $Global:DefaultLocalUserCredentials -or $True -eq $runBackup ){
         if ( ( $ret=create_update_localuser_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all local user"}
@@ -15710,7 +15693,7 @@ Try {
             # All Snapmirror relationship must be Snapmirrored/Idle or Insync before continue
             if ( ( $ret=wait_snapmirror_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver) -ne $True ) { Write-LogError "ERROR: Failed snapmirror relations bad status " ; $Return = $False }
         }
-        if($Restore -eq $True -and $Global:VOLUME_TYPE -eq "DP"){
+        if($Restore -eq $True -and $Global:VOLUME_TYPE -eq "dp"){
             Write-Log "Junction-Path of Volume cannot be modified if restored as DP volume. You will have to mount them once data restored through snapmirror"
             Write-LogDebug "Junction-Path cannot be modified for DP volume"
         }else{
@@ -15742,7 +15725,7 @@ Try {
                     }
                 }
             }
-            if($Restore -eq $True -and $Global:VOLUME_TYPE -eq "DP"){
+            if($Restore -eq $True -and $Global:VOLUME_TYPE -eq "dp"){
                 Write-Log "CIFS share cannot be restored if volumes are restored as DP volume. You will have to mount them once data restored through snapmirror"
                 Write-Log "Or restore with RW volume type forced"
                 Write-LogDebug "CIFS shares and Symlinks cannot be restored for DP volume"
@@ -16168,7 +16151,7 @@ Try {
 	$out = Get-NcVserver  -Name $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar 
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" }
 	if ( $out.State -ne "stopped" ) {
-        Write-Log "remove_vserver_source:Stop-NcVserver -Name $myPrimaryVserver -Controller $myPrimaryController"
+        Write-LogDebug "remove_vserver_source:Stop-NcVserver -Name $myPrimaryVserver -Controller $myPrimaryController"
 		$out = Stop-NcVserver -Name $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar -Confirm:$False
 		if ( $? -ne $True ) {
 			Write-LogError "ERROR: Unable to stop  Vserver [$myPrimaryVserver]" 
@@ -16387,7 +16370,7 @@ Try {
 	$out = Get-NcVserver  -Name $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" }
 	if ( $out.State -ne "stopped" ) {
-        Write-Log "Stop-NcVserver -Name $mySecondaryVserver -Controller $mySecondaryController"
+        Write-LogDebug "Stop-NcVserver -Name $mySecondaryVserver -Controller $mySecondaryController"
 		$out = Stop-NcVserver -Name $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar -Confirm:$False
 		if ( $? -ne $True ) {
 			Write-LogError "ERROR: Unable to stop  Vserver [$mySecondaryVserver]" 
@@ -16920,6 +16903,10 @@ try{
             }else{
                 if ($ret -ne $True){ Write-LogError "ERROR: Failed to backup all LIF" ; $Return = $True }
             }
+            if($Global:ForceNonInteractive -eq $True){
+                Write-LogDebug "Reset NonInteractive Mode to its previous mode [$Global:PreviousNonInteractiveMode]"
+                $Global:NonInteractive=$Global:PreviousNonInteractiveMode
+            }
             # backup CIFS server ################################################################################################################################################################
             Write-Log "[$myPrimaryVserver] Backup CIFS Server Object"
             Write-LogDebug "create_update_CIFS_server_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $myPrimaryVserver -Backup $True -Restore $False"
@@ -17314,7 +17301,10 @@ try{
         }else{
             if ($ret -ne $True){ Write-LogError "ERROR: Failed to backup all LIF" ; $Return = $True }
         }
-
+        if($Global:ForceNonInteractive -eq $True){
+            Write-LogDebug "Reset NonInteractive Mode to its previous mode [$Global:PreviousNonInteractiveMode]"
+            $Global:NonInteractive=$Global:PreviousNonInteractiveMode
+        }
 
         # backup CIFS server ################################################################################################################################################################
         Write-Log "[$myPrimaryVserver] Backup CIFS Server Object"
@@ -17713,13 +17703,14 @@ try{
                 $UserFullname=$User.FullName
                 if($Restore -eq $True){
                     if(Test-Path $($Global:JsonPath+"Get-NcCifsServer.json")){
-                        $PrimaryCifsServer=Get-Content $($Global:JsonPath+"Get-NcCifsServer.json") -Raw | ConvertFrom-Json
+                        $PrimaryCifs=Get-Content $($Global:JsonPath+"Get-NcCifsServer.json") -Raw | ConvertFrom-Json
                         Write-LogDebug "$($Global:JsonPath+"Get-NcCifsServer.json") successfully imported"
                     }else{
                         $Return=$False
                         $filepath=$($Global:JsonPath+"Get-NcCifsServer.json")
                         Throw "ERROR: failed to read $filepath"
                     }
+                    $PrimaryCifsServer=$PrimaryCifs.CifsServer
                 }
                 if($PrimaryCifsServer -ne $SecondaryCifsServer){$UserName=$UserName -replace $PrimaryCifsServer,$SecondaryCifsServer}
                 if($UserFullname.length -eq 0 -or $UserFullname.count -eq 0){$UserFullname=""}
@@ -19652,20 +19643,20 @@ Function mount_volume (
             }  
         }
         try{
-            if($Global:PSTKCall -eq "Zapi"){
+            # if($Global:PSTKCall -eq "Zapi"){
                 Write-LogDebug "Mount-NcVol -Name $myVolumeName -JunctionPath $JunctionPath -VserverContext $myVserver -Controller $myController"
                 $out=Mount-NcVol -Name $myVolumeName -JunctionPath $JunctionPath -VserverContext $myVserver -Controller $myController -ErrorVariable ErrorVar
                 if ( $? -ne $True ) {throw "ERROR: Mount-NcVol [$myVolumeName] failed [$ErrorVar]" } 
-            }else{
+            <# }else{
                 #! force ZAPI call because of burt with 9.12.1RC1
                 Write-LogDebug "Mount-NcVol -Name $myVolumeName -JunctionPath $JunctionPath -VserverContext $myVserver -Controller $myController -ONTAPI"
                 $out=Mount-NcVol -Name $myVolumeName -JunctionPath $JunctionPath -VserverContext $myVserver -Controller $myController -ErrorVariable ErrorVar -ONTAPI
                 if ( $? -ne $True ) {throw "ERROR: Mount-NcVol [$myVolumeName] failed [$ErrorVar]" } 
-            }
+            } #>
         }catch{
             #wait-debugger
             $ErrorMessage = $_.Exception.Message
-            Write-LogDebug "Catch Mount-NcVol Failed to mount trap [$ErrorMessage]"
+            Write-LogDebug "CATCH: Mount-NcVol Failed to mount [$ErrorMessage]"
         }
         if($voltype -eq "dp" -and $Restore -eq $False){
             Write-LogDebug "resync snapmirror previously broken"
@@ -22510,6 +22501,7 @@ Function restore_quota (
             $SoftDiskLimit=$quota.SoftDiskLimit
             $SoftFileLimit=$quota.SoftFileLimit
             $Threshold=$quota.Threshold
+            if($myPolicy.length -eq 0){$myPolicy="default"}
             Write-LogDebug "${ClusterName}:${Vserver}:${Volume}:${Qtree}:${QuotaType}:${QuotaTarget}:${DiskLimit}:${FileLimit}:${SoftDiskLimit}:${SoftFileLimit}:${Threshold}:${myPolicy}"
             Write-LogDebug "volume informations [${ClusterName}] [${Vserver}] [${Volume}]"
             $VOL=$VolumeList | where-Object {$_.Name -eq $Volume}
@@ -22526,35 +22518,35 @@ Function restore_quota (
             { 
                 $NcQuotaParamList=@{}
                 $Opts = ""  
-                if ( $DiskLimit -ne '-' ) 
+                if ( $DiskLimit -ne '-' -or $null -ne $DiskLimit ) 
                 {
-                    $size = $DiskLimit + 'k'
+                    $size = [string]$DiskLimit + 'k'
                     $Opts = $Opts + '-DiskLimit ' + $size + ' '
                     $NcQuotaParam = @{DiskLimit=$size}
                     $NcQuotaParamList=$NcQuotaParamList + $NcQuotaParam
                 }
-                if ( $SoftDiskLimit -ne '-' ) 
+                if ( $SoftDiskLimit -ne '-' -or $null -ne $SoftDiskLimit ) 
                 {
-                    $size = $SoftDiskLimit + 'k'
+                    $size = [string]$SoftDiskLimit + 'k'
                     $Opts = $Opts + '-SoftDiskLimit ' + $size + ' '
                     $NcQuotaParam = @{SoftDiskLimit=$size}
                     $NcQuotaParamList=$NcQuotaParamList + $NcQuotaParam
                 }
-                if ( $FileLimit -ne '-' ) 
+                if ( $FileLimit -ne '-' -or $null -ne $FileLimit ) 
                 {
                     $Opts = $Opts + '-FileLimit ' + $FileLimit + ' '
                     $NcQuotaParam = @{FileLimit=$FileLimit}
                     $NcQuotaParamList=$NcQuotaParamList + $NcQuotaParam
                 }
-                if ( $SoftFileLimit -ne '-' ) 
+                if ( $SoftFileLimit -ne '-' -or $null -ne $SoftFileLimit ) 
                 {
                     $Opts = $Opts + '-SoftFileLimit ' + $SoftFileLimit + ' '
                     $NcQuotaParam = @{SoftFileLimit=$SoftFileLimit}
                     $NcQuotaParamList=$NcQuotaParamList + $NcQuotaParam
                 }
-                if ( $Threshold -ne '-' ) 
+                if ( $Threshold -ne '-' -or $null -ne $Threshold ) 
                 {
-                    $size = $Threshold + 'k'
+                    $size = [string]$Threshold + 'k'
                     $Opts = $Opts + '-Threshold ' + $size + ' '
                     $NcQuotaParam = @{Threshold=$size}
                     $NcQuotaParamList=$NcQuotaParamList + $NcQuotaParam
@@ -22587,9 +22579,58 @@ Function restore_quota (
                         }
                         if ( $QuotaTarget -eq '*' ) { $QuotaTarget='/vol/' + $Volume }
                         try{
-                            Write-LogDebug "Add-NcQuota -Controller $myController -Vserver $Vserver -Path $QuotaTarget $Opts -Policy $myPolicy"
-                            $Output=Add-NcQuota -Controller $myController -Vserver $Vserver -Path $QuotaTarget @NcQuotaParamList -Policy $myPolicy  -ErrorVariable ErrorVar
-                            if ( $? -ne $True -and $ErrorVar -ne "duplicate entry" ) { Write-LogDebug "Add-NcQuota failed on a duplicate entry [$ErrorVar]"; $Return = $False }
+                            if($Global:PSTKCall -ne "Rest"){
+                                Write-LogDebug "Add-NcQuota -Controller $myController -Vserver $Vserver -Path $QuotaTarget $Opts -Policy $myPolicy -Volume $Volume"
+                                $Output=Add-NcQuota -Controller $myController -Vserver $Vserver -Path $QuotaTarget @NcQuotaParamList -Policy $myPolicy -Volume $Volume -ErrorVariable ErrorVar
+                                if ( $? -ne $True -and $ErrorVar -ne "duplicate entry" ) { Write-LogDebug "Add-NcQuota failed on a duplicate entry [$ErrorVar]"; $Return = $False }
+                            }else{
+                                $body=@{}
+                                if ( $DiskLimit -ne '-' -or $null -ne $DiskLimit ){$body.space=@{"hard_limit"=$DiskLimit*10}}
+                                if ( $SoftDiskLimit -ne '-' -or $null -ne $SoftDiskLimit ){$body.space=@{"soft_limit"=$SoftDiskLimit}}
+                                if ( $FileLimit -ne '-' -or $null -ne $FileLimit ){$body.files=@{"hard_limit"=$FileLimit}}
+                                if ( $SoftFileLimit -ne '-' -or $null -ne $SoftFileLimit ){$body.files=@{"soft_limit"=$SoftFileLimit}}
+                                if ( $Qtree -eq '-' -or $null -eq $Qtree){$body.qtree=@{"name"=""}}
+                                $body.type="tree"
+                                $body.volume=@{"name"=$Volume}
+                                $body.svm=@{"name"=$Vserver}
+                                $body=$body | ConvertTo-Json
+                                $Cred=get_local_cDotcred($myController)
+                                $url=$("https://"+$myController.Name+"/api/storage/quota/rules")
+                                Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck"
+                                $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                if($? -ne $True){
+                                    Write-LogError "ERROR: Unable to post [$url]. Reason [$ErrorVar]"
+                                    Write-LogDebug "[$workOn]: end"
+                                    return $False
+                                }
+                                $JobUuid=$ret.job.uuid
+                                $StartTime=Get-date
+                                $Timeout=$False
+                                $JobDone=$False
+                                While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+                                    $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $myController
+                                    if($JobDetail.JobCompletion -eq "success"){
+                                        $JobDone=$True
+                                        break
+                                    }else{
+                                        $JobStatus=$JobDetail.JobState
+                                        Write-LogDebug "[$workOn] Create quota rule job status [$JobStatus]"
+                                        if($JobStatus -eq "failure"){
+                                            $JobCompletion=$JobDetail.JobCompletion
+                                            Write-LogError "[$workOn] Create quota rule failed [$JobCompletion]"
+                                            break
+                                        }
+                                    }
+                                    $CurrentTime=Get-date
+                                    $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+                                    if($TimeSpend -gt $Global:STOP_TIMEOUT){
+                                        Write-LogWarn "[$myVserver] Create quota rule take too much time. Check in Ontap its status"
+                                        $Timeout=$True
+                                    }
+                                    Start-Sleep 5
+                                }
+                            }
+                            
                             $VolumeListToRestartQuota+=$Vserver + ':' + $Volume
                         }catch{
                             $ErrorMessage = $_.Exception.Message
@@ -23335,7 +23376,10 @@ Try {
             $Return=$False
             Write-LogError "ERROR: Failed to set all lif up on [$mySecondaryVserver]"
         }
-        
+        if($Global:ForceNonInteractive -eq $True){
+            Write-LogDebug "Reset NonInteractive Mode to its previous mode [$Global:PreviousNonInteractiveMode]"
+            $Global:NonInteractive=$Global:PreviousNonInteractiveMode
+        }
     }
     if("Volumes" -in $objects){
         Write-Log "[$mySecondaryVserver] Restore Object Volumes & QOS PolicyGroup & Namespace"
@@ -23354,7 +23398,7 @@ Try {
             Write-LogError "ERROR: create_update_qospolicy_dr" 
             $Return = $False 
         }
-        if ($Global:VOLUME_TYPE -eq "RW") {
+        if ($Global:VOLUME_TYPE -eq "rw") {
             # in restore mode force update snapshot policy on all destinations volumes
             if ( ( $ret=mount_voldr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver  -workOn $workOn -Backup $False -Restore $True ) -ne $True ) { Write-LogError "ERROR: Failed to mount all volumes " ; $Return = $False }
             $Global:ForceUpdateSnapPolicy = $True

@@ -1192,7 +1192,10 @@ $Global:STOP_TIMEOUT = 360
 $Global:START_TIMEOUT = 360
 $Global:SINGLE_CLUSTER = $False
 $Global:SILENT_PERIOD = 3 				# SILENT_PERIOD in seconds after which we will test again if Primary site is alive
-$Global:RESTORE_ORIGINAL = $False
+if($ForceRestoreOriginal.IsPresent){
+    $Global:RESTORE_ORIGINAL = $True    
+}
+$Global:ForceRestoreOriginal=$ForceRestoreOriginal
 $DebugPreference = "SilentlyContinue"
 $VerbosePreference = "SilentlyContinue"
 $ErrorActionPreference = "Continue"
@@ -1225,6 +1228,12 @@ $Global:ForceRestoreOriginal = $ForceRestoreOriginal
 $Global:BACKUPALLSVM = $False
 $Global:PreserveIdentity=$PreserveIdentity
 $Global:TieringPolicy=$TieringPolicy
+$Global:InsideMCC=$False
+if($RW.IsPresent){
+    $Global:VOLUME_TYPE="rw"
+}else{
+    $Global:VOLUME_TYPE="dp"
+}
 $Global:Timeout=$Timeout
 if($DeleteSource.IsPresent){
     $Global:DeleteSource=$true
@@ -1556,7 +1565,7 @@ Write-LogDebug "VERSION             [$RELEASE]"
 Write-LogDebug "Vserver             [$Vserver]"
 Write-LogDebug "LogLevelConsole     [$LogLevelConsole]"
 Write-LogDebug "LogLevelLogFile     [$LogLevelLogFile]"
-Write-LogDebug "RW                  [$RW]"
+Write-LogDebug "VOLUME Type         [$Global:VOLUME_TYPE]"
 Write-LogDebug "PSVersionTable      [$PSVersionDetail]"
 Write-LogDebug "PSTK Version        [$PSTKVersion]"
 Write-LogDebug "PSTK Call           [$Global:PSTKCall]"   
@@ -2112,14 +2121,17 @@ if ( $Restore ) {
     $Global:Run_Mode = "Restore"
     $Global:RESTORE_SRC_CLUSTER = $Restore
     $Global:RESTORE_DST_CLUSTER = $Destination
-    if ($Global:RESTORE_SRC_CLUSTER -eq $Global:RESTORE_DST_CLUSTER) {
+    if(-not $ForceRestoreOriginal.IsPresent){
+        if ($Global:RESTORE_SRC_CLUSTER -eq $Global:RESTORE_DST_CLUSTER) {
         $Global:RESTORE_ORIGINAL = $True
         Write-Log "[$Restore] Restore to Origin [$Vserver]"
-    }
-    else {
-        $Global:RESTORE_ORIGINAL = $False	
+        }
+        else {
+            $Global:RESTORE_ORIGINAL = $False	
+        }
     }
     Write-LogOnly "SVMTOOL running Restore"
+    
     if ((Test-Path $Global:CONFFILE) -eq $True ) {
         $read_conf = read_config_file $Global:CONFFILE
         if ( $null -eq $read_conf ) {
@@ -2243,30 +2255,26 @@ if ( $Restore ) {
         $Global:RootAggr = $RootAggr
         $Global:DataAggr = $DataAggr
         $Global:ConsoleThreadingRequired = $true
-        $Global:RESTORE_ORIGINAL = $RESTORE_ORIGINAL
-        $Global:ForceRestoreOriginal = $FORCE_RESTORE_ORIGINAL
         $Global:NonInteractive = $NonInteractive
         $Global:JsonPath = $JsonPath
         $Global:SVMTOOL_DB = $SVMTOOL_DB
-        $Global:VOLUME_TYPE = $VOLUME_TYPE
-
+        Write-Log "[$svm] LOGFILE               [$LOGFILE]"
         Write-LogDebug ""
-        Write-LogDebug "Restore [$svm] on Cluster [$Destination]"
-        Write-LogDebug "LOGFILE [$LOGFILE]"
-        Write-Log "[$svm] LOGFILE [$LOGFILE]"
-        Write-LogDebug "SVMTOOL_DB [$Global:SVMTOOL_DB]"
-        Write-LogDebug "JsonPath [$Global:JsonPath]"
-        Write-LogDebug "svm [$svm]"
-        Write-LogDebug "DestinationController [$DestinationController]"
-        Write-LogDebug "VOLUME_TYPE [$Global:VOLUME_TYPE]"
-        Write-LogDebug "RootAggr [$Global:RootAggr]"
-        Write-LogDebug "DataAggr [$Global:DataAggr]"
-
+        Write-LogDebug "Restore                 [$svm] on Cluster [$Destination]"
+        Write-LogDebug "LOGFILE                 [$LOGFILE]"
+        Write-LogDebug "SVMTOOL_DB              [$Global:SVMTOOL_DB]"
+        Write-LogDebug "JsonPath                [$Global:JsonPath]"
+        Write-LogDebug "svm                     [$svm]"
+        Write-LogDebug "DestinationController   [$DestinationController]"
+        Write-LogDebug "VOLUME_TYPE             [$Global:VOLUME_TYPE]"
+        Write-LogDebug "RootAggr                [$Global:RootAggr]"
+        Write-LogDebug "DataAggr                [$Global:DataAggr]"
+        Write-LogDebug "RESTORE_ORIGINAL        [$Global:RESTORE_ORIGINAL]"
         if ( ( $ret = create_vserver_dr -myPrimaryVserver $svm -mySecondaryController $DestinationController -workOn $svm -mySecondaryVserver $svm -Restore -DDR $False -aggrMatchRegEx $AggrMatchRegex -nodeMatchRegEx $NodeMatchRegex -myDataAggr $Global:DataAggr -RootAggr $Global:RootAggr -TemporarySecondaryCifsIp $TemporarySecondaryCifsIp -SecondaryCifsLifMaster $SecondaryCifsLifMaster -SecondaryCifsLifCustomVlan $SecondaryCifsLifCustomVlan )[-1] -ne $True ) {
             Write-LogDebug "ERROR in create_vserver_dr [$ret]"
             #return $False
         }
-        if ($Global:VOLUME_TYPE -eq "RW") {
+        if ($Global:VOLUME_TYPE -eq "rw") {
             # in restore mode force update snapshot policy on all destinations volumes
             $Global:ForceUpdateSnapPolicy = $True
             if ( ( $ret = set_vol_options_from_voldb -myVserver $svm -myController $DestinationController -Restore) -ne $True ) {
@@ -2455,7 +2463,6 @@ if ( $RestoreMultiSVM ) {
                 $Global:DataAggr = $DataAggr
                 $Global:ConsoleThreadingRequired = $true
                 $Global:RESTORE_ORIGINAL = $RESTORE_ORIGINAL
-                $Global:ForceRestoreOriginal = $FORCE_RESTORE_ORIGINAL
 
                 if(($PSVersionTable.PSVersion.Major -lt 7) -or $IsWindows){$Path = $env:PSModulePath.split(";")}else{$Path = $env:PSModulePath.split(":")}
                 if ($Path -notcontains $script_path) {
@@ -2615,7 +2622,7 @@ if ( $RestoreMultiSVM ) {
                     Write-LogDebug "ERROR in create_vserver_dr [$ret]"
                     #return $False
                 }
-                if ($Global:VOLUME_TYPE -eq "RW") {
+                if ($Global:VOLUME_TYPE -eq "rw") {
                     # in restore mode force update snapshot policy on all destinations volumes
                     $Global:ForceUpdateSnapPolicy = $True
                     if ( ( $ret = set_vol_options_from_voldb -myVserver $SourceVserver -myController $DestinationController -Restore) -ne $True ) {
@@ -2866,14 +2873,14 @@ if ( $RestoreObject ){
     
 
     # if restore volumes to Origin, force restore volumes as RW volumes
-    if ($RW -eq $True) {
-        $Global:VOLUME_TYPE = "RW"
+    if ($RW.IsPresent) {
+        $Global:VOLUME_TYPE = "rw"
     }
     else {
-        $Global:VOLUME_TYPE = "DP"
+        $Global:VOLUME_TYPE = "dp"
     }
     if($Global:RESTORE_ORIGINAL -eq $True){
-        $Global:VOLUME_TYPE="RW"
+        $Global:VOLUME_TYPE="rw"
     }
     $Global:SVMTOOL_DB=$SVMTOOL_DB
     
@@ -3071,6 +3078,8 @@ Write-LogDebug "OPTION ForceDelete                  [$Global:ForceDelete]"
 if ( $ShowDR ) {
     $Global:Run_Mode = "ShowDR"
     Write-LogOnly "SVMTOOL running ShowDR"
+    $Global:LOGFILE=$LOGFILE
+    Write-Log "LOGFILE [$Global:LOGFILE]"
     if($NoVolumeDetail.IsPresent -eq $False ){
         $Global:NoVolumeDetail=$False
     }else{
@@ -3500,11 +3509,12 @@ if ( $DeleteSource ) {
 
     if ( ($SourceState -ne "stopped" -or $DestState -ne "running") -and $Global:ForceDelete -eq $False) {
         Write-LogError "ERROR : SVM [$Vserver] not correctly migrated to destination [$SecondaryClusterName]. Failed to delete on source"
+        Write-LogError "ERROR : SVM [$Vserver] must already be in stopped state"
         clean_and_exit 1
     }
     else {
         Write-LogWarn "[$Vserver] Delete Source SVM cannot be interrupted or rolled back"
-        Write-LogWarn "[$Vserver] SVM must already be in stopped state"
+        #Write-LogWarn "[$Vserver] SVM must already be in stopped state"
         $ASK_WAIT = Read-HostOptions -question "Do you want to completely delete [$Vserver] on [$PrimaryClusterName] ?" -options "y/n" -default "y"
         if ($ASK_WAIT -eq 'y'){
             if ( ( $ret = remove_snapmirror_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR) -ne $True ) {
@@ -3517,15 +3527,17 @@ if ( $DeleteSource ) {
                 return $false
             }
             
-            Write-Log "[$VserverDR] Renamed to [$Vserver]"
-            Write-LogDebug "Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl"
-            $out = Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar
-            if ( $? -ne $True ) {
-                throw "ERROR: Rename-NcVserver failed [$ErrorVar]"
-            }
-            if($SourceVserverComment.lenght -gt 1){
-                Write-LogDebug "Set-NcVserver -Name $Vserver -Controller $NcSecondaryCtrl -Comment $SourceVserverComment"
-                $ret=Set-NcVserver -Name $Vserver -Controller $NcSecondaryCtrl -Comment $SourceVserverComment
+            if($VserverDR -ne $Vserver){
+                Write-Log "[$VserverDR] Renamed to [$Vserver]"
+                Write-LogDebug "Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl"
+                $out = Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar
+                if ( $? -ne $True ) {
+                    throw "ERROR: Rename-NcVserver failed [$ErrorVar]"
+                }
+                if($SourceVserverComment.lenght -gt 1){
+                    Write-LogDebug "Set-NcVserver -Name $Vserver -Controller $NcSecondaryCtrl -Comment $SourceVserverComment"
+                    $ret=Set-NcVserver -Name $Vserver -Controller $NcSecondaryCtrl -Comment $SourceVserverComment
+                }
             }
 
             Write-Log "[$Vserver] will be deleted on cluster [$PrimaryClusterName]"
