@@ -1699,10 +1699,25 @@ if ( $Backup ) {
     }
     Write-LogDebug "create_vserver_dr correctly finished [$ret]"
     Write-Log "[$Vserver] Check Quota"
-    $AllQuotaRulesList = Get-NcQuota -Controller $myPrimaryController -VserverContext $Vserver -ErrorVariable ErrorVar 
-    if ( $? -ne $True ) { 
-        Write-LogDebug "ERROR: Get-NcQuota Failed"
-        clean_and_exit 1
+    if($Global:PSTKCall -ne "Rest"){
+        # ! Force ONTAPI due to burt in PSTK with REST call
+        Write-LogDebug "Get-NcQuota -Controller $myPrimaryController -VserverContext $Vserver -ErrorVariable ErrorVar -ONTAPI"
+        $AllQuotaRulesList = Get-NcQuota -Controller $myPrimaryController -VserverContext $Vserver -ErrorVariable ErrorVar -ONTAPI
+        if ( $? -ne $True ) { 
+            Write-LogDebug "ERROR: Get-NcQuota Failed"
+            clean_and_exit 1
+        }
+    }else{
+        $Credential = get_local_cDotcred($myPrimaryController)
+        $url="https://"+$myPrimaryController.Name+"/api/storage/quota/rules?svm.name="+$Vserver+"&fields=**"
+        Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+        $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+        if($? -ne $True){
+            Write-LogError "ERROR: Unable to get quota policy rules. Reason [$ErrorVar]" 
+        }else{
+            $RESTAllQuotaRulesList=$ret.records
+        }
+        $AllQuotaRulesList = $RESTAllQuotaRulesList
     }
     $AllQuotaRulesList | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath + "Get-NcQuota.json") -Encoding ASCII -Width 65535
     if ( $null -ne ($ret = Get-Item $($Global:JsonPath + "Get-NcQuota.json") -ErrorAction SilentlyContinue) ) {
@@ -1995,7 +2010,19 @@ if ( $BackupMultiSVM ) {
                 }
                 Write-LogDebug "create_vserver_dr correctly finished [$ret]"
                 Write-Log "[$myPrimaryVserver] Check Quota"
-                $AllQuotaRulesList = Get-NcQuota -Controller $myPrimaryController -VserverContext $myPrimaryVserver -ErrorVariable ErrorVar 
+                if($Global:PSTKCall -ne "Rest"){
+                    $AllQuotaRulesList = Get-NcQuota -Controller $myPrimaryController -VserverContext $myPrimaryVserver -ErrorVariable ErrorVar 
+                }else{
+                    $Credential = get_local_cDotcred($myPrimaryController)
+                    $url="https://"+$myPrimaryController.Name+"/api/storage/quota/rules?svm.name="+$myPrimaryVserver+"&fields=**"
+                    Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+                    $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                    if($? -ne $True){
+                        Write-LogError "ERROR: Unable to get quota policy rules. Reason [$ErrorVar]" 
+                    }else{
+                        $AllQuotaRulesList=$ret.records
+                    }
+                }
                 if ( $? -ne $True ) { 
                     Write-LogDebug "ERROR: Get-NcQuota Failed"
                     flush_log4net -loggerinstance "console_$guid"	
