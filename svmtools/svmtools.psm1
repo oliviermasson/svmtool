@@ -22624,6 +22624,7 @@ Function restore_quota (
                             Write-LogDebug "Add-NcQuota -Controller $myController -Vserver $Vserver -Path $QuotaTarget $Opts -Policy $myPolicy -Volume $Volume"
                             $Output=Add-NcQuota -Controller $myController -Vserver $Vserver -Path $QuotaTarget @NcQuotaParamList -Policy $myPolicy -Volume $Volume -ErrorVariable ErrorVar
                             if ( $? -ne $True -and $ErrorVar -ne "duplicate entry" ) { Write-LogDebug "Add-NcQuota failed on a duplicate entry [$ErrorVar]"; $Return = $False }
+                            if(-not $VolumeListToRestartQuota.Contains($($Vserver + ':' + $Volume))){$VolumeListToRestartQuota+=$Vserver + ':' + $Volume}
                         }else{
                             $body=@{}
                             if ( $DiskLimit -ne '-' -and $null -ne $DiskLimit ){$body.space+=@{"hard_limit"=$DiskLimit}}
@@ -22652,6 +22653,7 @@ Function restore_quota (
                                 $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $myController
                                 if($JobDetail.JobCompletion -eq "success"){
                                     $JobDone=$True
+                                    if(-not $VolumeListToRestartQuota.Contains($($Vserver + ':' + $Volume))){$VolumeListToRestartQuota+=$Vserver + ':' + $Volume}
                                     break
                                 }else{
                                     $JobStatus=$JobDetail.JobState
@@ -22671,7 +22673,7 @@ Function restore_quota (
                                 Start-Sleep 5
                             }
                         }
-                        if(-not $VolumeListToRestartQuota.Contains($($Vserver + ':' + $Volume))){$VolumeListToRestartQuota+=$Vserver + ':' + $Volume}
+                        
                     }catch{
                         $ErrorMessage = $_.Exception.Message
                         Write-LogWarn "Failed to create quota tree rule [$Opts] on target [$QuotaTarget] because [$ErrorMessage]"
@@ -22713,6 +22715,7 @@ Function restore_quota (
                             Write-LogDebug "Add-NcQuota -User $QuotaTarget -Volume $Volume -Controller $myController -Vserver $Vserver -Qtree $Qtree $Opts -Policy $myPolicy"
                             $Output=Add-NcQuota -User $QuotaTarget -Volume $Volume -Controller $myController -Vserver $Vserver -Qtree $Qtree @NcQuotaParamList -Policy $myPolicy  -ErrorVariable ErrorVar
                             if ( $? -ne $True -and $ErrorVar -ne "duplicate entry" ) {Write-LogDebug "Add-NcQuota failed on a duplicate entry [$ErrorVar]"; $Return = $False }
+                            if(-not $VolumeListToRestartQuota.Contains($($Vserver + ':' + $Volume))){$VolumeListToRestartQuota+=$Vserver + ':' + $Volume}
                         }else{
                             $body=@{}
                             if ( $DiskLimit -ne '-' -and $null -ne $DiskLimit ){$body.space+=@{"hard_limit"=$DiskLimit}}
@@ -22743,6 +22746,7 @@ Function restore_quota (
                                 $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $myController
                                 if($JobDetail.JobCompletion -eq "success"){
                                     $JobDone=$True
+                                    if(-not $VolumeListToRestartQuota.Contains($($Vserver + ':' + $Volume))){$VolumeListToRestartQuota+=$Vserver + ':' + $Volume}
                                     break
                                 }else{
                                     $JobStatus=$JobDetail.JobState
@@ -22762,7 +22766,7 @@ Function restore_quota (
                                 Start-Sleep 5
                             }
                         }
-                        if(-not $VolumeListToRestartQuota.Contains($($Vserver + ':' + $Volume))){$VolumeListToRestartQuota+=$Vserver + ':' + $Volume}
+                        
                     }catch{
                         $ErrorMessage = $_.Exception.Message
                         Write-LogWarn "Failed to create quota user rule [$Opts] on target [$Qtree] because [$ErrorMessage]"
@@ -22805,6 +22809,7 @@ Function restore_quota (
                             Write-LogDebug "Add-NcQuota -Group $QuotaTarget -Volume $Volume -Controller $myController -Vserver $Vserver -Qtree $Qtree $Opts -Policy $myPolicy"
                             $Output=Add-NcQuota -Group $QuotaTarget -Volume $Volume -Controller $myController -Vserver $Vserver -Qtree $Qtree @NcQuotaParamList -Policy $myPolicy  -ErrorVariable ErrorVar
                             if ( $? -ne $True -and $ErrorVar -ne "duplicate entry" ) {Write-LogDebug "Add-NcQuota failed on a duplicate entry [$ErrorVar]"; $Return = $False }
+                            if(-not $VolumeListToRestartQuota.Contains($($Vserver + ':' + $Volume))){$VolumeListToRestartQuota+=$Vserver + ':' + $Volume}
                         }else{
                             $body=@{}
                             if ( $DiskLimit -ne '-' -and $null -ne $DiskLimit ){$body.space+=@{"hard_limit"=$DiskLimit}}
@@ -22834,6 +22839,7 @@ Function restore_quota (
                                 $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $myController
                                 if($JobDetail.JobCompletion -eq "success"){
                                     $JobDone=$True
+                                    if(-not $VolumeListToRestartQuota.Contains($($Vserver + ':' + $Volume))){$VolumeListToRestartQuota+=$Vserver + ':' + $Volume}
                                     break
                                 }else{
                                     $JobStatus=$JobDetail.JobState
@@ -22853,7 +22859,7 @@ Function restore_quota (
                                 Start-Sleep 5
                             }
                         }
-                        if(-not $VolumeListToRestartQuota.Contains($($Vserver + ':' + $Volume))){$VolumeListToRestartQuota+=$Vserver + ':' + $Volume}
+                        
                     }catch{
                         $ErrorMessage = $_.Exception.Message
                         Write-LogWarn "Failed to create quota group rule [$Opts] on target [$Qtree] because [$ErrorMessage]"
@@ -23005,148 +23011,329 @@ Function create_quota_rules_from_quotadb (
                                 Write-LogWarn "Volume [$SVM] [$Volume] does not exist on ctrl [$myController], skipping Quota rules for it"
                                 Continue
                             }
-                            if ( $VOL.VolumeIdAttributes.Type -eq "dp" ) 
-                            {
-                                Write-LogWarn "Unable to set quota on volume [$SVM] [$Volume] because it's a DataProtectionMirror volume" 
-                                Continue
+                            # * it may have a differences in volume attributes based on REST or ZAPI calls during Get-NcVol
+                            if($null -ne ($VOL | Get-Member -name type)){
+                                if ( $VOL.Type -eq "dp" ) 
+                                {
+                                    Write-LogWarn "Unable to set quota on volume [$Vserver] [$Volume] is DataProtectionMirror" 
+                                    Continue
+                                }
+                            }elseif($null -ne ($VOL.VolumeIdAttributes | Get-Member -Name type)){
+                                if ( $VOL.VolumeIdAttributes.type -eq "dp" ) 
+                                {
+                                    Write-LogWarn "Unable to set quota on volume [$Vserver] [$Volume] is DataProtectionMirror" 
+                                    Continue
+                                }
                             } 
-                            else 
-                            { 
-                                $NcQuotaParamList=@{}
-                                $Opts = ""  
-                                if ( $DiskLimit -ne '-' ) 
+                            #else 
+                            #{ 
+                            $NcQuotaParamList=@{}
+                            $Opts = ""  
+                            if ( $DiskLimit -ne '-' ) 
+                            {
+                                $size = [string]$DiskLimit + 'k'
+                                $Opts = $Opts + '-DiskLimit ' + $size + ' '
+                                $NcQuotaParam = @{DiskLimit=$size}
+                                $NcQuotaParamList=$NcQuotaParamList + $NcQuotaParam
+                            }
+                            if ( $SoftDiskLimit -ne '-' ) 
+                            {
+                                $size = [string]$SoftDiskLimit + 'k'
+                                $Opts = $Opts + '-SoftDiskLimit ' + $size + ' '
+                                $NcQuotaParam = @{SoftDiskLimit=$size}
+                                $NcQuotaParamList=$NcQuotaParamList + $NcQuotaParam
+                            }
+                            if ( $FileLimit -ne '-' ) 
+                            {
+                                $Opts = $Opts + '-FileLimit ' + $FileLimit + ' '
+                                $NcQuotaParam = @{FileLimit=$FileLimit}
+                                $NcQuotaParamList=$NcQuotaParamList + $NcQuotaParam
+                            }
+                            if ( $SoftFileLimit -ne '-' ) 
+                            {
+                                $Opts = $Opts + '-SoftFileLimit ' + $SoftFileLimit + ' '
+                                $NcQuotaParam = @{SoftFileLimit=$SoftFileLimit}
+                                $NcQuotaParamList=$NcQuotaParamList + $NcQuotaParam
+                            }
+                            if ( $Threshold -ne '-' ) 
+                            {
+                                $size = [string]$Threshold + 'k'
+                                $Opts = $Opts + '-Threshold ' + $size + ' '
+                                $NcQuotaParam = @{Threshold=$size}
+                                $NcQuotaParamList=$NcQuotaParamList + $NcQuotaParam
+                            }
+                            switch ($QuotaType) 
+                            {
+                                'tree' 
                                 {
-                                    $size = $DiskLimit + 'k'
-                                    $Opts = $Opts + '-DiskLimit ' + $size + ' '
-                                    $NcQuotaParam = @{DiskLimit=$size}
-                                    $NcQuotaParamList=$NcQuotaParamList + $NcQuotaParam
-                                }
-                                if ( $SoftDiskLimit -ne '-' ) 
-                                {
-                                    $size = $SoftDiskLimit + 'k'
-                                    $Opts = $Opts + '-SoftDiskLimit ' + $size + ' '
-                                    $NcQuotaParam = @{SoftDiskLimit=$size}
-                                    $NcQuotaParamList=$NcQuotaParamList + $NcQuotaParam
-                                }
-                                if ( $FileLimit -ne '-' ) 
-                                {
-                                    $Opts = $Opts + '-FileLimit ' + $FileLimit + ' '
-                                    $NcQuotaParam = @{FileLimit=$FileLimit}
-                                    $NcQuotaParamList=$NcQuotaParamList + $NcQuotaParam
-                                }
-                                if ( $SoftFileLimit -ne '-' ) 
-                                {
-                                    $Opts = $Opts + '-SoftFileLimit ' + $SoftFileLimit + ' '
-                                    $NcQuotaParam = @{SoftFileLimit=$SoftFileLimit}
-                                    $NcQuotaParamList=$NcQuotaParamList + $NcQuotaParam
-                                }
-                                if ( $Threshold -ne '-' ) 
-                                {
-                                    $size = $Threshold + 'k'
-                                    $Opts = $Opts + '-Threshold ' + $size + ' '
-                                    $NcQuotaParam = @{Threshold=$size}
-                                    $NcQuotaParamList=$NcQuotaParamList + $NcQuotaParam
-                                }
-                                switch ($QuotaType) 
-                                {
-                                    'tree' 
-                                    {
-                                        #if ( $QuotaTarget -eq '*' ) { $QuotaTarget='/vol/' + $Volume }
-                                        $Query=Get-NcQuota -Template -Controller $myController
-                                        $Query.QuotaTarget = $QuotaTarget
-                                        $Query.Volume = $Volume
-                                        $Query.Vserver = $SVM
-                                        $Query.QuotaType= 'tree'  
-                                        $Query.Policy=$myPolicy
-                                        $QuotaList=Get-NcQuota -Controller $myController -Query $Query
-                                        foreach ( $Quota in ( $QuotaList | Skip-Null ) ) {
-                                            if ( ( $Query.QuotaTarget -eq $Quota.QuotaTarget ) ) 
-                                            {
-                                                if ( $QuotaTarget -eq '*' ) { $QuotaTarget='/vol/' + $Volume }
-                                                Write-LogDebug "Remove-NcQuota -Controller $myController -Vserver $SVM -Path $QuotaTarget -Policy $myPolicy"
-                                                $Output=Remove-NcQuota -Controller $myController -Vserver $SVM -Path $QuotaTarget -Policy $myPolicy  -ErrorVariable ErrorVar
-                                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Remove-NcQuota failed [$ErrorVar]" } 
-                                            }
-                                        }
-                                        if ( $QuotaTarget -eq '*' ) { $QuotaTarget='/vol/' + $Volume }
-                                        try{
-                                            Write-LogDebug "Add-NcQuota -Controller $myController -Vserver $SVM -Path $QuotaTarget $Opts -Policy $myPolicy"
-                                            $Output=Add-NcQuota -Controller $myController -Vserver $SVM -Path $QuotaTarget @NcQuotaParamList -Policy $myPolicy  -ErrorVariable ErrorVar
-                                            if ( $? -ne $True -and $ErrorVar -ne "duplicate entry" ) { Write-LogDebug "Add-NcQuota failed on a duplicate entry"; $Return = $False ; throw "ERROR: Add-NcQuota failed [$ErrorVar]" }
-                                            $VolumeListToRestartQuota+=$SVM + ':' + $Volume
-                                        }catch{
-                                            $ErrorMessage = $_.Exception.Message
-                                            Write-LogWarn "Failed to create quota tree rule [$opts] on target [$QuotaTarget] because [$ErrorMessage]"
-                                            Write-LogDebug "Failed to create quota tree rule [$opts] on target [$QuotaTarget] because [$ErrorMessage]"  
+                                    #if ( $QuotaTarget -eq '*' ) { $QuotaTarget='/vol/' + $Volume }
+                                    $Query=Get-NcQuota -Template -Controller $myController
+                                    $Query.QuotaTarget = $QuotaTarget
+                                    $Query.Volume = $Volume
+                                    $Query.Vserver = $SVM
+                                    $Query.QuotaType= 'tree'  
+                                    $Query.Policy=$myPolicy
+                                    $QuotaList=Get-NcQuota -Controller $myController -Query $Query
+                                    foreach ( $Quota in ( $QuotaList | Skip-Null ) ) {
+                                        if ( ( $Query.QuotaTarget -eq $Quota.QuotaTarget ) ) 
+                                        {
+                                            if ( $QuotaTarget -eq '*' ) { $QuotaTarget='/vol/' + $Volume }
+                                            Write-LogDebug "Remove-NcQuota -Controller $myController -Vserver $SVM -Path $QuotaTarget -Policy $myPolicy"
+                                            $Output=Remove-NcQuota -Controller $myController -Vserver $SVM -Path $QuotaTarget -Policy $myPolicy  -ErrorVariable ErrorVar
+                                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Remove-NcQuota failed [$ErrorVar]" } 
                                         }
                                     }
-                                    'user' 
-                                    {
-                                        $Query=Get-NcQuota -Template -Controller $myController
-                                        $Query.QuotaTarget = $QuotaTarget
-                                        $Query.Volume = $Volume
-                                        $Query.Vserver = $SVM
-                                        if ( $Qtree -ne "" ) { $Query.Qtree = $Qtree }
-                                        $Query.QuotaType= 'user'
-                                        $Query.Policy=$myPolicy
-                                        $QuotaList=Get-NcQuota -Controller $myController -Query $Query  -ErrorVariable ErrorVar
-                                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcQuota failed [$ErrorVar]" }
-                                        foreach ( $Quota in ( $QuotaList | Skip-Null ) ) {
-                                            if ( ( $Query.QuotaTarget -eq $Quota.QuotaTarget ) -and ( $Query.Qtree -eq $Quota.Qtree ) ) 
-                                            {
-                                                Write-LogDebug "Remove-NcQuota -User $QuotaTarget -Volume $Volume -Controller $myController -Vserver $SVM -Qtree $Qtree -Policy $myPolicy"
-                                                $Output=Remove-NcQuota -User $QuotaTarget -Volume $Volume -Controller $myController -Vserver $SVM -Qtree $Qtree -Policy $myPolicy  -ErrorVariable ErrorVar 
-                                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Remove-NcQuota failed [$ErrorVar]" }
+                                    if ( $QuotaTarget -eq '*' ) { $QuotaTarget='/vol/' + $Volume }
+                                    try{
+                                        <# Write-LogDebug "Add-NcQuota -Controller $myController -Vserver $SVM -Path $QuotaTarget $Opts -Policy $myPolicy"
+                                        $Output=Add-NcQuota -Controller $myController -Vserver $SVM -Path $QuotaTarget @NcQuotaParamList -Policy $myPolicy  -ErrorVariable ErrorVar
+                                        if ( $? -ne $True -and $ErrorVar -ne "duplicate entry" ) { Write-LogDebug "Add-NcQuota failed on a duplicate entry"; $Return = $False ; throw "ERROR: Add-NcQuota failed [$ErrorVar]" }
+                                        $VolumeListToRestartQuota+=$SVM + ':' + $Volume #>
+
+                                        if($Global:PSTKCall -ne "Rest"){
+                                            Write-LogDebug "Add-NcQuota -Controller $myController -Vserver $SVM -Path $QuotaTarget $Opts -Policy $myPolicy -Volume $Volume"
+                                            $Output=Add-NcQuota -Controller $myController -Vserver $SVM -Path $QuotaTarget @NcQuotaParamList -Policy $myPolicy -Volume $Volume -ErrorVariable ErrorVar
+                                            if ( $? -ne $True -and $ErrorVar -ne "duplicate entry" ) { Write-LogDebug "Add-NcQuota failed on a duplicate entry [$ErrorVar]"; $Return = $False }
+                                            if(-not $VolumeListToRestartQuota.Contains($($SVM + ':' + $Volume))){$VolumeListToRestartQuota+=$SVM + ':' + $Volume}
+                                        }else{
+                                            $body=@{}
+                                            if ( $DiskLimit -ne '-' -and $null -ne $DiskLimit ){$body.space+=@{"hard_limit"=$DiskLimit}}
+                                            if ( $SoftDiskLimit -ne '-' -and $null -ne $SoftDiskLimit ){$body.space+=@{"soft_limit"=$SoftDiskLimit}}
+                                            if ( $FileLimit -ne '-' -and $null -ne $FileLimit ){$body.files+=@{"hard_limit"=$FileLimit}}
+                                            if ( $SoftFileLimit -ne '-' -and $null -ne $SoftFileLimit ){$body.files+=@{"soft_limit"=$SoftFileLimit}}
+                                            if ( $Qtree -eq '-' -or $null -eq $Qtree){$body.qtree=@{"name"=""}}else{$body.qtree=@{"name"=$Qtree}}
+                                            $body.type="tree"
+                                            $body.volume=@{"name"=$Volume}
+                                            $body.svm=@{"name"=$SVM}
+                                            $body=$body | ConvertTo-Json
+                                            $Cred=get_local_cDotcred($myController)
+                                            $url=$("https://"+$myController.Name+"/api/storage/quota/rules")
+                                            Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck"
+                                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                            if($? -ne $True){
+                                                Write-LogError "ERROR: Unable to post [$url]. Reason [$ErrorVar]"
+                                                Write-LogDebug "[$workOn]: end"
+                                                return $False
+                                            }
+                                            $JobUuid=$ret.job.uuid
+                                            $StartTime=Get-date
+                                            $Timeout=$False
+                                            $JobDone=$False
+                                            While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+                                                $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $myController
+                                                if($JobDetail.JobCompletion -eq "success"){
+                                                    $JobDone=$True
+                                                    if(-not $VolumeListToRestartQuota.Contains($($SVM + ':' + $Volume))){$VolumeListToRestartQuota+=$SVM + ':' + $Volume}
+                                                    break
+                                                }else{
+                                                    $JobStatus=$JobDetail.JobState
+                                                    Write-LogDebug "[$workOn] Create quota rule job status [$JobStatus]"
+                                                    if($JobStatus -eq "failure"){
+                                                        $JobCompletion=$JobDetail.JobCompletion
+                                                        Write-LogError "[$workOn] Create quota rule failed [$JobCompletion]"
+                                                        break
+                                                    }
+                                                }
+                                                $CurrentTime=Get-date
+                                                $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+                                                if($TimeSpend -gt $Global:STOP_TIMEOUT){
+                                                    Write-LogWarn "[$myVserver] Create quota tree rule take too much time. Check in Ontap its status"
+                                                    $Timeout=$True
+                                                }
+                                                Start-Sleep 5
                                             }
                                         }
-                                        try{
+                                    }catch{
+                                        $ErrorMessage = $_.Exception.Message
+                                        Write-LogWarn "Failed to create quota tree rule [$opts] on target [$QuotaTarget] because [$ErrorMessage]"
+                                        Write-LogDebug "Failed to create quota tree rule [$opts] on target [$QuotaTarget] because [$ErrorMessage]"  
+                                    }
+                                }
+                                'user' 
+                                {
+                                    $Query=Get-NcQuota -Template -Controller $myController
+                                    $Query.QuotaTarget = $QuotaTarget
+                                    $Query.Volume = $Volume
+                                    $Query.Vserver = $SVM
+                                    if ( $Qtree -ne "" ) { $Query.Qtree = $Qtree }
+                                    $Query.QuotaType= 'user'
+                                    $Query.Policy=$myPolicy
+                                    $QuotaList=Get-NcQuota -Controller $myController -Query $Query  -ErrorVariable ErrorVar
+                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcQuota failed [$ErrorVar]" }
+                                    foreach ( $Quota in ( $QuotaList | Skip-Null ) ) {
+                                        if ( ( $Query.QuotaTarget -eq $Quota.QuotaTarget ) -and ( $Query.Qtree -eq $Quota.Qtree ) ) 
+                                        {
+                                            Write-LogDebug "Remove-NcQuota -User $QuotaTarget -Volume $Volume -Controller $myController -Vserver $SVM -Qtree $Qtree -Policy $myPolicy"
+                                            $Output=Remove-NcQuota -User $QuotaTarget -Volume $Volume -Controller $myController -Vserver $SVM -Qtree $Qtree -Policy $myPolicy  -ErrorVariable ErrorVar 
+                                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Remove-NcQuota failed [$ErrorVar]" }
+                                        }
+                                    }
+                                    try{
+                                        <# Write-LogDebug "Add-NcQuota -User $QuotaTarget -Volume $Volume -Controller $myController -Vserver $SVM -Qtree $Qtree $Opts -Policy $myPolicy"
+                                        $Output=Add-NcQuota -User $QuotaTarget -Volume $Volume -Controller $myController -Vserver $SVM -Qtree $Qtree @NcQuotaParamList -Policy $myPolicy  -ErrorVariable ErrorVar
+                                        if ( $? -ne $True -and $ErrorVar -ne "duplicate entry" ) {Write-LogDebug "Add-NcQuota failed on a duplicate entry"; $Return = $False ; throw "ERROR: Add-NcQuota failed [$ErrorVar]" }
+                                        $VolumeListToRestartQuota+=$SVM + ':' + $Volume #>
+
+                                        if($null -eq $Qtree -or $Qtree.length -eq 0){
+                                            $Qtree=""
+                                        }
+                                        if($Global:PSTKCall -ne "Rest"){
                                             Write-LogDebug "Add-NcQuota -User $QuotaTarget -Volume $Volume -Controller $myController -Vserver $SVM -Qtree $Qtree $Opts -Policy $myPolicy"
                                             $Output=Add-NcQuota -User $QuotaTarget -Volume $Volume -Controller $myController -Vserver $SVM -Qtree $Qtree @NcQuotaParamList -Policy $myPolicy  -ErrorVariable ErrorVar
-                                            if ( $? -ne $True -and $ErrorVar -ne "duplicate entry" ) {Write-LogDebug "Add-NcQuota failed on a duplicate entry"; $Return = $False ; throw "ERROR: Add-NcQuota failed [$ErrorVar]" }
-                                            $VolumeListToRestartQuota+=$SVM + ':' + $Volume
-                                        }catch{
-                                            $ErrorMessage = $_.Exception.Message
-                                            Write-LogWarn "Failed to create quota user rule [$opts] on target [$Qtree] because [$ErrorMessage]"
-                                            Write-LogDebug "Failed to create quota user rule [$opts] on target [$Qtree] because [$ErrorMessage]"
-                                        }
-                                    }
-                                    'group' 
-                                    {
-                                        $Query=Get-NcQuota -Template -Controller $myController
-                                        $Query.QuotaTarget = $QuotaTarget
-                                        $Query.Volume = $Volume
-                                        $Query.Qtree = $Qtree
-                                        $Query.Vserver = $SVM
-                                        $Query.QuotaType= 'group'
-                                        $Query.Policy=$myPolicy
-                                        $QuotaList=Get-NcQuota -Controller $myController -Query $Query  -ErrorVariable ErrorVar
-                                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcQuota failed [$ErrorVar]" }
-                                        foreach ( $Quota in ( $QuotaList | Skip-Null ) ) {
-                                            if ( ( $Query.QuotaTarget -eq $Quota.QuotaTarget ) ) 
-                                            {
-                                                Write-LogDebug "Remove-NcQuota -Group $QuotaTarget -Volume $Volume -Controller $myController -Vserver $SVM -Qtree $Qtree -Policy $myPolicy"
-                                                $Output=Remove-NcQuota -Group $QuotaTarget -Volume $Volume -Controller $myController -Vserver $SVM -Qtree $Qtree -Policy $myPolicy  -ErrorVariable ErrorVar
-                                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Remove-NcQuota failed [$ErrorVar]" }
+                                            #if ( $? -ne $True -and $ErrorVar -notmatch "duplicate entry" ) {Write-LogDebug "Add-NcQuota failed on a duplicate entry [$ErrorVar]"; $Return = $False }
+                                            if ( $? -ne $True ) {Write-LogDebug "Add-NcQuota failed [$ErrorVar]"; $Return = $False }
+                                            if(-not $VolumeListToRestartQuota.Contains($($SVM + ':' + $Volume))){$VolumeListToRestartQuota+=$SVM + ':' + $Volume}
+                                        }else{
+                                            $body=@{}
+                                            if ( $DiskLimit -ne '-' -and $null -ne $DiskLimit ){$body.space+=@{"hard_limit"=$DiskLimit}}
+                                            if ( $SoftDiskLimit -ne '-' -and $null -ne $SoftDiskLimit ){$body.space+=@{"soft_limit"=$SoftDiskLimit}}
+                                            if ( $FileLimit -ne '-' -and $null -ne $FileLimit ){$body.files+=@{"hard_limit"=$FileLimit}}
+                                            if ( $SoftFileLimit -ne '-' -and $null -ne $SoftFileLimit ){$body.files+=@{"soft_limit"=$SoftFileLimit}}
+                                            if ( $Qtree -eq '-' -or $null -eq $Qtree){$body.qtree=@{"name"=""}}else{$body.qtree=@{"name"=$Qtree}}
+                                            if ( $PerformUserMapping -eq $True ){$body.user_mapping=$True}else{$body.user_mapping=$False}
+                                            $body.type="user"
+                                            $body.volume=@{"name"=$Volume}
+                                            $body.svm=@{"name"=$SVM}
+                                            if ($QuotaTarget -eq '-' -or $null -eq $QuotaTarget){$body.users=@();$body.users+=@{"name"=""}}else{$body.users=$QuotaTarget}
+                                            $body=$body | ConvertTo-Json
+                                            $Cred=get_local_cDotcred($myController)
+                                            $url=$("https://"+$myController.Name+"/api/storage/quota/rules")
+                                            Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck"
+                                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                            if($? -ne $True){
+                                                Write-LogError "ERROR: Unable to post [$url]. Reason [$ErrorVar]"
+                                                Write-LogDebug "[$workOn]: end"
+                                                return $False
+                                            }
+                                            $JobUuid=$ret.job.uuid
+                                            $StartTime=Get-date
+                                            $Timeout=$False
+                                            $JobDone=$False
+                                            While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+                                                $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $myController
+                                                if($JobDetail.JobCompletion -eq "success"){
+                                                    $JobDone=$True
+                                                    if(-not $VolumeListToRestartQuota.Contains($($SVM + ':' + $Volume))){$VolumeListToRestartQuota+=$SVM + ':' + $Volume}
+                                                    break
+                                                }else{
+                                                    $JobStatus=$JobDetail.JobState
+                                                    Write-LogDebug "[$workOn] Create quota rule job status [$JobStatus]"
+                                                    if($JobStatus -eq "failure"){
+                                                        $JobCompletion=$JobDetail.JobCompletion
+                                                        Write-LogError "[$workOn] Create quota rule failed [$JobCompletion]"
+                                                        break
+                                                    }
+                                                }
+                                                $CurrentTime=Get-date
+                                                $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+                                                if($TimeSpend -gt $Global:STOP_TIMEOUT){
+                                                    Write-LogWarn "[$myVserver] Create quota user rule take too much time. Check in Ontap its status"
+                                                    $Timeout=$True
+                                                }
+                                                Start-Sleep 5
                                             }
                                         }
-                                        try{
-                                            Write-LogDebug "Add-NcQuota -Group $QuotaTarget -Volume $Volume -Controller $myController -Vserver $SVM -Qtree $Qtree $Opts -Policy $myPolicy"
-                                            $Output=Add-NcQuota -Group $QuotaTarget -Volume $Volume -Controller $myController -Vserver $SVM -Qtree $Qtree @NcQuotaParamList -Policy $myPolicy  -ErrorVariable ErrorVar
-                                            if ( $? -ne $True -and $ErrorVar -ne "duplicate entry" ) {Write-LogDebug "Add-NcQuota failed on a duplicate entry"; $Return = $False ; throw "ERROR: Add-NcQuota failed [$ErrorVar]" }
-                                            $VolumeListToRestartQuota+=$SVM + ':' + $Volume
-                                        }catch{
-                                            $ErrorMessage = $_.Exception.Message
-                                            Write-LogWarn "Failed to create quota group rule [$opts] on target [$Qtree] because [$ErrorMessage]"
-                                            Write-LogDebug "Failed to create quota group rule [$opts] on target [$Qtree] because [$ErrorMessage]"
-                                        }
-                                    }
-                                    default 
-                                    {
-                                        Write-LogError "ERROR: $QuotaType Unknown Type" 
-                                        $Return = $false
+                                    }catch{
+                                        $ErrorMessage = $_.Exception.Message
+                                        Write-LogWarn "Failed to create quota user rule [$opts] on target [$Qtree] because [$ErrorMessage]"
+                                        Write-LogDebug "Failed to create quota user rule [$opts] on target [$Qtree] because [$ErrorMessage]"
                                     }
                                 }
+                                'group' 
+                                {
+                                    $Query=Get-NcQuota -Template -Controller $myController
+                                    $Query.QuotaTarget = $QuotaTarget
+                                    $Query.Volume = $Volume
+                                    $Query.Qtree = $Qtree
+                                    $Query.Vserver = $SVM
+                                    $Query.QuotaType= 'group'
+                                    $Query.Policy=$myPolicy
+                                    $QuotaList=Get-NcQuota -Controller $myController -Query $Query  -ErrorVariable ErrorVar
+                                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcQuota failed [$ErrorVar]" }
+                                    foreach ( $Quota in ( $QuotaList | Skip-Null ) ) {
+                                        if ( ( $Query.QuotaTarget -eq $Quota.QuotaTarget ) ) 
+                                        {
+                                            Write-LogDebug "Remove-NcQuota -Group $QuotaTarget -Volume $Volume -Controller $myController -Vserver $SVM -Qtree $Qtree -Policy $myPolicy"
+                                            $Output=Remove-NcQuota -Group $QuotaTarget -Volume $Volume -Controller $myController -Vserver $SVM -Qtree $Qtree -Policy $myPolicy  -ErrorVariable ErrorVar
+                                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Remove-NcQuota failed [$ErrorVar]" }
+                                        }
+                                    }
+                                    try{
+                                        <# Write-LogDebug "Add-NcQuota -Group $QuotaTarget -Volume $Volume -Controller $myController -Vserver $SVM -Qtree $Qtree $Opts -Policy $myPolicy"
+                                        $Output=Add-NcQuota -Group $QuotaTarget -Volume $Volume -Controller $myController -Vserver $SVM -Qtree $Qtree @NcQuotaParamList -Policy $myPolicy  -ErrorVariable ErrorVar
+                                        if ( $? -ne $True -and $ErrorVar -ne "duplicate entry" ) {Write-LogDebug "Add-NcQuota failed on a duplicate entry"; $Return = $False ; throw "ERROR: Add-NcQuota failed [$ErrorVar]" }
+                                        $VolumeListToRestartQuota+=$SVM + ':' + $Volume #>
+
+                                        if($null -eq $Qtree -or $Qtree.length -eq 0){
+                                            $Qtree=""
+                                        }
+                                        if($Global:PSTKCall -ne "Rest"){
+                                            Write-LogDebug "Add-NcQuota -Group $QuotaTarget -Volume $Volume -Controller $myController -Vserver $SVM -Qtree $Qtree $Opts -Policy $myPolicy"
+                                            $Output=Add-NcQuota -Group $QuotaTarget -Volume $Volume -Controller $myController -Vserver $SVM -Qtree $Qtree @NcQuotaParamList -Policy $myPolicy  -ErrorVariable ErrorVar
+                                            if ( $? -ne $True -and $ErrorVar -ne "duplicate entry" ) {Write-LogDebug "Add-NcQuota failed on a duplicate entry [$ErrorVar]"; $Return = $False }
+                                            if(-not $VolumeListToRestartQuota.Contains($($SVM + ':' + $Volume))){$VolumeListToRestartQuota+=$SVM + ':' + $Volume}
+                                        }else{
+                                            $body=@{}
+                                            if ( $DiskLimit -ne '-' -and $null -ne $DiskLimit ){$body.space+=@{"hard_limit"=$DiskLimit}}
+                                            if ( $SoftDiskLimit -ne '-' -and $null -ne $SoftDiskLimit ){$body.space+=@{"soft_limit"=$SoftDiskLimit}}
+                                            if ( $FileLimit -ne '-' -and $null -ne $FileLimit ){$body.files+=@{"hard_limit"=$FileLimit}}
+                                            if ( $SoftFileLimit -ne '-' -and $null -ne $SoftFileLimit ){$body.files+=@{"soft_limit"=$SoftFileLimit}}
+                                            if ( $Qtree -eq '-' -or $null -eq $Qtree){$body.qtree=@{"name"=""}}else{$body.qtree=@{"name"=$Qtree}}
+                                            $body.type="group"
+                                            $body.volume=@{"name"=$Volume}
+                                            $body.svm=@{"name"=$SVM}
+                                            if ($QuotaTarget -eq '-' -or $null -eq $QuotaTarget){$body.group=@{"name"=""}}else{$body.group=@{"name"=$QuotaTarget}}
+                                            $body=$body | ConvertTo-Json
+                                            $Cred=get_local_cDotcred($myController)
+                                            $url=$("https://"+$myController.Name+"/api/storage/quota/rules")
+                                            Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck"
+                                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                            if($? -ne $True){
+                                                Write-LogError "ERROR: Unable to post [$url]. Reason [$ErrorVar]"
+                                                Write-LogDebug "[$workOn]: end"
+                                                return $False
+                                            }
+                                            $JobUuid=$ret.job.uuid
+                                            $StartTime=Get-date
+                                            $Timeout=$False
+                                            $JobDone=$False
+                                            While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+                                                $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $myController
+                                                if($JobDetail.JobCompletion -eq "success"){
+                                                    $JobDone=$True
+                                                    if(-not $VolumeListToRestartQuota.Contains($($SVM + ':' + $Volume))){$VolumeListToRestartQuota+=$SVM + ':' + $Volume}
+                                                    break
+                                                }else{
+                                                    $JobStatus=$JobDetail.JobState
+                                                    Write-LogDebug "[$workOn] Create quota rule job status [$JobStatus]"
+                                                    if($JobStatus -eq "failure"){
+                                                        $JobCompletion=$JobDetail.JobCompletion
+                                                        Write-LogError "[$workOn] Create quota rule failed [$JobCompletion]"
+                                                        break
+                                                    }
+                                                }
+                                                $CurrentTime=Get-date
+                                                $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+                                                if($TimeSpend -gt $Global:STOP_TIMEOUT){
+                                                    Write-LogWarn "[$myVserver] Create quota user rule take too much time. Check in Ontap its status"
+                                                    $Timeout=$True
+                                                }
+                                                Start-Sleep 5
+                                            }
+                                        }
+                                    }catch{
+                                        $ErrorMessage = $_.Exception.Message
+                                        Write-LogWarn "Failed to create quota group rule [$opts] on target [$Qtree] because [$ErrorMessage]"
+                                        Write-LogDebug "Failed to create quota group rule [$opts] on target [$Qtree] because [$ErrorMessage]"
+                                    }
+                                }
+                                default 
+                                {
+                                    Write-LogError "ERROR: $QuotaType Unknown Type" 
+                                    $Return = $false
+                                }
                             }
+                            #}
                         }
                     }
                 }
@@ -23192,7 +23379,7 @@ Try {
                 Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
                 $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                 if($? -ne $True){
-                    Write-LogError "ERROR: Unable to get policy admin owner. Reason [$ErrorVar]" 
+                    Write-LogError "ERROR: Enable to get policy admin owner. Reason [$ErrorVar]" 
                 }else{
                     $VolQuotaStatus=$ret.records[0].quota.state
                 }
@@ -23200,8 +23387,55 @@ Try {
             if ( $VolQuotaStatus -eq 'on' ) { 
                 Write-LogDebug "restart_quota_vol_from_list: Disable-NcQuota -Vserver $Vserver -Volume $Volume"
                 Write-Log "[$Vserver] Disable quota on Volume [$Volume]" 
-                $Output=Disable-NcQuota -Controller $myController -Vserver $Vserver -Volume $Volume  -ErrorVariable ErrorVar
-                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Disable-NcQuota failed [$ErrorVar]" }
+                if($Global:PSTKCall -ne "Rest"){
+                    $Output=Disable-NcQuota -Controller $myController -Vserver $Vserver -Volume $Volume  -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Disable-NcQuota failed [$ErrorVar]" }
+                }else{
+                    $url="https://"+$myController.Name+"/api/storage/volumes?svm.name="+$Vserver+"&name="+$Volume+"&fields=uuid"
+                    Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+                    $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                    if($? -ne $True){
+                        Write-LogError "ERROR: Unable to get volume detail. Reason [$ErrorVar]" 
+                    }else{
+                        $VolUuid=$ret.records[0].uuid
+                        
+                    }
+                    $url="https://"+$myController.Name+"/api/storage/volumes/"+$VolUuid
+                    $body=@{"quota"=@{"enabled"=$False}}
+                    $body=$body | convertTo-Json
+                    Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $Credential -body $body -SkipCertificateCheck"
+                    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $Credential -SkipCertificateCheck -body $body -ErrorVariable ErrorVar
+                    if($? -ne $True){
+                        Write-LogError "ERROR: Disable to enable quota on volume [$Volume]. Reason [$ErrorVar]" 
+                    }else{
+                        $JobUuid=$ret.job.uuid
+                        $StartTime=Get-date
+                        $Timeout=$False
+                        $JobDone=$False
+                        While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+                            $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $myController
+                            if($JobDetail.JobCompletion -eq "success"){
+                                $JobDone=$True
+                                break
+                            }else{
+                                $JobStatus=$JobDetail.JobState
+                                Write-LogDebug "[$workOn] Disable quota job status [$JobStatus]"
+                                if($JobStatus -eq "failure"){
+                                    $JobCompletion=$JobDetail.JobCompletion
+                                    Write-LogError "[$workOn] Disable quota job status [$JobCompletion]"
+                                    break
+                                }
+                            }
+                            $CurrentTime=Get-date
+                            $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+                            if($TimeSpend -gt $Global:STOP_TIMEOUT){
+                                Write-LogWarn "[$workOn] Disable quota job take too much time. Check in Ontap its status"
+                                $Timeout=$True
+                            }
+                            Start-Sleep 5
+                        }
+                    }
+                }
             }
             $isTimeOut = $false
             $StartTime=Get-date
