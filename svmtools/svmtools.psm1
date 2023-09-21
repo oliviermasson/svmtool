@@ -520,7 +520,7 @@ Function read_config_file ([string]$ConfigFile ) {
 			Write-LogDebug "read_config_file [$key] [$value]"
 	
 			if ($key.Contains("#")) {
-				Write-LogDebug "read_config_file: comment: [$_]"
+				Write-LogDebug "comment: [$_]"
 			} else {
 				$read_vars.Add($key,$value)
 			}
@@ -985,7 +985,7 @@ Function get-lag ($epochdate) {
 Function get_local_cred ([string]$myCredential,[switch]$ResetPassword,[switch]$ADcred) {
 
     if($Global:WfaIntegration){
-        Write-LogDebug "get_local_cred: get from WFA - [$myCredential]"
+        Write-LogDebug "get from WFA - [$myCredential]"
         try{
             $cred = Get-WfaCredentials $myCredential
             return $cred
@@ -1179,7 +1179,7 @@ Function set_cDotcred_from_cli ([string]$filer, [string]$cred_file ) {
 Function get_local_cDotcred ([string]$myCluster) {
 
     if($Global:WfaIntegration){
-        Write-LogDebug "get_cDOT_cred: Get from WFA - Cluster: [$myCluster]"
+        Write-LogDebug "Get from WFA - Cluster: [$myCluster]"
         return Get-WfaCredentials $myCluster
     }
 
@@ -6495,6 +6495,11 @@ Catch {
 }
 #############################################################################################
 # check_update_vserver 
+# update vserver configuration:
+# - allowedprotocols
+# - language
+# - rootvolume security style
+# - nsswitch
 Function check_update_vserver(
 	[NetApp.Ontapi.Filer.C.NcController] $myPrimaryController,
 	[NetApp.Ontapi.Filer.C.NcController] $mySecondaryController,
@@ -9724,6 +9729,111 @@ catch{
 }
 
 #############################################################################################
+# Remove all vserver snapmirror policies
+# needed to remove source or destination SVM
+Function remove_all_snapmirror_policy(
+	[NetApp.Ontapi.Filer.C.NcController] $myController,
+	[string] $myVserver,
+    [string] $workOn=$myVserver) {
+Try {
+
+    $Return = $True 
+    Write-LogDebug "[$workOn]: start"
+	Write-Log "[$workOn] Remove all SVM SnapMirror Policy"
+    Write-LogDebug "Get-NcSnapmirrorPolicy -Vserver $myVserver -Controller $myController"
+    $mySnapmirrorPolicies=Get-NcSnapmirrorPolicy -Vserver $myVserver -Controller $myController -ErrorVariable ErrorVar
+    Write-LogDebug "will remove these snapmirror policy [$mySnapmirrorPolicies]"
+    Write-LogDebug "mySnapmirrorPolicies | Remove-NcSnapmirrorPolicy -VserverContext $myVserver -Controller $myController"
+    $mySnapmirrorPolicies | Remove-NcSnapmirrorPolicy -VserverContext $myVserver -Controller $myController -ErrorVariable ErrorVar 
+    if ( $? -ne $True ) { 
+        Write-LogError "ERROR: Remove-NcSnapmirrorPolicy Failed to remove snapmirror policy [$ErrorVar]" 
+        Write-LogDebug "[$workOn]: end"
+        return $False
+    }
+    Write-LogDebug "end"
+    return $Return 
+}
+Catch {
+Error_Handling $_ $workOn
+return $Return
+}
+}
+
+#############################################################################################
+# create & update all vserver snapmirror policies
+Function create_update_snapmirror_policy(
+	[NetApp.Ontapi.Filer.C.NcController] $myPrimaryController,
+	[NetApp.Ontapi.Filer.C.NcController] $mySecondaryController,
+	[string] $myPrimaryVserver,
+    [string] $mySecondaryVserver,
+    [string]$workOn=$mySecondaryVserver,
+    [bool]$Backup=$False,
+    [bool]$Restore=$False) {
+Try {
+
+    $Return = $True 
+    Write-LogDebug "[$mySecondaryVserver]: start"
+	Write-Log "[$workOn] Create SVM SnapMirror Policies"
+    if($Backup -eq $True){Write-LogDebug "run in Backup mode [$myPrimaryVserver]"}
+    if($Restore -eq $True){Write-LogDebug "run in Restore mode [$myPrimaryVserver]"}
+    <# if($Restore -eq $False){
+	    $myPrimaryCluster = (Get-NcCluster -Controller $myPrimaryController  -ErrorVariable ErrorVar).ClusterName
+        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCluster failed [$ErrorVar]" }
+    }			
+	if($Backup -eq $False){
+        $mySecondaryCluster = (Get-NcCluster -Controller $mySecondaryController  -ErrorVariable ErrorVar).ClusterName			
+        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCluster failed [$ErrorVar]" }
+    } #>
+    if($Restore -eq $False){
+        Write-LogDebug "Get-NcSnapmirrorPolicy -Vserver $myPrimaryVserver -Controller $myPrimaryController"
+        $PrimarySnapmirrorPolicies=Get-NcSnapmirrorPolicy -Vserver $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
+    }else{
+        if(Test-Path $($Global:JsonPath+"Get-NcSnapmirrorPolicy.json")){
+            $PrimarySnapmirrorPolicies=Get-Content $($Global:JsonPath+"Get-NcSnapmirrorPolicy.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcSnapmirrorPolicy.json") successfully imported"
+        }else{
+            Write-LogWarn "Failed to read Get-NcVol.json backup file"
+            Write-LogWarn "Will restore with basic options"
+        }
+    }
+    if($Backup -eq $True){
+        $PrimarySnapmirrorPolicies | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcSnapmirrorPolicy.json") -Encoding ASCII -Width 65535
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcSnapmirrorPolicy.json") -ErrorAction SilentlyContinue) ){
+            Write-LogDebug "$($Global:JsonPath+"Get-NcSnapmirrorPolicy.json") saved successfully"
+        }else{
+            Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcSnapmirrorPolicy.json")"
+            $Return=$False
+        }
+    }
+    if($Backup -eq $False){
+        Write-Log "[$workOn] Remove corresponding Snapmirror Policy on secondary before recreate them"
+        Write-LogDebug "PrimarySnapmirrorPolicies | Remove-NcSnapmirrorPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+        $PrimarySnapmirrorPolicies | Remove-NcSnapmirrorPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar 
+        if ( $? -ne $True ) { 
+            Write-LogError "ERROR: Remove-NcSnapmirrorPolicy Failed to remove snapmirror policy [$ErrorVar]" 
+            Write-LogDebug "[$workOn]: end"
+            return $False
+        }
+        Write-Log "[$workOn] Recreate corresponding Snapmirror Policy on secondary"
+        Write-LogDebug "PrimarySnapmirrorPolicies | New-NcSnapmirrorPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+        $PrimarySnapmirrorPolicies | New-NcSnapmirrorPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar 
+        if ( $? -ne $True ) { 
+            Write-LogError "ERROR: New-NcSnapmirrorPolicy Failed to add new snapmirror policy [$ErrorVar]" 
+            Write-LogDebug "[$workOn]: end"
+            return $False
+        }
+    }
+    Write-LogDebug "end"
+    return $Return 
+}
+Catch {
+Error_Handling $_ $workOn
+return $Return
+}
+}
+
+#############################################################################################
+# create all necessary snapmirror relationship
 Function create_snapmirror_dr(
 	[NetApp.Ontapi.Filer.C.NcController] $myPrimaryController,
 	[NetApp.Ontapi.Filer.C.NcController] $mySecondaryController,
@@ -15338,6 +15448,7 @@ Try {
     }
     if ( ( $ret=check_update_voldr  -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: check_update_voldr failed";  $Return = $False }
     if ( ( $ret=create_update_qospolicy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore -ForClone) -ne $True ) { Write-LogError "ERROR: create_update_qospolicy_dr" ; $Return = $False }
+    if ( ( $ret=create_update_snapmirror_policy -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: create_update_snapmirror_policy" ; $Return = $False }
     if ( ( $ret=create_update_snap_policy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) {Write-LogError "ERROR: create_update_snap_policy_dr"}
     $DestinationVserverDR=($mySecondaryVserver -Split ("_clone."))[0]
     if ( ( $ret=mount_clone_voldr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -DestVserverDR $DestinationVserverDR -workOn $workOn -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to mount all volumes " ; $Return = $False }
@@ -15679,6 +15790,7 @@ Try {
     }
 	if ( ( $ret=check_update_voldr  -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: check_update_voldr failed";  $Return = $False }
     if ( ( $ret=create_update_qospolicy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: create_update_qospolicy_dr" ; $Return = $False }
+    if ( ( $ret=create_update_snapmirror_policy -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: create_update_snapmirror_policy" ; $Return = $False }
 	if ( ( $ret=create_snapmirror_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn -DDR $DDR -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all snapmirror relations " ; $Return = $False }
     if ( ( $ret=create_update_snap_policy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) {Write-LogError "ERROR: create_update_snap_policy_dr"}
     if ( ( $ret=map_lundr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to map all LUNs " ; $Return = $False }
@@ -16148,10 +16260,11 @@ Try {
             }
         }
     }
+    if(($ret=remove_all_snapmirror_policy -myController $myPrimaryController -myVserver $myPrimaryVserver) -ne $True ) { Throw "ERROR: Fail to remove all snapmirror policy inside [$myPrimaryVserver]"}
 	$out = Get-NcVserver  -Name $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar 
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" }
 	if ( $out.State -ne "stopped" ) {
-        Write-LogDebug "remove_vserver_source:Stop-NcVserver -Name $myPrimaryVserver -Controller $myPrimaryController"
+        Write-LogDebug "Stop-NcVserver -Name $myPrimaryVserver -Controller $myPrimaryController"
 		$out = Stop-NcVserver -Name $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar -Confirm:$False
 		if ( $? -ne $True ) {
 			Write-LogError "ERROR: Unable to stop  Vserver [$myPrimaryVserver]" 
@@ -16377,6 +16490,8 @@ Try {
 		}
         Start-Sleep 1
 	}
+
+    if(($ret=remove_all_snapmirror_policy -myController $mySecondaryController -myVserver $mySecondaryVserver) -ne $True ) { Throw "ERROR: Fail to remove all snapmirror policy inside [$mySecondaryVserver]"}
 
 	$out = Get-NcVserver  -Name $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" }
@@ -17967,19 +18082,11 @@ Function update_vserver_dr (
     [bool] $NoSnapmirrorWait=$false) {
 	$Return = $True
 	Write-LogDebug "start"
-	if ( ( check_update_vserver -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver ) -ne $True ) { Write-LogError "ERROR: Failed check update vserver" ; return $False }
- 
-	Write-LogDebug "Update policy"
-	<# if ( ( create_update_policy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver )  -ne $True ) {
-		Write-LogError "ERROR: create_update_policy_dr failed" 
-		$Return = $False
-	} #>												  
-																																																					
+	if ( ( check_update_vserver -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver ) -ne $True ) { Write-LogError "ERROR: Failed check update vserver" ; return $False }									  
+	if ( ( $ret=create_update_snapmirror_policy -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn) -ne $True ) { Write-LogError "ERROR: create_update_snapmirror_policy" ; $Return = $False }																																																				
 	if ( $myDataAggr -or $aggrMatchRegEx ) {
 		Write-LogDebug "Create required new volumes $mySecondaryController Vserver $Vserver"
-
 		if ( ( create_volume_voldr -myDataAggr $myDataAggr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -aggrMatchRegEx $aggrMatchRegEx ) -ne $True ) { Write-LogError "ERROR: Failed to create all volumes" ; return $False }
-
 		Write-LogDebug "Create required new snapmirror relations $mySecondaryController Vserver $Vserver"
 		if ( ( create_snapmirror_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -DDR $DDR ) -ne $True ) { Write-LogError "ERROR: Failed to create all snapmirror relations " ; return $False }
         if(-not $NoSnapMirrorWait){
@@ -23834,8 +23941,19 @@ Try {
 	$Return = $true
     Write-LogDebug "start"
 
+
+    if("Users" -in $objects){
+        Write-Log "[$mySecondaryVserver] Restore Object Users"
+        if ( ( $ret=create_update_role_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $False -Restore $True) -ne $True ) { Write-LogError "ERROR: Failed to restore all Role"}
+        #if( $null -ne $Global:DefaultLocalUserCredentials ){
+            if ( ( $ret=create_update_localuser_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $False -Restore $True) -ne $True ) { Write-LogError "ERROR: Failed to restore all local user"}
+        #}else{
+        #    Write-LogWarn "WARNING: SKIPPING local user create/update with no default credentials"
+        #}
+        if ( ( $ret=create_update_localunixgroupanduser_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $False -Restore $True) -ne $True ) { Write-LogError "ERROR: Failed to restore all Local Unix User and Group"}
+    }
     if("Lifs" -in $objects){
-        Write-Log "[$mySecondaryVserver] Restore Object Lifs"*
+        Write-Log "[$mySecondaryVserver] Restore Object Lifs"
         $ret=create_lif_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $mySecondaryVserver  -Backup $False -Restore $True -nodeMatchRegEx $nodeMatchRegEx
         if ( $ret[0]  -ne $True )  {
             $Return=$False
