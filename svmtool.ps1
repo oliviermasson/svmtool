@@ -2911,6 +2911,9 @@ if ( $RestoreObject ){
     }
     $Global:SVMTOOL_DB=$SVMTOOL_DB
     
+    if ( ( $ret=create_vserver_dr_envelope -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $DestinationSVM -workOn $DestinationSVM -aggrMatchRegEx $aggrMatchRegEx -nodeMatchRegEx $nodeMatchRegEx -myDataAggr $myDataAggr -RootAggr $RootAggr) -ne $True ) { Write-LogError "ERROR: Failed create vserver envelope"; clean_and_exit 1 }
+    if ( ( $ret=check_update_vserver -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $DestinationSVM -workOn $DestinationSVM -Backup $False -Restore $True) -ne $True ) { Write-LogError "ERROR: Failed check update vserver" ; $Return = $False }
+
     if ( ( $ret= restore_object -myPrimaryController $NcPrimaryCtrl `
     -mySecondaryController $NcSecondaryCtrl `
     -myPrimaryVserver $Vserver `

@@ -8109,8 +8109,7 @@ Try {
                 }else{
                     Write-Log "Ignoring Volume [$PrimaryVolName] because of Vol State [$PrimaryVolState], Vol Type [$PrimaryVolType] and Is Vserver Root [$PrimaryVolIsVserverRoot]"
                 }
-            }
-            elseif($PrimaryVolExtendStyle -match "flexgroup|flexgroup_constituent"){
+            }elseif($PrimaryVolExtendStyle -match "flexgroup|flexgroup_constituent"){
                 # create a flexgroup and all its constituent
 
                 if($Restore -eq $False){
@@ -8270,17 +8269,29 @@ Try {
                                         $TieringPolicy="auto"
                                     }
                                 }
-
                                 REST_create_snapmirror -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -PrimaryVol $PrimaryFlexgroupMasterName -SecondaryVol $SecondaryFlexgroupMasterName -Group_type "flexgroup" -Policy $Policy -Policy_type $Policy_type -Schedule $Global:MirrorSchedule -workOn $mySecondaryVserver -TieringPolicy $TieringPolicy
                             }
                               
                         }elseif($PrimaryFlexgroupMasterName -notin $ListFlexgroup){
-                            Write-Log "[$workOn] Volume [$SecondaryFlexgroupMasterName] already exists" 
+                            Write-Log "[$workOn] Flexgroup [$SecondaryFlexgroupMasterName] already exists" 
                             $ListFlexgroup+=$PrimaryFlexgroupMasterName
                         }
                     }
                 }else{
-                    Write-LogWarn "Warning: Ignore Flexgroup [$PrimaryVolName] verification in Restore Mode. If missing, currently you must recreate Flexgroup manualy"
+                    #Write-LogWarn "Warning: Ignore Flexgroup [$PrimaryVolName] verification in Restore Mode. If missing, currently you must recreate Flexgroup manualy"
+                    Write-Log "[$workon] Process a Flexgroup volume [$PrimaryVolName]"
+                    # check this volume Name on secondary SVM
+                    Write-LogDebug "Check if [$PrimaryVolName] volume exists on destination"
+                    Write-LogDebug "Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $PrimaryVolName"
+                    $SecondaryFlexgroup = Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $PrimaryVolName  -ErrorVariable ErrorVar 
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+                    if ( $null -eq $SecondaryFlexgroup ) {
+                        if( ($ret=create_flexgroup -myController $mySecondaryController -myVserver $mySecondaryVserver -myFlexgroup $PrimaryVol) -ne $True) {Write-LogError "ERROR: Fail to create flexgroup [$PrimaryVolName]; $Return=$False"}
+                        clean_and_exit 0
+                    }elseif($PrimaryVolName -notin $ListFlexgroup){
+                        Write-Log "[$workOn] Flexgroup [$PrimaryVolName] already exists" 
+                        $ListFlexgroup+=$PrimaryVolName
+                    }
                 }
             }
             else {
@@ -8299,6 +8310,168 @@ Catch {
     Error_Handling $_ $myPrimaryVserver
 	return $Return
 }
+}
+
+#############################################################################################
+# create an empty flexgroup based on already created flexgroup
+# used currently only in restore mode
+# in normal mode we still use a snamirror_protect job even if it requires us to add a suffix (_dst) to the name of the destination flexgroup. 
+Function create_flexgroup(
+    [NetApp.Ontapi.Filer.C.NcController] $myController,
+    [string] $myVserver,
+    $myFlexgroup) {
+Try {
+    $Return = $True
+    Write-LogDebug "[$myVserver]: start"
+    # analyse flexgroup structure
+    # number of constituent
+    # number of aggr involved
+    # size
+
+    $numberConstituent=$myFlexgroup.constituents.count
+    $numberAggr=$myFlexgroup.aggregates.count
+    $aggrAvailable=(Get-NcAggr -Controller $myController).name
+    if($aggrAvailable.count -ne $numberAggr){
+        Write-LogWarn "WARNING: Destination Cluster does not contains the same number of aggr as source"
+    }
+    if($aggrAvailable.count -lt $numberAggr){
+        Write-LogWarn "WARNING: Destination Cluster contains less aggr than source. Performance will not be the same on destination flexgroup"
+    }
+    $numberConstituentPerAggr=0
+    $index=0
+    foreach ($aggr in $myFlexgroup.aggregates.name){
+        $currentNumber=($myFlexgroup.constituents | Where-Object {$_.aggregates.name -eq $aggr}).count
+        
+        if($index -eq 0){
+            $numberConstituentPerAggr=$currentNumber
+        }else{
+            if($currentNumber -ne $numberConstituentPerAggr){
+                Write-LogError "ERROR: number if data constituent is not equal for all aggregate. Check in ONTAP before continue"
+                Clean_and_exit 1
+            }
+        }
+        $index+=1
+    }
+    $sizeConstituent=$myFlexgroup.constituents[0].space.size
+    $sizeFlexgroup=$myFlexgroup.size
+    $type=$myFlexgroup.type
+    $body=@{}
+    #$body.access_time_enabled=$myFlexgroup.access_time_enabled
+    #$body.activity_tracking=@{"state"=$myFlexgroup.activity_tracking.state}
+    $body.analytics=@{"state"=$myFlexgroup.analytics.state}
+    #$body.anti_ransomware_state=$myFlexgroup.anti_ransomware.state
+    $body.asynchronous_directory_delete=@{"enabled"=$myFlexgroup.asynchronous_directory_delete.enabled}
+    #$body.autosize=$myFlexgroup.autosize
+    $body.cloud_retrieval_policy=$myFlexgroup.cloud_retrieval_policy
+    if($myFlexgroup.comment.length -gt 1){
+        $body.comment=$myFlexgroup.comment
+    }
+    $body.constituents_per_aggregate=$numberConstituentPerAggr
+    #$body.convert_unicode=$myFlexgroup.convert_unicode
+    $body.efficiency=@{
+        "application_io_size"=$myFlexgroup.efficiency.application_io_size
+        "compaction"=$myFlexgroup.efficiency.compaction
+        "compression"=$myFlexgroup.efficiency.compression
+        #"compression_type"=$myFlexgroup.efficiency.compression_type
+        "cross_volume_dedupe"=$myFlexgroup.efficiency.cross_volume_dedupe
+        "dedupe"=$myFlexgroup.efficiency.dedupe
+        #"logging_enabled"=$myFlexgroup.efficiency.logging_enabled
+        #"policy"=@{"name"=$myFlexgroup.efficiency.policy.name}
+    }
+    if($myFlexgroup.efficiency.schedule -ne "-"){
+        $body.efficiency.schedule=$myFlexgroup.efficiency.schedule
+    }
+    if($null -ne $myFlexgroup.efficiency.auto_state){
+        $body.efficiency.auto_state=$myFlexgroup.efficiency.auto_state
+    }
+    $body.encryption=@{
+        "enabled"=$myFlexgroup.encryption.enabled
+        #"type"=$myFlexgroup.encryption.type
+    }
+    #$body.files=@{"maximum"=$myFlexgroup.files.maximum}
+    $body.guarantee=@{"type"=$myFlexgroup.guarantee.type}
+    $body.language=$myFlexgroup.language
+    $body.max_dir_size=$myFlexgroup.max_dir_size
+    $body.name=$myFlexgroup.name
+    $body.nas=@{
+        "export_policy"=@{"name"=$myFlexgroup.nas.export_policy.name}
+        "security_style"=$myFlexgroup.nas.security_style
+        "unix_permissions"=$myFlexgroup.nas.unix_permissions
+    }
+    if($type -eq "rw"){
+        $body.nas.path=$myFlexgroup.nas.path
+    }
+    # ! attention this policy must exist first
+    if($null -ne $myFlexgroup.qos.policy.name){
+        $body.qos=@{"name"=$myFlexgroup.qos.policy.name}
+    }
+    $body.size=$sizeFlexgroup
+    $body.snaplock=@{"type"=$myFlexgroup.snaplock.type}
+    if($myFlexgroup.snaplock.type -ne "non_snaplock"){
+        $body.snaplock.retention=@{
+            "default"=$myFlexgroup.snaplock.retention.default
+            "maximum"=$myFlexgroup.snaplock.retention.maximum
+            "minimum"=$myFlexgroup.snaplock.retention.minimum
+        }
+    }
+    $body.snapshot_locking_enabled=$myFlexgroup.snapshot_locking_enabled
+    $body.snapshot_policy=@{"name"=$myFlexgroup.snapshot_policy.name}
+    $body.svm=@{"name"=$myFlexgroup.svm.name}
+    $body.tiering=@{"policy"=$myFlexgroup.tiering.policy}
+    if($myFlexgroup.tiering.policy -ne "none"){
+        $body.tiering.min_cooling_days=$myFlexgroup.tiering.min_cooling_days
+        $body.tiering.object_tags=$myFlexgroup.tiering.object_tags
+    }
+    $body.type=$type
+    $body.aggregates=@()
+    foreach ($aggr in $aggrAvailable){
+        $body.aggregates+=@{"name"=$aggr}
+    }
+    $body=$body | ConvertTo-Json
+    $credential=get_local_cDotcred($myController)
+    $url=$("https://"+$myController.Name+"/api/storage/volumes")
+    Write-LogDebug "Invoke-RestMethod -Method post -Uri $url -Credential $credential -body $body -SkipCertificateCheck"
+    $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $credential -body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+    if($? -ne $True){
+        Write-LogError "ERROR: Unable to create flexgroup. Reason [$ErrorVar]"
+        Write-LogDebug "[$workOn]: end"
+        return $False
+    }
+    $JobUuid=$ret.job.Uuid
+    Write-LogDebug "Check create flexgroup job [$JobUuid]"
+    $StartTime=Get-Date
+    $JobDone=$False
+    While($JobDone -eq $False){
+        $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
+        if($JobDetail.JobCompletion -eq "success"){
+            $JobDone=$True
+            Write-LogDebug "[$workOn]: end"
+            return $True
+        }else{
+            $JobStatus=$JobDetail.JobState
+            Write-LogDebug "[$workOn] create flexgroup job status [$JobStatus]"
+            if($JobStatus -eq "failure"){
+                $JobCompletion=$JobDetail.JobCompletion
+                Write-LogError "[$workOn] create flexgroup job status [$JobCompletion]"
+                Write-LogDebug "[$workOn]: end"
+                return $False
+            }
+        }
+        $CurrentTime=Get-date
+        $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+        if($TimeSpend -gt $Global:STOP_TIMEOUT){
+            Write-LogWarn "[$workOn] create flexgroup job take too much time. Check in Ontap its status"
+            Write-LogDebug "[$workOn]: end"
+            return $False
+        }
+    }
+    Write-LogDebug "[$myVserver]: end"
+	return $Return 
+}
+Catch {
+    Error_Handling $_ $myVserver
+	return $Return
+    }
 }
 
 #############################################################################################
@@ -9936,7 +10109,7 @@ Try {
     #     } 
     # }
 
-    # iterates on the list of primary volumes available or selected
+    # * iterates on the list of primary volumes available or selected to create snapmirror relationship
     $ListFlexgroup=@()
     $WarningFlexgroup=@()
     $ChangePolicyFlexgroup=@()
@@ -15543,6 +15716,202 @@ Function set_vserver_protocols_with_rest (
 }
 
 #############################################################################################
+# create vserver DR envelope
+# used only with restoreobject
+Function create_vserver_dr_envelope (
+    [NetApp.Ontapi.Filer.C.NcController]$myPrimaryController,
+    [NetApp.Ontapi.Filer.C.NcController]$mySecondaryController,
+	[string]$myPrimaryVserver,
+    [string]$mySecondaryVserver,
+    [string]$workOn=$mySecondaryVserver,
+    [string]$aggrMatchRegEx,
+    [string]$nodeMatchRegEx,
+    [string]$myDataAggr,    
+    [string]$RootAggr
+    ){
+Try {
+	$Return = $True
+    $runBackup=$False
+    $runRestore=$False
+    $Restore=$True
+    $Backup=$False
+    Write-Log "[$workOn] Check SVM configuration"
+    Write-LogDebug "[$myPrimaryVserver]: start"
+    if($Backup -eq $True){Write-LogDebug "run in Backup mode [$myPrimaryVserver]";$runBackup=$True}
+    if($Restore -eq $True){Write-LogDebug "run in Restore mode [$myPrimaryVserver]";$runRestore=$True}
+
+    if($Restore -eq $False){
+        $PrimaryVserver = Get-NcVserver -Controller $myPrimaryController -Name $myPrimaryVserver  -ErrorVariable ErrorVar  
+        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" }
+        if ( $null -eq $PrimaryVserver ) {
+            Write-LogError "ERROR: Vserver $myPrimaryVserver not found" 
+            clean_and_exit 1
+        }
+        if($Global:PSTKCall -match "Zapi"){
+            if($null -eq $PrimaryVserver.RootVolume){
+                $PrimaryVserver = Get-NcVserver -Controller $myPrimaryController -Name $myPrimaryVserver  -ErrorVariable ErrorVar -ONTAPI 
+                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" }
+                if ( $null -eq $PrimaryVserver ) {
+                    Write-LogError "ERROR: Vserver $myPrimaryVserver not found" 
+                    clean_and_exit 1
+                }
+                $PrimaryRootVolume=$PrimaryVserver.RootVolume   
+            }
+        }else{
+            $PrimaryCredential = get_local_cDotcred($myPrimaryController)
+            $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/vserver?vserver="+$myPrimaryVserver+"&fields=rootvolume,aggregate,rootvolume_security_style,allowed_protocols")
+            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck"
+            $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+            if($? -ne $True){
+                Write-LogError "ERROR: Unable to get svm rootvolume name. Reason [$ErrorVar]" 
+            }else{
+                $PrimaryVserver.RootVolume=$ret.records[0].rootvolume
+                $PrimaryVserver.RootVolumeAggregate=$ret.records[0].aggregate
+                $PrimaryVserver.RootVolumeSecurityStyle=$ret.records[0].rootvolume_security_style
+                $PrimaryVserver.AllowedProtocols=$ret.records[0].allowed_protocols
+            }
+        }
+    }else{
+        # Read JSON file for this SVM
+        if(Test-Path $($Global:JsonPath+"Get-NcVserver.json")){
+            $PrimaryVserver=Get-Content $($Global:JsonPath+"Get-NcVserver.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcVserver.json") successfully imported"
+        }else{
+            $Return=$False
+            $filepath=$($Global:JsonPath+"Get-NcVserver.json")
+            Throw "ERROR: failed to read $filepath"
+        }
+        $mySecondaryVserver=$myPrimaryVserver
+    }
+    <# if($Backup -eq $True){
+        $PrimaryVserver | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcVserver.json") -Encoding ASCII -Width 65535
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcVserver.json") -ErrorAction SilentlyContinue) ){
+            Write-LogDebug "$($Global:JsonPath+"Get-NcVserver.json") saved successfully"
+        }else{
+            Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcVserver.json")"
+        }
+    } #>
+
+    if($Backup -eq $False){
+        $PrimaryRootVolume = $PrimaryVserver.RootVolume
+        $PrimaryRootVolumeAggr = $PrimaryVserver.RootVolumeAggregate
+        $PrimaryRootVolumeSecurityStyle = $PrimaryVserver.RootVolumeSecurityStyle
+        $PrimaryLanguage = $PrimaryVserver.Language
+        $PrimaryIPSpace = $PrimaryVserver.Ipspace
+        $PrimaryAllowedProtocols=$PrimaryVserver.AllowedProtocols
+        $PrimaryComment=$PrimaryVserver.Comment
+        $SecondaryVserver = Get-NcVserver -Controller $mySecondaryController -Name $mySecondaryVserver  -ErrorVariable ErrorVar 
+        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" }
+        
+        if ( $null -ne $SecondaryVserver ) {
+            Write-Log "[$mySecondaryVserver] Already exists on $mySecondaryController"
+            <# if($Global:PSTKCall -eq "Rest"){
+                $SecondaryCredential = get_local_cDotcred($mySecondaryController)
+                $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/vserver?vserver="+$mySecondaryVserver+"&fields=rootvolume,aggregate,rootvolume_security_style,allowed_protocols")
+                Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
+                $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+                if($? -ne $True){
+                    Write-LogError "ERROR: Unable to get svm rootvolume name. Reason [$ErrorVar]" 
+                }else{
+                    $SecondaryVserver.RootVolume=$ret.records[0].rootvolume
+                    $SecondaryVserver.RootVolumeAggregate=$ret.records[0].aggregate
+                    $SecondaryVserver.RootVolumeSecurityStyle=$ret.records[0].rootvolume_security_style
+                    $SecondaryVserver.AllowedProtocols=$ret.records[0].allowed_protocols
+                }
+            }
+            # $SecondaryRootVolume = $SecondaryVserver.RootVolume
+            # $SecondaryRootVolumeSecurityStyle = $SecondaryVserver.RootVolumeSecurityStyle
+            $SecondaryLanguage = $SecondaryVserver.Language
+            $SecondaryAllowedProtocols=$SecondaryVserver.AllowedProtocols
+            $SecondaryNameMappingSwitch=$SecondaryVserver.NameMappingSwitch
+            $SecondaryNameServerSwitch=$SecondaryVserver.NameServerSwitch
+            $SecondaryComment=$SecondaryVserver.Comment	
+            $SecondaryRootVolumeAggregate=$SecondaryVserver.RootVolumeAggregate #>
+        }else {
+            Write-Log "[$workOn] Create new vserver"
+            $Question = "[$workOn] Please Select root aggregate on Cluster [$MySecondaryController]:"
+
+            # this now works differently, we try to pick the best matching aggr and fall back to default
+            if($aggrMatchRegEx -ne ""){
+                $dataAggrMatchRegex = replace_regex_groupmatches -string $PrimaryRootVolumeAggr -regex $aggrMatchRegEx -replacewith "(.*)"
+            }else{
+                $dataAggrMatchRegex = ""
+            }
+            # we find a regex match first, but fall back to default.  If default is provided, we also assume autoselect (it's just for the rootvol)
+            $RootAggr = select_data_aggr_from_cli -myController $mySecondaryController -myQuestion $Question -regExMatch $dataAggrMatchRegex -default $RootAggr -autoSelect ($Global:NonInteractive -or ($RootAggr -ne ""))
+            Write-LogDebug "Get-NcAggr -Controller $mySecondaryController -Name $RootAggr"
+            $out = Get-NcAggr -Controller $mySecondaryController -Name $RootAggr  -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcAggr failed [$ErrorVar]" ; }
+
+            if ( $null -eq $out ) {
+                Write-LogError "ERROR: aggregate [$RootAggr] not found on cluster [$mySecondaryController]" 
+                Write-LogError "ERROR: exit" 
+                clean_and_exit 1 
+            }
+            $SecondaryComment=$(($PrimaryComment -replace " secondary SVMTOOL","")+" secondary SVMTOOL")
+            if($Global:PSTKCall -eq "Zapi"){
+                Write-Log "[$workOn] Create DR Vserver [$PrimaryRootVolume] [$PrimaryLanguage] [$mySecondaryController] [$RootAggr]"
+                Write-LogDebug "New-NcVserver -Name $mySecondaryVserver -RootVolume $PrimaryRootVolume -RootVolumeSecurityStyle $PrimaryRootVolumeSecurityStyle -Comment $SecondaryComment -Language $PrimaryLanguage -NameServerSwitch file -Ipspace $PrimaryIPSpace -Controller $mySecondaryController -RootVolumeAggregate $RootAggr"
+                $NewVserver=New-NcVserver -Name $mySecondaryVserver -RootVolume $PrimaryRootVolume -RootVolumeSecurityStyle $PrimaryRootVolumeSecurityStyle -Comment $SecondaryComment -Language $PrimaryLanguage -NameServerSwitch file -Ipspace $PrimaryIPSpace -Controller $mySecondaryController -RootVolumeAggregate $RootAggr  -ErrorVariable ErrorVar
+                if ( $? -ne $True ) {
+                    Write-LogError "ERROR: Failed to create vserver $mySecondaryVserver on $mySecondaryController"  
+                    Write-LogError "ERROR: exit" 
+                    clean_and_exit 1
+                }
+
+                Write-LogDebug "Set-NcVserver -Name $mySecondaryVserver -AllowedProtocols $PrimaryAllowedProtocols -Controller $mySecondaryController"
+                $NewVserver=Set-NcVserver -AllowedProtocols $PrimaryAllowedProtocols -Name $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                if ( $? -ne $True ) {
+                    Write-LogError "ERROR: Failed to modify vserver $mySecondaryVserver on $mySecondaryController"  
+                    Write-LogError "ERROR: exit" 
+                    clean_and_exit 1
+                }
+            }else{ # Rest Mode
+                # * Set-NcVserver does not support -RootVolume -RootVolumeAggregate -RootVolumeSecurityStyle and allowed_protocols arguments
+                Write-Log "[$workOn] Create DR Vserver [$PrimaryLanguage] [$mySecondaryController] [$RootAggr]"
+                # ! force ONTAPI due to burt when adding files as ns-switch group protocol in REST mode which is transformed in filess with two 's' which not a protocol!!
+                Write-LogDebug "New-NcVserver -Name $mySecondaryVserver -Comment $SecondaryComment -Language $PrimaryLanguage -NameServerSwitch file -Ipspace $PrimaryIPSpace -Controller $mySecondaryController -ONTAPI"
+                $NewVserver=New-NcVserver -Name $mySecondaryVserver -Comment $SecondaryComment -Language $PrimaryLanguage -NameServerSwitch file -Ipspace $PrimaryIPSpace -Controller $mySecondaryController -ErrorVariable ErrorVar -ONTAPI
+                if ( $? -ne $True ) {
+                    Write-LogError "ERROR: Failed to create vserver $mySecondaryVserver on $mySecondaryController"  
+                    Write-LogError "ERROR: exit" 
+                    clean_and_exit 1
+                }    
+                $SecondaryCredential = get_local_cDotcred($mySecondaryController)
+                $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/vserver?vserver="+$mySecondaryVserver+"&fields=rootvolume,aggregate,rootvolume_security_style,allowed_protocols")
+                Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
+                $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+                if($? -ne $True){
+                    Write-LogError "ERROR: Unable to get svm rootvolume name. Reason [$ErrorVar]" 
+                }else{
+                    $SecondaryVserver = Get-NcVserver -Controller $mySecondaryController -Name $mySecondaryVserver  -ErrorVariable ErrorVar 
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" }
+                    $SecondaryVserver.RootVolume=$ret.records[0].rootvolume
+                    $SecondaryVserver.RootVolumeSecurityStyle = $ret.records[0].rootvolume_security_style
+                    $SecondaryVserver.RootVolumeAggregate = $ret.records[0].aggregate
+                    $SecondaryVserver.AllowedProtocols = $ret.records[0].allowed_protocols
+                } 
+            } 
+            $SecondaryVserver = Get-NcVserver -Controller $mySecondaryController -Name $mySecondaryVserver  -ErrorVariable ErrorVar 
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" }
+            if ( $null -eq $SecondaryVserver ) {
+                Write-LogError "ERROR: Failed Get vserver information $mySecondaryVserver on $mySecondaryController"  
+                Write-LogError "ERROR: exit" 
+                clean_and_exit 1
+            }
+        }
+    }
+
+    Write-LogDebug "[$myPrimaryVserver]: end"
+    return $Return 
+} Catch {
+    Error_Handling $_ $myPrimaryVserver
+	return $Return
+}
+}
+
+#############################################################################################
+# create vserver DR envelope and all others component
 Function create_vserver_dr (
     [NetApp.Ontapi.Filer.C.NcController]$myPrimaryController,
     [NetApp.Ontapi.Filer.C.NcController]$mySecondaryController,
