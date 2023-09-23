@@ -6,7 +6,7 @@
 # Generated on: 2018-10-09
 #
 # Updated by : Olivier Masson
-# Updated on : 2020-11-13
+# Updated on : 2022-11-07
 #
 # Version Control :
 #   1.0.0 : Initial version
@@ -26,6 +26,8 @@
 #   1.1.4 : Add NonInteractive parameter to Restore-SvmDr
 #           Add ForceRestoreOriginal parameter to Restore-SvmDr
 #   1.1.5 : Add ForceRestoreOriginal parameter to Restore-ObjectSvmDr
+#   1.1.6 : Add DefaultChapCredentials paramater
+#   1.1.7 : Change/Add some synopsis informations
 #           
 @{
 
@@ -33,7 +35,7 @@
     RootModule        = '.\svmtool.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.1.5'
+    ModuleVersion     = '1.1.7'
 
     # Supported PSEditions
     # CompatiblePSEditions = @()
@@ -122,7 +124,7 @@
             # LicenseUri = ''
 
             # A URL to the main website for this project.
-            ProjectUri = 'https://github.com/oliviermasson/svmtool'
+            ProjectUri = 'https://github.com/CXO-Automation/svmtool'
 
             # A URL to an icon representing this module.
             # IconUri = ''
@@ -135,7 +137,7 @@
     } # End of PrivateData hashtable
 
     # HelpInfo URI of this module
-    HelpInfoURI       = 'https://github.com/oliviermasson/svmtool'
+    HelpInfoURI       = 'https://github.com/CXO-Automation/svmtool'
 
     # Default prefix for commands exported from this module. Override the default prefix using Import-Module -Prefix.
     # DefaultCommandPrefix = ''

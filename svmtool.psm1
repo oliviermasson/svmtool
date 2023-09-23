@@ -159,6 +159,7 @@ function New-SvmDrConfiguration {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
 
         [Int32]$Timeout = 60
 
@@ -169,6 +170,7 @@ function New-SvmDrConfiguration {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "Setup"
 }
+
 <#
 .Synopsis
     Initialize a new relationship between 2 vservers.
@@ -452,6 +454,11 @@ function New-SvmDr {
         # Use this parameter to join the dr vserver in AD without interaction
         [pscredential]$ActiveDirectoryCredentials,
 
+        # Optional argument to pass the iSCSI CHAP username and password used to configure iSCSI session security.
+        # In NonInteractive Mode, username and password of this pre-created credential are used
+        # Can be used during ConfigureDR, UpdateDR, CloneDR, Restore, UpdateReverse, Migrate, ReActivate and RestoreObject
+        [pscredential]$DefaultChapCredentials,
+
         # Optional, when the vserver dr is created, all lifs are taken offline (duplicate ip conflicts)
         # Hence if the vserver needs to be joined in AD, there is no lif available
         # By passing an temporary ip-address and in combination with parameter "SecondaryCifsLifMaster"
@@ -510,7 +517,11 @@ function New-SvmDr {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
-        [Int32]$Timeout = 60
+        [switch]$ForceZapi,
+        [Int32]$Timeout = 60,
+
+        # If Present CIFS shares that are presents on Dest but not present on source, will be deleted on Dest
+        [switch]$DeleteDestShares
     )
 
     $CommandName = $PSCmdlet.MyInvocation.InvocationName;
@@ -518,6 +529,7 @@ function New-SvmDr {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "ConfigureDR"
 }
+
 <#
 .Synopsis
     Shows all registered relationships
@@ -589,6 +601,7 @@ function Show-SvmDrConfiguration {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "ListInstance"
 }
+
 <#
 .Synopsis
     Shows a vserver relationship
@@ -688,6 +701,7 @@ function Show-SvmDr {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -697,6 +711,7 @@ function Show-SvmDr {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "ShowDR"
 }
+
 <#
 .Synopsis
     Updates relationships between 2 vservers.
@@ -870,6 +885,11 @@ function Update-SvmDr {
         # Use this parameter to join the dr vserver in AD without interaction
         [pscredential]$ActiveDirectoryCredentials,
 
+        # Optional argument to pass the iSCSI CHAP username and password used to configure iSCSI session security.
+        # In NonInteractive Mode, username and password of this pre-created credential are used
+        # Can be used during ConfigureDR, UpdateDR, CloneDR, Restore, UpdateReverse, Migrate, ReActivate and RestoreObject
+        [pscredential]$DefaultChapCredentials,
+
         # Optional, when the vserver dr is created, all lifs are taken offline (duplicate ip conflicts)
         # Hence if the vserver needs to be joined in AD, there is no lif available
         # By passing an temporary ip-address and in combination with parameter "SecondaryCifsLifMaster"
@@ -913,7 +933,11 @@ function Update-SvmDr {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
-        [Int32]$Timeout = 60
+        [switch]$ForceZapi,
+        [Int32]$Timeout = 60,
+
+        # If Present CIFS shares that are presents on Dest but not present on source, will be deleted on Dest
+        [switch]$DeleteDestShares
     )
 
 
@@ -922,6 +946,7 @@ function Update-SvmDr {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "UpdateDR"
 }
+
 <#
 .Synopsis
     Removes the relationships between 2 vservers.
@@ -933,7 +958,7 @@ function Update-SvmDr {
 
     Remove-SvmDr -Instance Default -Vserver cifs
 
-    Do you really want to delete SVM_DR [cifs-dr] from secondary cluster  [c3po] ? [y/n] : y
+    Do you really want to delete SVM-DR [cifs-dr] from secondary cluster  [c3po] ? [y/n] : y
     remove snapmirror relation for volume [cifs:vol1] [cifs-dr:vol1]
     Release Relation [cifs:vol1] [cifs-dr:vol1]
     Remove volume [vol1] from [cifs-dr]
@@ -968,6 +993,7 @@ function Remove-SvmDr {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -977,6 +1003,7 @@ function Remove-SvmDr {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "DeleteDR"
 }
+
 <#
 .Synopsis
     Activates Svm Dr
@@ -984,9 +1011,10 @@ function Remove-SvmDr {
     Activates Svm Dr
     Test if source vserver is still alive
     If still alive will prompt if you want to swith production from source to destination vserver
-    If not alive will switch automaticaly production on DR with source identity
+    Check if secondary SVM has been configured with Preserve Identity or not and then perform necessary actions to keep or not identity on secondary SVM
+    If not alive will switch automaticaly production on DR
     It will break all snapmirror relations
-    It will bring the DR vserver online (and the lifs) with source identity
+    It will bring the DR vserver online (and the lifs)
     It will bring the source vserver offline
 
 .EXAMPLE
@@ -1041,10 +1069,6 @@ function Invoke-SvmDrActivate {
         # Is default enabled in Wfa-Integration Mode
         [switch]$NonInteractive,
 
-        # Preserve or not Network Identity (IP addresses and CIFS server name) of Source on Destination
-        [Parameter(Mandatory = $false)]
-        [bool]$PreserveIdentity=$True,
-
         # Enables OnCommand Workflow Automation (WFA) Integration
         [switch]$WfaIntegration,
 
@@ -1053,7 +1077,11 @@ function Invoke-SvmDrActivate {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
-        [Int32]$Timeout = 60
+        [switch]$ForceZapi,
+        [Int32]$Timeout = 60,
+
+        # If Present CIFS shares that are presents on Dest but not present on source, will be deleted on Dest
+        [switch]$DeleteDestShares
     )
 
     $CommandName = $PSCmdlet.MyInvocation.InvocationName;
@@ -1061,6 +1089,7 @@ function Invoke-SvmDrActivate {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "ActivateDR"
 }
+
 <#
 .Synopsis
     Resyncs Svm Dr relations
@@ -1121,6 +1150,7 @@ function Invoke-SvmDrResync {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -1129,6 +1159,7 @@ function Invoke-SvmDrResync {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "Resync"
 }
+
 <#
 .Synopsis
     Resyncs Svm Dr relations in the opposite direction
@@ -1194,6 +1225,7 @@ function Invoke-SvmDrResyncReverse {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -1202,6 +1234,7 @@ function Invoke-SvmDrResyncReverse {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "ResyncReverse"
 }
+
 <#
 .Synopsis
     Updates relationships between 2 vservers in the opposite direction.
@@ -1366,6 +1399,11 @@ function Update-SvmDrReverse {
         # If you pass this parameter, the password will used to create missing users
         [pscredential]$DefaultLocalUserCredentials,
 
+        # Optional argument to pass the iSCSI CHAP username and password used to configure iSCSI session security.
+        # In NonInteractive Mode, username and password of this pre-created credential are used
+        # Can be used during ConfigureDR, UpdateDR, CloneDR, Restore, UpdateReverse, Migrate, ReActivate and RestoreObject
+        [pscredential]$DefaultChapCredentials,
+
         # Loglevel of the console output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
         [string]$LogLevelConsole = "Info",
@@ -1383,6 +1421,7 @@ function Update-SvmDrReverse {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -1391,6 +1430,7 @@ function Update-SvmDrReverse {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "UpdateReverse"
 }
+
 <#
 .Synopsis
     Re-establishes the orginal Svm Dr Relation
@@ -1477,12 +1517,18 @@ function Invoke-SvmDrRecoverFromDr {
         # If you pass this parameter, the password will used to create missing users
         [pscredential]$DefaultLocalUserCredentials,
 
+        # Optional argument to pass the iSCSI CHAP username and password used to configure iSCSI session security.
+        # In NonInteractive Mode, username and password of this pre-created credential are used
+        # Can be used during ConfigureDR, UpdateDR, CloneDR, Restore, UpdateReverse, Migrate, ReActivate and RestoreObject
+        [pscredential]$DefaultChapCredentials,
+
         # Snapmirror Policy to use
         [Parameter(Mandatory = $false)]
         [string]$XDPPolicy,
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -1491,6 +1537,7 @@ function Invoke-SvmDrRecoverFromDr {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "ReActivate"
 }
+
 <#
 .Synopsis
     Removes the relationship-configuration-file between 2 vservers
@@ -1530,6 +1577,7 @@ function Remove-SvmDrConfiguration {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -1538,6 +1586,7 @@ function Remove-SvmDrConfiguration {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "RemoveDRConf"
 }
+
 <#
 .Synopsis
     Removes Instance configuration between two Clusters
@@ -1567,6 +1616,8 @@ function Remove-SvmDrInstance {
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
         [string]$LogLevelLogFile = "Debug",
 
+        [switch]$ForceZapi,
+
         # Enables OnCommand Workflow Automation (WFA) Integration
         [switch]$WfaIntegration
     )
@@ -1576,6 +1627,7 @@ function Remove-SvmDrInstance {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Add "-RemoveInstance $Instance" -Drop "Instance"
 }
+
 <#
 .Synopsis
     Applies a snapmirror schedule on all snapmirror relations
@@ -1624,6 +1676,7 @@ function Set-SvmDrSchedule {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -1632,6 +1685,7 @@ function Set-SvmDrSchedule {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList)
 }
+
 <#
 .Synopsis
     Applies a snapmirror schedule on all reversed snapmirror relations
@@ -1679,6 +1733,7 @@ function Set-SvmDrScheduleReverse {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -1687,6 +1742,7 @@ function Set-SvmDrScheduleReverse {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList)
 }
+
 <#
 .Synopsis
     Migrates the source svm to the desination svm
@@ -1884,8 +1940,13 @@ function Invoke-SvmDrMigrate {
 
         # Optional, this SvmDr solution cannot transfer the passwords of local users (cifs, cluster)
         # In Non-Interactive Mode, the script cannot create missing users
-        # If you pass this parameter, the password will used to create missing users
+        # If you pass this parameter, the contained password will be used to create missing users
         [pscredential]$DefaultLocalUserCredentials,
+
+        # Optional argument to pass the iSCSI CHAP username and password used to configure iSCSI session security.
+        # In NonInteractive Mode, username and password of this pre-created credential are used
+        # Can be used during ConfigureDR, UpdateDR, CloneDR, Restore, UpdateReverse, Migrate, ReActivate and RestoreObject
+        [pscredential]$DefaultChapCredentials,
 
         # Loglevel of the console output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
@@ -1899,10 +1960,11 @@ function Invoke-SvmDrMigrate {
         # Is default enabled in Wfa-Integration Mode
         [switch]$NonInteractive,
 
-        # Optional, when the vserver dr is created, all lifs are taken offline (duplicate ip conflicts)
+        # Optional, when the vserver dr is created, all lifs are taken offline (to avoid duplicate ip conflicts)
         # Hence if the vserver needs to be joined in AD, there is no lif available
         # By passing an temporary ip-address and in combination with parameter "SecondaryCifsLifMaster"
-        # A temporary lif will be created to join the vserver dr in AD
+        # A temporary lif will be created to join the vserver dr into AD
+        # May be necessary for the last update before migrate, only if secondary SVM is configured with Preserve Identity
         [string]$TemporarySecondaryCifsIp,
 
         # Optional, when the vserver dr is created, all lifs are taken offline (duplicate ip conflicts)
@@ -1924,7 +1986,11 @@ function Invoke-SvmDrMigrate {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
-        [Int32]$Timeout = 60
+        [switch]$ForceZapi,
+        [Int32]$Timeout = 60,
+
+        # If Present CIFS shares that are presents on Dest but not present on source, will be deleted on Dest
+        [switch]$DeleteDestShares
     )
 
 
@@ -1933,6 +1999,7 @@ function Invoke-SvmDrMigrate {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "Migrate"
 }
+
 <#
 .Synopsis
     Removes a source vserver
@@ -1998,8 +2065,12 @@ function Remove-SvmDrSource {
         # Enables OnCommand Workflow Automation (WFA) Integration
         [switch]$WfaIntegration,
 
+        #Enables Force Delete source event if dest does not exists
+        [switch]$ForceDelete,
+
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -2008,6 +2079,7 @@ function Remove-SvmDrSource {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "DeleteSource"
 }
+
 <#
 .Synopsis
     Restores quota's on the destination
@@ -2062,6 +2134,7 @@ function Set-SvmDrQuota {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -2071,6 +2144,7 @@ function Set-SvmDrQuota {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "CreateQuotaDR"
 }
+
 <#
 .Synopsis
     Restores quota's in the reverse direction (destination -> source)
@@ -2126,6 +2200,7 @@ function Set-SvmDrQuotaReverse {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -2135,6 +2210,7 @@ function Set-SvmDrQuotaReverse {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "ReCreateQuota"
 }
+
 <#
 .Synopsis
     Makes some internal tests
@@ -2187,6 +2263,7 @@ function Test-SvmDrConnection {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -2196,6 +2273,7 @@ function Test-SvmDrConnection {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "InternalTest"
 }
+
 <#
 .Synopsis
     Removes all broken Reverse SnapMirror relations (after DR test or crash)
@@ -2238,6 +2316,7 @@ function Clear-SvmDrReverse {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -2247,12 +2326,13 @@ function Clear-SvmDrReverse {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "CleanReverse"
 }
+
 <#
 .Synopsis
     Backs up Cluster and Vserver information to Json-files
 .DESCRIPTION
 	Backs up Cluster and Vserver information to Json-files.
-    The vserver is optional, if not provided, the full cluster is backed up.
+    The vserver is optional, if not provided, all SVM of corresponding cluster are backed up.
 .NOTES
     The backup process is ran in a runspace (parallel execution)
     Console logging wil not work in an Powershell ISE host
@@ -2343,6 +2423,7 @@ function Backup-SvmDr {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -2528,6 +2609,11 @@ function New-SvmDrClone {
         # Use this parameter to join the dr vserver in AD without interaction
         [pscredential]$ActiveDirectoryCredentials,
 
+        # Optional argument to pass the iSCSI CHAP username and password used to configure iSCSI session security.
+        # In NonInteractive Mode, username and password of this pre-created credential are used
+        # Can be used during ConfigureDR, UpdateDR, CloneDR, Restore, UpdateReverse, Migrate, ReActivate and RestoreObject
+        [pscredential]$DefaultChapCredentials,
+
         # Optional, when the vserver clone is created, all lifs are taken offline (duplicate ip conflicts)
         # Hence if the vserver needs to be joined in AD, there is no lif available
         # By passing an temporary ip-address and in combination with parameter "SecondaryCifsLifMaster"
@@ -2574,6 +2660,7 @@ function New-SvmDrClone {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -2643,6 +2730,7 @@ function Remove-SvmDrClone {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -2659,6 +2747,10 @@ function Remove-SvmDrClone {
 .DESCRIPTION
 	Restores Cluster and Vserver information from previously created Json-files
     The vserver is optional, if not provided all vservers will be restored
+.PARAMETER Objects
+    List of object currently available that can be restored independantly
+    [Lifs, Volumes, NFS Exports, CifsServer, NetBios, CIFS Shares, Symlinks, Quotas, Users]
+
 .NOTES
     
     RestoreObject can be used to restore on source a list of mandatory CIFS Server, CIFS shares, volumes or Lifs
@@ -2667,7 +2759,7 @@ function Remove-SvmDrClone {
 
 .EXAMPLE 
 
-    Restore-ObjectSvmDr -Cluster r2d2 -Vserver PSLAB -Objects Shares -Destination c3po -Vserver cifs
+    Restore-ObjectSvmDr -Cluster r2d2 -Vserver PSLAB -Objects Shares,Symlinks -Destination c3po -Vserver cifs
 
 #>
 function Restore-ObjectSvmDr {
@@ -2750,7 +2842,12 @@ function Restore-ObjectSvmDr {
         # Use this parameter to join the dr vserver in AD without interaction
         [pscredential]$ActiveDirectoryCredentials,
 
-        <# # Optional, when the vserver dr is created, all lifs are taken offline (duplicate ip conflicts)
+        # Optional argument to pass the iSCSI CHAP username and password used to configure iSCSI session security.
+        # In NonInteractive Mode, username and password of this pre-created credential are used
+        # Can be used during ConfigureDR, UpdateDR, CloneDR, Restore, UpdateReverse, Migrate, ReActivate and RestoreObject
+        [pscredential]$DefaultChapCredentials,
+
+        # Optional, when the vserver dr is created, all lifs are taken offline (duplicate ip conflicts)
         # Hence if the vserver needs to be joined in AD, there is no lif available
         # By passing an temporary ip-address and in combination with parameter "SecondaryCifsLifMaster"
         # A temporary lif will be created to join the vserver dr in AD
@@ -2761,7 +2858,19 @@ function Restore-ObjectSvmDr {
         # So we will clone the lif that is passed in this parameter (using same port and options)
         # Use this in combination with parameter "TemporarySecondaryCifsIp"
         # A temporary lif will be created to join the vserver dr in AD
-        [string]$SecondaryCifsLifMaster, #>
+        [string]$SecondaryCifsLifMaster,
+
+        # Optional, when the vserver is restored, all lifs are taken offline (duplicate ip conflicts)
+        # Hence if the vserver needs to be joined in AD, there is no lif available
+        # So we will clone the lif that is passed in this parameter (using same port and options)
+        # Use this in combination with parameter "TemporarySecondaryCifsIp"
+        # A temporary lif will be created to join the restored vserver in AD
+        # This paramter provides the custom VLAN of this temporary lif
+        [string]$SecondaryCifsLifCustomVlan,
+
+        # Optional
+        # this parameter provides custom OU where to register this CIFS server into AD
+        [string]$ActiveDirectoryCustomOU,
 
         # Loglevel of the console output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
@@ -2776,6 +2885,7 @@ function Restore-ObjectSvmDr {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -2791,17 +2901,17 @@ function Restore-ObjectSvmDr {
     Restores Cluster and Vserver information from previously created Json-files
 .DESCRIPTION
 	Restores Cluster and Vserver information from previously created Json-files
-    The vserver is optional, if not provided all vservers will be restored
+    The vserver is optional, if not provided all vservers available in backup will be restored
 .NOTES
     The restore process is ran in a runspace (parallel execution)
-    Console logging wil not work in an Powershell ISE host
+    Console logging will not work in an Powershell ISE host
     The restore process cannot be run in Non-Interactive Mode
 
     The restore process must be seen like this :
         - the vserver must not yet exist
         - the vserver will be created as complete as possible using information from json file
         - volumes will be created as DP volumes
-        - the idea is then to resync volume data from snapvault locations
+        - the idea is then to resync volume's data from snapvault locations
 
 .EXAMPLE 
 
@@ -2865,18 +2975,37 @@ function Restore-SvmDr {
         # Use this parameter to join the dr vserver in AD without interaction
         [pscredential]$ActiveDirectoryCredentials,
 
-        # Optional, when the vserver dr is created, all lifs are taken offline (duplicate ip conflicts)
+        # Optional argument to pass the iSCSI CHAP username and password used to configure iSCSI session security.
+        # In NonInteractive Mode, username and password of this pre-created credential are used
+        # Can be used during ConfigureDR, UpdateDR, CloneDR, Restore, UpdateReverse, Migrate, ReActivate and RestoreObject
+        [pscredential]$DefaultChapCredentials,
+
+        # Optional, when the vserver is restored, all lifs are taken offline (duplicate ip conflicts)
         # Hence if the vserver needs to be joined in AD, there is no lif available
         # By passing an temporary ip-address and in combination with parameter "SecondaryCifsLifMaster"
-        # A temporary lif will be created to join the vserver dr in AD
+        # A temporary lif will be created to join the restored vserver in AD
+        # This paramter provides the IP address of this temporary lif
         [string]$TemporarySecondaryCifsIp,
 
-        # Optional, when the vserver dr is created, all lifs are taken offline (duplicate ip conflicts)
+        # Optional, when the vserver is restored, all lifs are taken offline (duplicate ip conflicts)
         # Hence if the vserver needs to be joined in AD, there is no lif available
         # So we will clone the lif that is passed in this parameter (using same port and options)
         # Use this in combination with parameter "TemporarySecondaryCifsIp"
-        # A temporary lif will be created to join the vserver dr in AD
+        # A temporary lif will be created to join the restored vserver in AD
+        # This paramter provides the lif name that will be clonedfor this temporary lif
         [string]$SecondaryCifsLifMaster,
+
+        # Optional, when the vserver is restored, all lifs are taken offline (duplicate ip conflicts)
+        # Hence if the vserver needs to be joined in AD, there is no lif available
+        # So we will clone the lif that is passed in this parameter (using same port and options)
+        # Use this in combination with parameter "TemporarySecondaryCifsIp"
+        # A temporary lif will be created to join the restored vserver in AD
+        # This paramter provides the custom VLAN of this temporary lif
+        [string]$SecondaryCifsLifCustomVlan,
+
+        # Optional
+        # this parameter provides custom OU where to register this CIFS server into AD
+        [string]$ActiveDirectoryCustomOU,
 
         # Loglevel of the console output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
@@ -2901,6 +3030,7 @@ function Restore-SvmDr {
 
         # Enables HTTP mode (default HTTPS)
         [switch]$HTTP,
+        [switch]$ForceZapi,
         [Int32]$Timeout = 60
     )
 
@@ -2935,6 +3065,7 @@ function Import-SvmDrConfiguration {
 
     invokeSvmtool -ParameterList ([ref]$ParameterList) -Action "ImportInstance"
 }
+
 <#
 .Synopsis
     Shows the SvmDr Script version
@@ -2960,8 +3091,12 @@ function Show-SvmDrVersion {
         # Loglevel of the logfile output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]
         [string]$LogLevelLogFile = "Debug"
+
     )
 
+    $CommandName = $PSCmdlet.MyInvocation.InvocationName;
+    $ParameterList = (Get-Command -Name $CommandName).Parameters;
+
     $scriptPath = "$PSScriptRoot\svmtool.ps1"
-    Invoke-Expression "& `"$scriptPath`" -Version"
+    Invoke-Expression -Command "& `"$scriptPath`" -Version" 
 }

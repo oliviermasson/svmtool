@@ -6,7 +6,7 @@
 # Generated on: 2018-06-07
 #
 # Update by : Olivier MASSON
-# Updated on : 2020-10-05
+# Updated on : 2022-02-24
 #
 # Version Control :
 #   1.0.4 : Initial version
@@ -91,13 +91,15 @@
 #           Correct ReActivate with SM-S
 #           Correct how to test if SVM source is alive to be compatible with and without Powershell Core
 #   1.4.2   Detect when service-policy should be used instead of firewall-policy if ONTAP 9.6 or greater
+#   1.5.0   Complete rewrite of Migrate, ActivateDR and ReActivateDR
+#   1.6.0   REST Transition
 @{
 
     # Script module or binary module file associated with this manifest.
     RootModule        = '.\svmtools.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.4.2'
+    ModuleVersion     = '1.6.0'
 
     # Supported PSEditions
     # CompatiblePSEditions = @()
@@ -186,7 +188,7 @@
             # LicenseUri = ''
 
             # A URL to the main website for this project.
-            ProjectUri = 'https://github.com/oliviermasson/svmtool'
+            ProjectUri = 'https://github.com/CXO-Automation/svmtool'
 
             # A URL to an icon representing this module.
             # IconUri = ''
@@ -199,7 +201,7 @@
     } # End of PrivateData hashtable
 
     # HelpInfo URI of this module
-    HelpInfoURI       = 'https://github.com/oliviermasson/svmtool'
+    HelpInfoURI       = 'https://github.com/CXO-Automation/svmtool'
 
     # Default prefix for commands exported from this module. Override the default prefix using Import-Module -Prefix.
     # DefaultCommandPrefix = ''
