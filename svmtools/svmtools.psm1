@@ -824,10 +824,18 @@ Function import_instance_svmdr() {
                     Write-Log "Failed to Backup CIFS Server details to JSON"
                     return $False
                 }
-                $PrimaryInterfaceList = Get-NcNetInterface -Role DATA -VserverContext $Vserver -DataProtocols cifs,nfs,none,iscsi -Controller $mySecondaryController  -ErrorVariable ErrorVar 
-                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
-                $SecondaryInterfaceList = Get-NcNetInterface -Role DATA -VserverContext $VserverDR -DataProtocols cifs,nfs,none,iscsi -Controller $mySecondaryController  -ErrorVariable ErrorVar 
-                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
+                if($Global:PSTKCall -ne "Rest"){
+                    $PrimaryInterfaceList = Get-NcNetInterface -Role DATA -VserverContext $Vserver -DataProtocols cifs,nfs,none,iscsi -Controller $mySecondaryController  -ErrorVariable ErrorVar 
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
+                    $SecondaryInterfaceList = Get-NcNetInterface -Role DATA -VserverContext $VserverDR -DataProtocols cifs,nfs,none,iscsi -Controller $mySecondaryController  -ErrorVariable ErrorVar 
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
+                }else{
+                    # *  With REST Get-NcNetInterface return only LIF with data protocol
+                    $PrimaryInterfaceList = Get-NcNetInterface -VserverContext $Vserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
+                    $SecondaryInterfaceList = Get-NcNetInterface -VserverContext $VserverDR -Controller $mySecondaryController  -ErrorVariable ErrorVar 
+                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
+                }
                 if ( ($ret=Save_LIF_To_JSON -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryNetList $PrimaryInterfaceList -mySecondaryNetList $SecondaryInterfaceList -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR) -eq $False){
                     Write-Log "Failed to Backup LIF details to JSON"
                     return $False
@@ -6175,17 +6183,42 @@ Try {
                         $SecondaryLunMap = Get-NcLunMap -Query $Query -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcLunMap failed [$ErrorVar]" } 
                         if ( $null -eq $SecondaryLunMap ) {
-                            if($Global:Run_Mode -ne "ConfigureDR"){
-                                Write-Log "[$workOn] Map Lun [$PrimaryLunPath] [$workOn] [$mySecondaryController] on [$PrimaryInitiatorGroup]"
-                                Write-LogDebug "Add-NcLunMap -Path $PrimaryLunPath -InitiatorGroup $PrimaryInitiatorGroup -Id $PrimaryLunId -Vserver $mySecondaryVserver -Controller $mySecondaryController"
-                                $out = Add-NcLunMap -Path $PrimaryLunPath -InitiatorGroup $PrimaryInitiatorGroup -Id $PrimaryLunId -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ErrorAction SilentlyContinue
-                                if ( $? -ne $True ) { 
-                                    # if($ErrorVar -notmatch "has no LIFs configured with iSCSI"){
-                                        Write-LogError "ERROR: Add-NcLunMap failed [$ErrorVar]"
-                                        # $Return=$False
-                                    # }
+                            #if($Global:Run_Mode -ne "ConfigureDR"){
+                                $BlockLIFPresent=$False
+                                if($Global:PSTKCall -eq "Rest"){
+                                    $cred=get_local_cDotcred($mySecondaryController)
+                                    $url=$("https://"+$mySecondaryController.name+"/api/network/ip/interfaces?state=up&return_records=false&services=data_core|data_iscsi|data_nvme_tcp&svm.name="+$mySecondaryVserver)
+                                    Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $cred -SkipCertificateCheck"
+                                    $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $cred -SkipCertificateCheck -ErrorVariable ErrorVar
+                                    if($? -ne $True){
+                                        Write-LogError "ERROR: Unable to lif informations [$ErrorVar]" 
+                                        return $False
+                                    }
+                                    if($ret.num_records -gt 0){
+                                        Write-LogDebug "At least on block lif is present and UP on DR"
+                                        $BlockLIFPresent=$True
+                                    }
+                                }else{
+                                    Write-LogDebug "Get-NcNetInterface -Controller $mySecondaryController -Query @{OpStatus=up;Vserver=mySecondaryVserver;DataProtocols=iscsi|fcp} -ONTAPI"
+                                    $ret= Get-NcNetInterface -Controller $mySecondaryController -Query @{OpStatus="up";Vserver=$mySecondaryVserver;DataProtocols="iscsi|fcp"} -ONTAPI -ErrorVariable ErrorVar
+                                    if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
+                                    if($null -ne $ret){
+                                        Write-LogDebug "At least on block lif is present and UP on DR"
+                                        $BlockLIFPresent=$True
+                                    }
                                 }
-                            }
+                                if($BlockLIFPresent){
+                                    Write-Log "[$workOn] Map Lun [$PrimaryLunPath] [$workOn] [$mySecondaryController] on [$PrimaryInitiatorGroup]"
+                                    Write-LogDebug "Add-NcLunMap -Path $PrimaryLunPath -InitiatorGroup $PrimaryInitiatorGroup -Id $PrimaryLunId -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+                                    $out = Add-NcLunMap -Path $PrimaryLunPath -InitiatorGroup $PrimaryInitiatorGroup -Id $PrimaryLunId -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ErrorAction SilentlyContinue
+                                    if ( $? -ne $True ) { 
+                                        # if($ErrorVar -notmatch "has no LIFs configured with iSCSI"){
+                                            Write-LogError "ERROR: Add-NcLunMap failed [$ErrorVar]"
+                                            # $Return=$False
+                                        # }
+                                    }
+                                }
+                            #}
                         } else {
                             Write-Log "[$workOn] Lun [$PrimaryLunPath] [$workOn] [$mySecondaryController] already mapped on [$PrimaryInitiatorGroup]"
                         }
@@ -6345,18 +6378,17 @@ Function set_serial_lundr (
                     throw "ERROR: wait_snapmirror_dr failed"  
                 }
                 foreach($Volume in $VolImpacted | Skip-Null){
-                    # ! No need to identify flexgroup, because of no SAN with flexgroup
-                    <# Write-LogDebug "Get-NcVol -Name $Volume -VserverContext $myPrimaryVserver -Controller $myPrimaryController"
+                    $isFlexgroup=$False
+                    # ! No need to identify flexgroup, because there is no SAN with flexgroup
+                    Write-LogDebug "Get-NcVol -Name $Volume -VserverContext $myPrimaryVserver -Controller $myPrimaryController"
                     $VolumeDetail=Get-NcVol -Name $Volume -VserverContext $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
                     if($? -ne $True){Throw "ERROR: Fail to get volume information reason [$ErrorVar"}
-                    $SourceLocation=$($myPrimaryVserver+":"+$Volume)
                     if($VolumeDetail.VolumeIdAttributes.StyleExtended -eq "flexgroup"){
-                        $DestLocation=$($mySecondaryVserver+":"+$Volume+"_dst")
-                    }else{
-                        $DestLocation=$($mySecondaryVserver+":"+$Volume)
-                    } #>
+                        $isFlexgroup=$True
+                    }
+                    $SourceLocation=$($myPrimaryVserver+":"+$Volume)
                     $DestLocation=$($mySecondaryVserver+":"+$Volume)
-                    if($Restore -eq $False -and $Backup -eq $False){
+                    if($Restore -eq $False -and $Backup -eq $False -and $isFlexgroup -eq $False){
                         
                         # Break SnapMirror Relations
                         Write-Log "[$workOn] Need to Break relationship [$SourceLocation] ---> [$DestLocation] to change LUN Serial Number"
@@ -6657,6 +6689,32 @@ Catch {
 }
 }
 
+Function REST_set_lif(
+    [string] $myVserver,
+    [string] $myLIFuuid,
+    [string] $body,
+    [NetApp.Ontapi.Filer.C.NcController] $myController
+) {
+
+    $Return=$True
+    Write-LogDebug "[$myVserver]: start"
+
+    if($myLIFuuid.length -ne 36){
+        Write-LogDebug "LIF Uuid [$myLIFuuid] not good"
+        return $False
+    }
+    $cred=get_local_cDotcred($myController)
+    $url=$("https://"+$myController.Name+"/api/network/ip/interfaces/"+$myLIFuuid)
+    Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $cred -Body $body -SkipCertificateCheck"
+    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $cred -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+    if($? -ne $True){
+        Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
+        $Return=$ret
+    }
+    Write-LogDebug "[$myVserver]: end"
+    return $True
+}
+
 #############################################################################################
  Function set_all_lif(
     [string] $myPrimaryVserver, 
@@ -6712,6 +6770,7 @@ Catch {
     $SameIP=@()
 	foreach($lif in $lifsdest){
         $lif_name=$lif.InterfaceName
+        $lif_uuid=$lif.LifUuid
         if($Restore -eq $True -and $lif_name -notin $lifRestored){
             # if in Restore mode and this LIF is not part of LIF previously restored, so do nothing and go to next LIF
             # This allow to only interact (lif up or lif down) with the previously restored LIF (during a Restore or RestoreObject mode) and leave other LIF in the state they are in
@@ -6726,20 +6785,51 @@ Catch {
         if($Force.IsPresent){
             Write-LogDebug "set_all_lif in Force mode"
             Write-LogDebug "[$workOn] Set LIF [$lif_name] into state [$state]"
-			$ret=Set-NcNetInterface -Name $lif_name -Vserver $mySecondaryVserver -Controller $mySecondaryController -AdministrativeStatus $state -ErrorVariable ErrorVar
-			if($? -ne $true){
-				Write-LogDebug "ERROR: failed to set lif [$lif_name] into state [$state] reason [$ErrorVar]"
-			}
+            if($Global:PSTKCall -ne "Rest"){
+                $ret=Set-NcNetInterface -Name $lif_name -Vserver $mySecondaryVserver -Controller $mySecondaryController -AdministrativeStatus $state -ErrorVariable ErrorVar
+                if($? -ne $true){
+                    Write-LogDebug "ERROR: failed to set lif [$lif_name] into state [$state] reason [$ErrorVar]"
+                }
+            }else{
+                $body=@{}
+                if($state -eq "up"){
+                    $body.enabled="true"
+                }else{
+                    $body.enabled="false"
+                }
+                # ! this REST function is not necessary for setting only adminstate
+                # ! but once we need to set other thing address, netmask....the cmdlet does not work and this REST fucntion need to be used
+                # ! we juste use it here for test
+                $body=$body | ConvertTo-Json
+                $ret=REST_set_lif -myVserver $mySecondaryVserver -myLIFuuid $lif_uuid -body $body -myController $mySecondaryController
+                if($ret -ne $True){
+                    Write-LogDebug "ERROR: failed to set lif [$lif_name] into state [$state] reason [$ret]"
+                }
+            }
 			$LIFset=$true   
         }elseif( ($lif_ip -notin $IPsource) -or (($Global:RESTORE_ORIGINAL -eq $True) -or $Global:ForceCloneOriginal.IsPresent -or ($Global:Run_Mode -eq "Migrate"))){
             # Interact with this LIF because IP address of this LIF on destination is not the same as source (to prevent duplicate IP address error)
             # But if we are in Restore mode of the original SVM or if we are interacting with LIF present on Cloned SVM, we are allowed to manage LIF with same IP address as source
             # Because in this case we will not create a duplicate ip address error
 			Write-LogDebug "[$workOn] Set LIF [$lif_name] into state [$state]"
-			$ret=Set-NcNetInterface -Name $lif_name -Vserver $mySecondaryVserver -Controller $mySecondaryController -AdministrativeStatus $state -ErrorVariable ErrorVar
-			if($? -ne $true){
-				Write-LogDebug "ERROR: failed to set lif [$lif_name] into state [$state] reason [$ErrorVar]"
-			}
+			if($Global:PSTKCall -ne "Rest"){
+                $ret=Set-NcNetInterface -Name $lif_name -Vserver $mySecondaryVserver -Controller $mySecondaryController -AdministrativeStatus $state -ErrorVariable ErrorVar
+                if($? -ne $true){
+                    Write-LogDebug "ERROR: failed to set lif [$lif_name] into state [$state] reason [$ErrorVar]"
+                }
+            }else{
+                $body=@{}
+                if($state -eq "up"){
+                    $body.enabled="true"
+                }else{
+                    $body.enabled="false"
+                }
+                $body=$body | ConvertTo-Json
+                $ret=REST_set_lif -myVserver $mySecondaryVserver -myLIFuuid $lif_uuid -body $body -myController $mySecondaryController
+                if($ret -ne $True){
+                    Write-LogDebug "ERROR: failed to set lif [$lif_name] into state [$state] reason [$ret]"
+                }
+            }
 			$LIFset=$true
 		}elseif($state -eq "up"){
             Write-LogDebug "Cannot set LIF [$lif_name] to up because it as same IP address [$lif_ip] as LIF on source"
@@ -8286,8 +8376,8 @@ Try {
                     $SecondaryFlexgroup = Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $PrimaryVolName  -ErrorVariable ErrorVar 
                     if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcVol failed [$ErrorVar]" }
                     if ( $null -eq $SecondaryFlexgroup ) {
-                        if( ($ret=create_flexgroup -myController $mySecondaryController -myVserver $mySecondaryVserver -myFlexgroup $PrimaryVol) -ne $True) {Write-LogError "ERROR: Fail to create flexgroup [$PrimaryVolName]; $Return=$False"}
-                        clean_and_exit 0
+                        if( ($ret=create_flexgroup -myController $mySecondaryController -myVserver $mySecondaryVserver -myFlexgroup $PrimaryVol) -ne $True) {Write-LogError "ERROR: Fail to create flexgroup [$PrimaryVolName]"; $Return=$False}
+                        #clean_and_exit 0
                     }elseif($PrimaryVolName -notin $ListFlexgroup){
                         Write-Log "[$workOn] Flexgroup [$PrimaryVolName] already exists" 
                         $ListFlexgroup+=$PrimaryVolName
@@ -8353,6 +8443,10 @@ Try {
         $index+=1
     }
     $sizeConstituent=$myFlexgroup.constituents[0].space.size
+    if(($sizeConstituent/1GB) -lt 100){
+        Write-LogError "ERROR: Failed to create with REST API a flexgroup with constituent's size lower than 100GB. You must recreate this flexgroup by CLI"
+        return $False
+    }
     $sizeFlexgroup=$myFlexgroup.size
     $type=$myFlexgroup.type
     $body=@{}
@@ -8361,7 +8455,7 @@ Try {
     $body.analytics=@{"state"=$myFlexgroup.analytics.state}
     #$body.anti_ransomware_state=$myFlexgroup.anti_ransomware.state
     $body.asynchronous_directory_delete=@{"enabled"=$myFlexgroup.asynchronous_directory_delete.enabled}
-    #$body.autosize=$myFlexgroup.autosize
+    $body.autosize=$myFlexgroup.autosize
     $body.cloud_retrieval_policy=$myFlexgroup.cloud_retrieval_policy
     if($myFlexgroup.comment.length -gt 1){
         $body.comment=$myFlexgroup.comment
@@ -8398,7 +8492,7 @@ Try {
         "security_style"=$myFlexgroup.nas.security_style
         "unix_permissions"=$myFlexgroup.nas.unix_permissions
     }
-    if($type -eq "rw"){
+    if($Global:VOLUME_TYPE -eq "rw"){
         $body.nas.path=$myFlexgroup.nas.path
     }
     # ! attention this policy must exist first
@@ -8464,6 +8558,7 @@ Try {
             Write-LogDebug "[$workOn]: end"
             return $False
         }
+        Start-Sleep 5
     }
     Write-LogDebug "[$myVserver]: end"
 	return $Return 
@@ -9893,6 +9988,7 @@ Try{
             Write-LogDebug "[$workOn]: end"
             return $False
         }
+        Start-Sleep 5
     }
 }
 catch{
@@ -9981,7 +10077,7 @@ Try {
     if($Backup -eq $False){
         Write-Log "[$workOn] Remove corresponding Snapmirror Policy on secondary before recreate them"
         Write-LogDebug "PrimarySnapmirrorPolicies | Remove-NcSnapmirrorPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-        $PrimarySnapmirrorPolicies | Remove-NcSnapmirrorPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar 
+        $ret=($PrimarySnapmirrorPolicies | Remove-NcSnapmirrorPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar )
         if ( $? -ne $True ) { 
             Write-LogError "ERROR: Remove-NcSnapmirrorPolicy Failed to remove snapmirror policy [$ErrorVar]" 
             Write-LogDebug "[$workOn]: end"
@@ -9989,7 +10085,7 @@ Try {
         }
         Write-Log "[$workOn] Recreate corresponding Snapmirror Policy on secondary"
         Write-LogDebug "PrimarySnapmirrorPolicies | New-NcSnapmirrorPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-        $PrimarySnapmirrorPolicies | New-NcSnapmirrorPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar 
+        $ret=($PrimarySnapmirrorPolicies | New-NcSnapmirrorPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar )
         if ( $? -ne $True ) { 
             Write-LogError "ERROR: New-NcSnapmirrorPolicy Failed to add new snapmirror policy [$ErrorVar]" 
             Write-LogDebug "[$workOn]: end"
@@ -10755,6 +10851,7 @@ Try {
     #backup or restore NetInterface List
     if($Restore -eq $False){
         if($Global:PSTKCall -eq "Rest"){
+            # *  With REST Get-NcNetInterface return only LIF with data protocol
             $PrimaryInterfaceList = Get-NcNetInterface -Vserver $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar 
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }  
         }else{
@@ -11105,21 +11202,36 @@ Try {
                 Write-Log "[$workOn] Network Interface [$PrimaryInterfaceName] already exists"
                 $SecondaryInterface  = Get-NcNetInterface -InterfaceName $PrimaryInterfaceName -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
                 $SecondaryFirewallPolicy=$SecondaryInterface.FirewallPolicy
+                $SecondaryInterfaceUuid=$SecondaryInterface.LifUuid
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
                 $SecondaryInterfaceAutoReverse=$SecondaryInterface.IsAutoRevert
                 if($PrimaryIsAutoRevert -ne $SecondaryInterfaceAutoReverse)
                 {
                     Write-Log "[$workOn] Network Interface [$PrimaryInterfaceName] Auto Reverse is different"
-                    Write-LogDebug "Set-NcNetInterface -Name $PrimaryInterfaceName -AutoRevert $PrimaryIsAutoRevert -Vserver $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar"
-                    if($PrimaryIsAutoRevert -eq $True)
-                    {
-                        $out = Set-NcNetInterface -Name $PrimaryInterfaceName -AutoRevert $True -Vserver $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar
+                    if($Global:PSTKCall -ne "Rest"){
+                        Write-LogDebug "Set-NcNetInterface -Name $PrimaryInterfaceName -AutoRevert $PrimaryIsAutoRevert -Vserver $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar"
+                        if($PrimaryIsAutoRevert -eq $True)
+                        {
+                            $out = Set-NcNetInterface -Name $PrimaryInterfaceName -AutoRevert $True -Vserver $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar
+                        }
+                        else
+                        {
+                            $out = Set-NcNetInterface -Name $PrimaryInterfaceName -AutoRevert $False -Vserver $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar
+                        }
+                        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcNetInterface failed [$ErrorVar]" }
+                    }else{
+                        $body=@{}
+                        if($PrimaryIsAutoRevert -eq $True){
+                            $body.location=@{"auto_revert"="true"}
+                        }else{
+                            $body.location=@{"auto_revert"="false"}
+                        }
+                        $body=$body | ConvertTo-Json
+                        $ret=REST_set_lif -myVserver $mySecondaryVserver -myLIFuuid $SecondaryInterfaceUuid -body $body -myController $mySecondaryController
+                        if($ret -ne $True){
+                            Write-LogDebug "ERROR: failed to set lif [$lif_name] into state [$state] reason [$ret]"
+                        }
                     }
-                    else
-                    {
-                        $out = Set-NcNetInterface -Name $PrimaryInterfaceName -AutoRevert $False -Vserver $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar
-                    }
-                    if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcNetInterface failed [$ErrorVar]" }
                 }
                 if($PrimaryFirewallPolicy -ne $SecondaryFirewallPolicy){
                     Write-Log "[$workOn] Network Interface [$PrimaryInterfaceName] Firewall Policy is different [$PrimaryFirewallPolicy] vs [$SecondaryFirewallPolicy]"
@@ -11206,7 +11318,12 @@ Try {
         }
     }
     if($Backup -eq $False -and $Restore -eq $False){
-        $SecondaryInterfaceList = Get-NcNetInterface -Role DATA -VserverContext $mySecondaryVserver -DataProtocols cifs,nfs,none,iscsi -Controller $mySecondaryController  -ErrorVariable ErrorVar 
+        if($Global:PSTKCall -ne "Rest"){
+            $SecondaryInterfaceList = Get-NcNetInterface -Role DATA -VserverContext $mySecondaryVserver -DataProtocols cifs,nfs,none,iscsi -Controller $mySecondaryController  -ErrorVariable ErrorVar 
+        }else{
+            # *  With REST Get-NcNetInterface return only LIF with data protocol
+            $SecondaryInterfaceList = Get-NcNetInterface -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+        }
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
         if ( ($ret=Save_LIF_To_JSON -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryNetList $PrimaryInterfaceList -mySecondaryNetList $SecondaryInterfaceList -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver) -eq $False){
             Write-Log "Failed to Backup Net LIF details to JSON"
@@ -11981,7 +12098,7 @@ Try {
             $body.options.psobject.Properties.Remove("export_policy_enabled")
             $body.security.psobject.Properties.Remove("kdc_encryption")
             $body = $body | ConvertTo-Json
-            $url=$("https://"+$mySecondaryController.Name+"/api/protocols/cifs/services/"+$myVserverUUID)
+            $url=$("https://"+$mySecondaryController.Name+"/api/protocols/cifs/services/"+$myVserverUUID+"?force=true")
             Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $myCred -body $body -SkipCertificateCheck"
             $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $myCred -body $body -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
@@ -13092,8 +13209,14 @@ Try {
     if($Restore -eq $False){
         $PrimaryCifsServerInfos = Get-NcCifsServer  -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsServer failed [$ErrorVar]" }
-        $PrimaryInterfaceList = Get-NcNetInterface -Role DATA -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar 
-        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
+        if($Global:PSTKCall -ne "Rest"){
+            $PrimaryInterfaceList = Get-NcNetInterface -Role DATA -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar 
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
+        }else{
+            # *  With REST Get-NcNetInterface return only LIF with data protocol
+            $PrimaryInterfaceList = Get-NcNetInterface -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar 
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
+        }
         $PrimaryCIFSsecurity=Get-NcCifsSecurity -Vservercontext $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
         if($? -ne $True){Throw "ERROR: Failed to get CIFS security for [$myPrimaryVserver] reason [$ErrorVar]"}
     }else{
@@ -14752,7 +14875,12 @@ Function display_clone_vserver(
         $NameServiceSources = $SecondaryNameService.NameServiceSources
         Format-ColorBrackets "Vserver NsSwitch       : [$NameServiceDatabase] [$NameServiceSources]" -ForceColor "darkyellow"
     }
-    $SecondaryInterfaceList = Get-NcNetInterface -Role DATA -VserverContext $myVserver -Controller $myController  -ErrorVariable ErrorVar 
+    if($Global:PSTKCall -ne "Rest"){
+        $SecondaryInterfaceList = Get-NcNetInterface -Role DATA -VserverContext $myVserver -Controller $myController  -ErrorVariable ErrorVar 
+    }else{
+        # *  With REST Get-NcNetInterface return only LIF with data protocol
+        $SecondaryInterfaceList = Get-NcNetInterface -VserverContext $myVserver -Controller $myController  -ErrorVariable ErrorVar
+    }
     foreach ( $SecondaryInterface in ( $SecondaryInterfaceList | Skip-Null ) ) {
         $SecondaryInterfaceName=$SecondaryInterface.InterfaceName
         $SecondaryAddress=$SecondaryInterface.Address
@@ -14885,7 +15013,11 @@ Function show_vserver_dr (
                 $NameServiceSources = $PrimaryNameService.NameServiceSources
                 Format-ColorBrackets "Vserver NsSwitch       : [$NameServiceDatabase] [$NameServiceSources]"
             }
-            $PrimaryInterfaceList = Get-NcNetInterface -Role DATA -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar 
+            if($Global:PSTKCall -ne "Rest"){
+                $PrimaryInterfaceList = Get-NcNetInterface -Role DATA -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar 
+            }else{
+                $PrimaryInterfaceList = Get-NcNetInterface -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar 
+            }
             foreach ( $PrimaryInterface in ( $PrimaryInterfaceList  | Skip-Null ) ) {
                 $PrimaryInterfaceName=$PrimaryInterface.InterfaceName
                 $PrimaryAddress=$PrimaryInterface.Address
@@ -15030,7 +15162,11 @@ Function show_vserver_dr (
                 $NameServiceSources = $SecondaryNameService.NameServiceSources
                 Format-ColorBrackets "Vserver NsSwitch       : [$NameServiceDatabase] [$NameServiceSources]"
             }
-            $SecondaryInterfaceList = Get-NcNetInterface -Role DATA -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
+            if($Global:PSTKCall -ne "Rest"){
+                $SecondaryInterfaceList = Get-NcNetInterface -Role DATA -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
+            }else{
+                $SecondaryInterfaceList = Get-NcNetInterface -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+            }
             foreach ( $SecondaryInterface in ( $SecondaryInterfaceList | Skip-Null ) ) {
                 $SecondaryInterfaceName=$SecondaryInterface.InterfaceName
                 $SecondaryAddress=$SecondaryInterface.Address
@@ -16602,7 +16738,7 @@ Try {
                     Write-LogDebug "[$workOn] Remove CIFS server status [$JobStatus]"
                     if($JobStatus -eq "failure"){
                         $JobCompletion=$JobDetail.JobCompletion
-                        Write-LogError "[$workOn] Vol creation failed [$JobCompletion]"
+                        Write-LogError "[$workOn] Remove CIFS server failed [$JobCompletion]"
                         break
                     }
                 }
@@ -17050,8 +17186,8 @@ Function break_snapmirror_vserver_dr (
 	[switch] $NoInteractive,
 	[string] $myPrimaryVserver, 
 	[string] $mySecondaryVserver,
-    [string] $myPrimaryLocation=$null,
-    [string] $mySecondaryLocation=$null) {
+    [string] $myPrimaryLocation="",
+    [string] $mySecondaryLocation="") {
 Try {
 	
 	$Return = $True
@@ -17070,7 +17206,7 @@ Try {
 		$Return = $False
 		throw "ERROR: break_snapmirror_vserver_dr mySecondaryVserver is null" 
 	}
-    if($null -ne $myPrimaryLocation -and $null -ne $mySecondaryLocation){
+    if($myPrimaryLocation -ne "" -and $mySecondaryLocation -ne ""){
         Write-LogDebug "Get-NcSnapmirror -SourceLocation $myPrimaryLocation -DestinationLocation $mySecondaryLocation -Controller $myController"
         $relationList = Get-NcSnapmirror -SourceLocation $myPrimaryLocation -DestinationLocation $mySecondaryLocation -Controller $myController  -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
@@ -17204,6 +17340,7 @@ try{
         if($null -ne $LIFinformation){
             $LIFaddress=$LIFinformation.Address
             $LIFnetmask=$LIFinformation.Netmask
+            $LIFnetmaskLength=$LIFinformation.NetmaskLength
             $LIFdomain=$LIFinformation.DnsDomainName
             Write-Log "[$myPrimaryVserver] Set [$LIFname] down"
             <# Write-LogDebug "Set-NcNetInterface -Name $LIFname -AdministrativeStatus down -DnsDomain temp.domain -Vserver $myPrimaryVserver -Controller $myPrimaryController"
@@ -17247,6 +17384,7 @@ try{
                 $Address = "169.254.$tmp1.$tmp2"
                 $NetMask = "255.255.255.0"
                 $InterfaceName=$LIFname
+                $LIFuuid=
                 Write-LogDebug "Invoke-NcSsh -Command ""set diag; vserver config override -command ""net int modify -vserver $ReplicatedSVM -lif $InterfaceNAme -Address $Address -Netmask $NetMask"""" -Controller $mySecondaryController"
                 $ret=Invoke-NcSsh -Command "set diag; vserver config override -command ""net int modify -vserver $ReplicatedSVM -lif $InterfaceName -address $Address -netmask $NetMask""" -Controller $mySecondaryController -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Invoke-NcSsh failed [$ErrorVar]" }
@@ -17263,13 +17401,35 @@ try{
             }
             if($PreserveIdentity -eq $True){
                 Write-Log "[$mySecondaryVserver] Set [$LIFname] up with [$LIFaddress] [$LIFnetmask] [$LIFdomain]"
-                Write-LogDebug "Set-NcNetInterface -Name $LIFname -Address $LIFaddress -Netmask $LIFnetmask -DnsDomain $LIFdomain -AdministrativeStatus up -Vserver $mySecondaryVserver -Controller $mySecondaryController"
-                $out=Set-NcNetInterface -Name $LIFname -Address $LIFaddress -Netmask $LIFnetmask -DnsDomain $LIFdomain -AdministrativeStatus up -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                if ( $? -ne $True )
-                {
-                    $Return = $False ; throw "ERROR: Set-NcNetInterface failed [$ErrorVar]"    
-                $Return = $False ; throw "ERROR: Set-NcNetInterface failed [$ErrorVar]"    
-                    $Return = $False ; throw "ERROR: Set-NcNetInterface failed [$ErrorVar]"    
+                if($Global:PSTKCall -ne "Rest"){
+                    Write-LogDebug "Set-NcNetInterface -Name $LIFname -Address $LIFaddress -Netmask $LIFnetmask -DnsDomain $LIFdomain -AdministrativeStatus up -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+                    $out=Set-NcNetInterface -Name $LIFname -Address $LIFaddress -Netmask $LIFnetmask -DnsDomain $LIFdomain -AdministrativeStatus up -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                    if ( $? -ne $True )
+                    {
+                        $Return = $False
+                        Write-LogError "ERROR: Set-NcNetInterface failed [$ErrorVar]"     
+                        clean_and_exit 1
+                    }
+                }else{
+                    $LIFdetail=Get-NcNetInterface -Name $LIFname -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                    $LIFuuid=$LIFdetail.LifUuid
+                    if ( $? -ne $True ){
+                        $Return = $False
+                        Write-LogError "ERROR: Get-NcNetInterface failed [$ErrorVar]"     
+                        clean_and_exit 1
+                    }
+                    $body=@{}
+                    $body.ip=@{
+                        "address"=$LIFaddress
+                        "netmask"=$LIFnetmaskLength
+                    }
+                    if($DnsDomainName.length -gt 1){$body.dns_zone=$DnsDomainName}
+                    $body.enabled="true"
+                    $body=$body | ConvertTo-Json
+                    $ret=REST_set_lif -myVserver $mySecondaryVserver -myLIFuuid $LIFuuid -body $body -myController $mySecondaryController
+                    if($ret -ne $True){
+                        Write-LogDebug "ERROR: failed to set lif [$LIFname] reason [$ret]"
+                    }
                 }
             }else{
                 Write-Log "[$mySecondaryVserver] Set [$LIFname] up"
@@ -17634,10 +17794,17 @@ try{
         }
 
         # * backup_lif
-        $PrimaryInterfaceList = Get-NcNetInterface -Role DATA -VserverContext $myPrimaryVserver -DataProtocols cifs,nfs,none,iscsi -Controller $NcCurrentActiveCtrl  -ErrorVariable ErrorVar 
-        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
-        $SecondaryInterfaceList = Get-NcNetInterface -Role DATA -VserverContext $mySecondaryVserver -DataProtocols cifs,nfs,none,iscsi -Controller $mySecondaryController  -ErrorVariable ErrorVar 
-        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
+        if($Global:PSTKCall -ne "Rest"){
+            $PrimaryInterfaceList = Get-NcNetInterface -Role DATA -VserverContext $myPrimaryVserver -DataProtocols cifs,nfs,none,iscsi -Controller $NcCurrentActiveCtrl  -ErrorVariable ErrorVar 
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
+            $SecondaryInterfaceList = Get-NcNetInterface -Role DATA -VserverContext $mySecondaryVserver -DataProtocols cifs,nfs,none,iscsi -Controller $mySecondaryController  -ErrorVariable ErrorVar 
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
+        }else{
+            $PrimaryInterfaceList = Get-NcNetInterface -VserverContext $myPrimaryVserver -Controller $NcCurrentActiveCtrl  -ErrorVariable ErrorVar 
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
+            $SecondaryInterfaceList = Get-NcNetInterface -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
+        }
         if ( ($ret=Save_LIF_To_JSON -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryNetList $PrimaryInterfaceList -mySecondaryNetList $SecondaryInterfaceList -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver) -eq $False){
             Write-Log "Failed to Backup LIF details to JSON"
             return $False
@@ -18452,7 +18619,7 @@ Function update_vserver_dr (
 	$Return = $True
 	Write-LogDebug "start"
 	if ( ( check_update_vserver -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver ) -ne $True ) { Write-LogError "ERROR: Failed check update vserver" ; return $False }									  
-	if ( ( $ret=create_update_snapmirror_policy -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn) -ne $True ) { Write-LogError "ERROR: create_update_snapmirror_policy" ; $Return = $False }																																																				
+	if ( ( $ret=create_update_snapmirror_policy -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver) -ne $True ) { Write-LogError "ERROR: create_update_snapmirror_policy" ; $Return = $False }																																																				
 	if ( $myDataAggr -or $aggrMatchRegEx ) {
 		Write-LogDebug "Create required new volumes $mySecondaryController Vserver $Vserver"
 		if ( ( create_volume_voldr -myDataAggr $myDataAggr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -aggrMatchRegEx $aggrMatchRegEx ) -ne $True ) { Write-LogError "ERROR: Failed to create all volumes" ; return $False }
@@ -18700,7 +18867,11 @@ Try {
 		}
 	}
 	# Stop All NetWork Interface
-	$InterfaceList = Get-NcNetInterface -Role DATA -VserverContext $myVserver -Controller $myController  -ErrorVariable ErrorVar 
+    if($Global:PSTKCall -ne "Rest"){
+	    $InterfaceList = Get-NcNetInterface -Role DATA -VserverContext $myVserver -Controller $myController  -ErrorVariable ErrorVar 
+    }else{
+        $InterfaceList = Get-NcNetInterface -VserverContext $myVserver -Controller $myController  -ErrorVariable ErrorVar
+    }
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
 	foreach ( $Interface in ( $InterfaceList | Skip-Null ) ) {
         $InterfaceName=$Interface.InterfaceName
@@ -18745,7 +18916,11 @@ Try {
         if ($? -ne $True){$Return=$False;Throw "FAILED to start Vserver [$myVserver] reason [$ErrorVar]"}
     }
 	# Start all Network Interfaces
-	$InterfaceList = Get-NcNetInterface -Role DATA -VserverContext $myVserver -Controller $myNcController  -ErrorVariable ErrorVar 
+    if($Global:PSTKCall -ne "Rest"){
+	    $InterfaceList = Get-NcNetInterface -Role DATA -VserverContext $myVserver -Controller $myNcController  -ErrorVariable ErrorVar 
+    }else{
+        $InterfaceList = Get-NcNetInterface -VserverContext $myVserver -Controller $myNcController  -ErrorVariable ErrorVar 
+    }
 	if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
 	foreach ( $Interface in ( $InterfaceList | Skip-Null ) ) {
             $InterfaceName=$Interface.InterfaceName
@@ -18980,7 +19155,8 @@ Function activate_vserver_dr (
         # Primary not joinable
         Write-LogDebug "ForceActivate Mode "
         if($NeedCIFS){
-            $ret=Get-NcNetInterface -Query @{Vserver=$currentPassiveVserver;OpStatus="up";DataProtocols="cifs|nfs|iscsi"} -Controller $NcCurrentPassiveCtrl -ErrorVariable ErrorVar
+            Write-LogDebug "Get-NcNetInterface -Query @{Vserver=$currentPassiveVserver;OpStatus=up} -Controller $NcCurrentPassiveCtrl -ErrorVariable ErrorVar | Where-Object {$_.DataProtocols -match cifs|nfs|iscsi}"
+            $ret=Get-NcNetInterface -Query @{Vserver=$currentPassiveVserver;OpStatus="up"} -Controller $NcCurrentPassiveCtrl -ErrorVariable ErrorVar | Where-Object {$_.DataProtocols -match "cifs|nfs|iscsi"}
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
             if ($null -eq $ret){
                 # No LIF UP configured with cifs or nfs or iscsi on destination SVM, so we are in PreserveIdentity mode
@@ -19012,13 +19188,15 @@ Function activate_vserver_dr (
         }else{
             $srcCIFS=$False
         }
-        $lifs=Get-NcNetInterface -Query @{Vserver=$currentActiveVserver;OpStatus="up";DataProtocols="cifs|nfs|iscsi";FirewallPolicy="mgmt*"} -Controller $NcCurrentActiveCtrl -ErrorVariable ErrorVar
+        Write-LogDebug "Get-NcNetInterface -Query @{Vserver=$currentActiveVserver;OpStatus=up} -Controller $NcCurrentActiveCtrl "
+        $lifs=Get-NcNetInterface -Query @{Vserver=$currentActiveVserver;OpStatus="up"} -Controller $NcCurrentActiveCtrl -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
         $RunInPreserveIdentityMode = $True
         Write-LogDebug "By default RunInPreseveIdentityMode set to True"
         foreach ($lif in $lifs) {
             #Test if remote LIF is configured and if it got an APIPA IP address
-            $ret=Get-NcNetInterface -Query @{InterfaceName=$($lif.InterfaceName);Vserver=$currentPassiveVserver;DataProtocols="cifs|nfs|iscsi";FirewallPolicy="mgmt*";Address="!169.254.*"} -Controller $NcCurrentPassiveCtrl -ErrorVariable ErrorVar
+            Write-LogDebug "Get-NcNetInterface -Query @{InterfaceName=$($lif.InterfaceName);Vserver=$currentActiveVserver;OpStatus=up} -Controller $NcCurrentActiveCtrl "
+            $ret=Get-NcNetInterface -Query @{InterfaceName=$($lif.InterfaceName);Vserver=$currentPassiveVserver;Address="!169.254.*"} -Controller $NcCurrentPassiveCtrl -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
             if($null -ne $ret){
                 # one LIF on secondary with Address different than 169.254.*.*, so we are not PreserveIdentity
@@ -19057,25 +19235,84 @@ Function activate_vserver_dr (
             $ADCred = get_local_cred ($newCIFSDomain)
             $newCIFSName=$("RMTACT_"+$CIFSactiveName)
             if($newCIFSName.length -gt 15){$newCIFSName=$newCIFSName.Substring(0,15)}
-            Write-Log "[$currentActiveVserver] Set CIFS server up with identity [$newCIFSName]"
+            Write-Log "[$currentActiveVserver] Set CIFS server down with identity [$newCIFSName]"
             Write-LogDebug "Stop-NcCifsServer -VserverContext $currentActiveVserver -Controller $NcCurrentActiveCtrl"
             $out=Stop-NcCifsServer -VserverContext $currentActiveVserver -Controller $NcCurrentActiveCtrl -ErrorVariable ErrorVar -Confirm:$False
-            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Stop-NcCifsServer failed [$ErrorVar]" }
-            Write-LogDebug "Set-NcCifsServer -AdministrativeStatus down -ForceAccountOverwrite -CifsServer $newCIFSName -Ou $newCIFSOU -Domain $newCIFSDomain -AdminCredential $ADCred -VserverContext $currentActiveVserver -controller $NcCurrentActiveCtrl"
-            $out=Set-NcCifsServer -AdministrativeStatus "down" -ForceAccountOverwrite -CifsServer $newCIFSName -Ou $newCIFSOU -Domain $newCIFSDomain -AdminCredential $ADCred -VserverContext $currentActiveVserver -controller $NcCurrentActiveCtrl  -ErrorVariable ErrorVar  -Confirm:$False
-            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcCifsServer failed [$ErrorVar]" }
-        }
-
-        # Analyse CIFS modifying Job
-        if( (wait_cifs_modify_job -myController $NcCurrentActiveCtrl) -eq $False){
-            throw "ERROR: a CIFS Modifying Job is running too long or Failed"
+            if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Stop-NcCifsServer failed [$ErrorVar]" ;clean_and_exit 1}
+            if($Global:PSTKCall -ne "Rest"){
+                Write-LogDebug "Set-NcCifsServer -AdministrativeStatus down -ForceAccountOverwrite -CifsServer $newCIFSName -Ou $newCIFSOU -Domain $newCIFSDomain -AdminCredential $ADCred -VserverContext $currentActiveVserver -controller $NcCurrentActiveCtrl"
+                $out=Set-NcCifsServer -AdministrativeStatus "down" -ForceAccountOverwrite -CifsServer $newCIFSName -Ou $newCIFSOU -Domain $newCIFSDomain -AdminCredential $ADCred -VserverContext $currentActiveVserver -controller $NcCurrentActiveCtrl  -ErrorVariable ErrorVar  -Confirm:$False
+                if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Set-NcCifsServer failed [$ErrorVar]" ;clean_and_exit 1}
+                # Analyse CIFS modifying Job
+                if( (wait_cifs_modify_job -myController $NcCurrentActiveCtrl) -eq $False){
+                    Write-LogError "ERROR: a CIFS Modifying Job is running too long or Failed"
+                    clean_and_exit 1
+                }
+            }else{
+                Write-LogDebug "Get-NcVserver -Name $currentActiveVserver -Controller $NcCurrentActiveCtrl -ErrorVariable ErrorVar"
+                $ActiveVserver=Get-NcVserver -Name $currentActiveVserver -Controller $NcCurrentActiveCtrl -ErrorVariable ErrorVar
+                if( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Get-NcVserver failed [$ErrorVar]" ; clean_and_exit 1}
+                $ActiveVserverUuid=$ActiveVserver.Uuid
+                $cred=get_local_cDotcred($NcCurrentActiveCtrl)
+                $url=$("https://"+$NcCurrentActiveCtrl.Name+"/api/protocols/cifs/services/"+$ActiveVserverUuid+"?force=true")
+                $body=@{}
+                $body.ad_domain=@{
+                    fqdn=$newCIFSDomain
+                    organizational_unit=$newCIFSOU
+                    password=[Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($ADcred.Password))
+                    user=$ADcred.UserName
+                }
+                $body.enabled=$False
+                $body.name=$newCIFSName
+                $body=$body | ConvertTo-Json
+                Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $Cred -SkipCertificateCheck  -body $body " #(body is intentionally hidden)"
+                $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                if($? -ne $True){
+                    Write-LogError "ERROR: patch request [$url] reason [$ErrorVar]"
+                }
+                $JobUuid=$ret.job.uuid
+                $StartTime=Get-date
+                $Timeout=$False
+                $JobDone=$False
+                While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+                    $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $NcCurrentActiveCtrl
+                    if($JobDetail.JobCompletion -eq "success"){
+                        $JobDone=$True
+                        break
+                    }else{
+                        $JobStatus=$JobDetail.JobState
+                        Write-LogDebug "[$workOn] Patch CIFS server status [$JobStatus]"
+                        if($JobStatus -eq "failure"){
+                            $JobCompletion=$JobDetail.JobCompletion
+                            Write-LogError "[$workOn] Patch CIFS server failed  [$JobCompletion]"
+                            break
+                        }
+                    }
+                    $CurrentTime=Get-date
+                    $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+                    if($TimeSpend -gt $Global:STOP_TIMEOUT){
+                        Write-LogWarn "[$workOn] Patch CIFS server take too much time. Check in Ontap its status"
+                        $Timeout=$True
+                    }
+                    Start-Sleep 5
+                }
+                $out=Stop-NcCifsServer -VserverContext $currentActiveVserver -Controller $NcCurrentActiveCtrl -ErrorVariable ErrorVar -Confirm:$False
+                if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Stop-NcCifsServer failed [$ErrorVar]" ; Clean_and_exit 1}
+            }
         }
 
         # * backup_lif_on_src
-        $PrimaryInterfaceList = Get-NcNetInterface -Role DATA -VserverContext $currentActiveVserver -DataProtocols cifs,nfs,none,iscsi -Controller $NcCurrentActiveCtrl  -ErrorVariable ErrorVar 
-        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
-        $SecondaryInterfaceList = Get-NcNetInterface -Role DATA -VserverContext $currentPassiveVserver -DataProtocols cifs,nfs,none,iscsi -Controller $NcCurrentPassiveCtrl  -ErrorVariable ErrorVar 
-        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
+        if($Global:PSTKCall -ne "Rest"){
+            $PrimaryInterfaceList = Get-NcNetInterface -Role DATA -VserverContext $currentActiveVserver -DataProtocols cifs,nfs,none,iscsi -Controller $NcCurrentActiveCtrl  -ErrorVariable ErrorVar 
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
+            $SecondaryInterfaceList = Get-NcNetInterface -Role DATA -VserverContext $currentPassiveVserver -DataProtocols cifs,nfs,none,iscsi -Controller $NcCurrentPassiveCtrl  -ErrorVariable ErrorVar 
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
+        }else{
+            $PrimaryInterfaceList = Get-NcNetInterface -VserverContext $currentActiveVserver -Controller $NcCurrentActiveCtrl  -ErrorVariable ErrorVar 
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
+            $SecondaryInterfaceList = Get-NcNetInterface -VserverContext $currentPassiveVserver -Controller $NcCurrentPassiveCtrl  -ErrorVariable ErrorVar 
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
+        }
         if ( ($ret=Save_LIF_To_JSON -myPrimaryController $NcCurrentActiveCtrl -mySecondaryController $NcCurrentPassiveCtrl -myPrimaryNetList $PrimaryInterfaceList -mySecondaryNetList $SecondaryInterfaceList -myPrimaryVserver $currentActiveVserver -mySecondaryVserver $currentPassiveVserver) -eq $False){
             Write-Log "Failed to Backup LIF details to JSON"
             return $False
@@ -19096,7 +19333,7 @@ Function activate_vserver_dr (
 
         # * set_lif_dst_with_source_identity
         # modify active LIF on secondary with primary settings
-        Write-Log "[$currentPassiveVserver] Modify LIF"
+        Write-Log "[$currentPassiveVserver] Modify LIF with source Addresses"
         if( ($ret=Set_LIF_from_JSON -ToNcController $NcCurrentPassiveCtrl -ToVserver $currentPassiveVserver -fromSrc) -eq $False ){
             Throw "ERROR: Failed to set IP address on [$currentPassiveVserver]"	
         }
@@ -19138,10 +19375,17 @@ Function activate_vserver_dr (
         }
 
         # * backup_lif_on_src
-        $PrimaryInterfaceList = Get-NcNetInterface -Role DATA -VserverContext $currentActiveVserver -DataProtocols cifs,nfs,none,iscsi -Controller $NcCurrentActiveCtrl  -ErrorVariable ErrorVar 
-        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
-        $SecondaryInterfaceList = Get-NcNetInterface -Role DATA -VserverContext $currentPassiveVserver -DataProtocols cifs,nfs,none,iscsi -Controller $NcCurrentPassiveCtrl  -ErrorVariable ErrorVar 
-        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
+        if($Global:PSTKCall -ne "Rest"){
+            $PrimaryInterfaceList = Get-NcNetInterface -Role DATA -VserverContext $currentActiveVserver -DataProtocols cifs,nfs,none,iscsi -Controller $NcCurrentActiveCtrl  -ErrorVariable ErrorVar 
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
+            $SecondaryInterfaceList = Get-NcNetInterface -Role DATA -VserverContext $currentPassiveVserver -DataProtocols cifs,nfs,none,iscsi -Controller $NcCurrentPassiveCtrl  -ErrorVariable ErrorVar 
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
+        }else{
+            $PrimaryInterfaceList = Get-NcNetInterface -VserverContext $currentActiveVserver -Controller $NcCurrentActiveCtrl  -ErrorVariable ErrorVar 
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
+            $SecondaryInterfaceList = Get-NcNetInterface -VserverContext $currentPassiveVserver -Controller $NcCurrentPassiveCtrl  -ErrorVariable ErrorVar 
+            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
+        }
         if ( ($ret=Save_LIF_To_JSON -myPrimaryController $NcCurrentActiveCtrl -mySecondaryController $NcCurrentPassiveCtrl -myPrimaryNetList $PrimaryInterfaceList -mySecondaryNetList $SecondaryInterfaceList -myPrimaryVserver $currentActiveVserver -mySecondaryVserver $currentPassiveVserver) -eq $False){
             Write-Log "Failed to Backup LIF details to JSON"
             return $False
@@ -20933,14 +21177,14 @@ Function Save_Cluster_To_JSON (
             $CLUSTERINFO_DST_FILE=$CLUSTERINFO_DST_FILE -Replace "\\","/" 
         }
         $SrcNcCluster | ConvertTo-Json -Depth 7 | Out-File -FilePath $CLUSTERINFO_SRC_FILE -Encoding ASCII -Width 65535
-        if( ($ret=get-item $CLUSTERINFO_SRC_FILE -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $CLUSTERINFO_SRC_FILE -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$CLUSTERINFO_SRC_FILE saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $CLUSTERINFO_SRC_FILE"
             $Return=$False
         }
         $DstNcCluster | ConvertTo-Json -Depth 7 | Out-File -FilePath $CLUSTERINFO_DST_FILE -Encoding ASCII -Width 65535
-        if( ($ret=get-item $CLUSTERINFO_DST_FILE -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $CLUSTERINFO_DST_FILE -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$CLUSTERINFO_DST_FILE saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $CLUSTERINFO_DST_FILE"
@@ -20953,14 +21197,14 @@ Function Save_Cluster_To_JSON (
             $CLUSTERINFO_DST_FILE=$CLUSTERINFO_DST_FILE -Replace "\\","/" 
         }
         $SrcNcCluster | ConvertTo-Json -Depth 7 | Out-File -FilePath $CLUSTERINFO_SRC_FILE -Encoding ASCII -Width 65535
-        if( ($ret=get-item $CLUSTERINFO_SRC_FILE -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $CLUSTERINFO_SRC_FILE -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$CLUSTERINFO_SRC_FILE saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $CLUSTERINFO_SRC_FILE"
             $Return=$False
         }
         $DstNcCluster | ConvertTo-Json -Depth 7 | Out-File -FilePath $CLUSTERINFO_DST_FILE -Encoding ASCII -Width 65535
-        if( ($ret=get-item $CLUSTERINFO_DST_FILE -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $CLUSTERINFO_DST_FILE -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$CLUSTERINFO_DST_FILE saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $CLUSTERINFO_DST_FILE"
@@ -21013,7 +21257,7 @@ Function Save_Cifs_Infos_To_JSON (
         }
         $output=Get-NcCifsServer -VserverContext $myVserver -Controller $myController
         $output | ConvertTo-Json -Depth 7 | Out-File -FilePath $CIFSINFO_FILE -Encoding ASCII -Width 65535
-        if( ($ret=get-item $CIFSINFO_FILE -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $CIFSINFO_FILE -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$CIFSINFO_FILE saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $CIFSINFO_FILE"
@@ -21026,7 +21270,7 @@ Function Save_Cifs_Infos_To_JSON (
         }
         $output=Get-NcCifsHomeDirectorySearchPath -VserverContext $myVserver -Controller $myController
         $output | ConvertTo-Json -Depth 7 | Out-File -FilePath $CIFSSEARCHDIR_FILE -Encoding ASCII -Width 65535
-        if( ($ret=get-item $CIFSSEARCHDIR_FILE -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $CIFSSEARCHDIR_FILE -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$CIFSSEARCHDIR_FILE saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $CIFSSEARCHDIR_FILE"
@@ -21039,7 +21283,7 @@ Function Save_Cifs_Infos_To_JSON (
         }
         $output=Get-NcCifsShare -VserverContext $myVserver -Controller $myController
         $output | ConvertTo-Json -Depth 7 | Out-File -FilePath $CIFSSHARE_FILE -Encoding ASCII -Width 65535
-        if( ($ret=get-item $CIFSSHARE_FILE -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $CIFSSHARE_FILE -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$CIFSSHARE_FILE saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $CIFSSHARE_FILE"
@@ -21052,7 +21296,7 @@ Function Save_Cifs_Infos_To_JSON (
         }
         $output=Get-NcCifsShareAcl -VserverContext $myVserver -Controller $myController
         $output | ConvertTo-Json -Depth 7 | Out-File -FilePath $CIFSSHAREACL_FILE -Encoding ASCII -Width 65535
-        if( ($ret=get-item $CIFSSHAREACL_FILE -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $CIFSSHAREACL_FILE -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$CIFSSHAREACL_FILE saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $CIFSSHAREACL_FILE"
@@ -21159,9 +21403,10 @@ Function Save_Cifs_Symlink_To_JSON (
         if(!$IsWindows){
             $CIFSSYMLINKINFO_FILE=$CIFSSYMLINKINFO_FILE -Replace "\\","/"    
         }
+        Write-LogDebug "Get-NcCifsSymlink -VserverContext $myVserver -Controller $myController"
         $myCifsSymlink=Get-NcCifsSymlink -VserverContext $myVserver -Controller $myController
         $myCifsSymlink | ConvertTo-Json -Depth 7 | Out-File -FilePath $CIFSSYMLINKINFO_FILE -Encoding ASCII -Width 65535
-        if( ($ret=get-item $CIFSSYMLINKINFO_FILE -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $CIFSSYMLINKINFO_FILE -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$CIFSSYMLINKINFO_FILE saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $CIFSSYMLINKINFO_FILE"
@@ -21196,7 +21441,8 @@ Function Restore_Cifs_Symlink_from_Json (
             $CIFSSYMLINKINFO_FILE=$CIFSSYMLINKINFO_FILE -Replace "\\","/"    
         }
         if( ( Test-Path $CIFSSYMLINKINFO_FILE ) -eq $false){
-            throw "ERROR: Unable to read [$CIFSSYMLINKINFO_FILE]"
+            Write-LogError "ERROR: Unable to read [$CIFSSYMLINKINFO_FILE]"
+            clean_and_exit 1
         }
         
         $CifsSymlinkInfos=Get-Content $CIFSSYMLINKINFO_FILE -Raw | ConvertFrom-Json
@@ -21211,7 +21457,7 @@ Function Restore_Cifs_Symlink_from_Json (
             Write-Log "[$myVserver] ReCreate New Symlink CIFS Path [$SymlinkCifsPath] Unix Path [$SymlinkUnixPath] Share [$SymlinkShareName]"
             Write-LogDebug "Add-NcCifsSymlink -CifsPath $SymlinkCifsPath -CifsServer $SymlinkCifsServer -HomeDirectory:$SymlinkHomeDirectory -Locality $SymlinkLocality -ShareName $SymlinkShareName -UnixPath $SymlinkUnixPath  -VserverContext $myVserver -Controller $myController"
             $out=Add-NcCifsSymlink -CifsPath $SymlinkCifsPath -CifsServer $SymlinkCifsServer -HomeDirectory:$SymlinkHomeDirectory -Locality $SymlinkLocality -ShareName $SymlinkShareName -UnixPath $SymlinkUnixPath  -VserverContext $myVserver -Controller $myController -ErrorVariable ErrorVar
-            if($? -ne $True){$Return=$False;Throw "ERROR: Failed to create Cifs Symlink [$SymlinkUnixPath] on CifsSymlinks [$SymlinkCifsPath] on [$myVserver] reason [$ErrorVar]"}
+            if($? -ne $True){$Return=$False;Write-LogError "ERROR: Failed to create Cifs Symlink [$SymlinkUnixPath] on CifsSymlinks [$SymlinkCifsPath] on [$myVserver] reason [$ErrorVar]";clean_and_exit 1}
         }
         
         Write-LogDebug "end"
@@ -21294,14 +21540,14 @@ Function Save_CIFS_To_JSON (
         }
 
         $myPrimaryCIFS | ConvertTo-Json -Depth 7 | Out-File -FilePath $CIFSINFO_SRC_FILE -Encoding ASCII -Width 65535
-        if( ($ret=get-item $CIFSINFO_SRC_FILE -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $CIFSINFO_SRC_FILE -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$CIFSINFO_SRC_FILE saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $CIFSINFO_SRC_FILE"
             $Return=$False
         }
         $mySecondaryCIFS | ConvertTo-Json -Depth 7 | Out-File -FilePath $CIFSINFO_DST_FILE -Encoding ASCII -Width 65535
-        if( ($ret=get-item $CIFSINFO_DST_FILE -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $CIFSINFO_DST_FILE -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$CIFSINFO_DST_FILE saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $CIFSINFO_DST_FILE"
@@ -21316,14 +21562,14 @@ Function Save_CIFS_To_JSON (
         }
 
         $myPrimaryCIFS | ConvertTo-Json -Depth 7 | Out-File -FilePath $CIFSINFO_SRC_FILE -Encoding ASCII -Width 65535
-        if( ($ret=get-item $CIFSINFO_SRC_FILE -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $CIFSINFO_SRC_FILE -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$CIFSINFO_SRC_FILE saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $CIFSINFO_SRC_FILE"
             $Return=$False
         }
         $mySecondaryCIFS | ConvertTo-Json -Depth 7 | Out-File -FilePath $CIFSINFO_DST_FILE -Encoding ASCII -Width 65535
-        if( ($ret=get-item $CIFSINFO_DST_FILE -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $CIFSINFO_DST_FILE -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$CIFSINFO_DST_FILE saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $CIFSINFO_DST_FILE"
@@ -21362,18 +21608,19 @@ Function Set_CIFS_from_JSON (
         
         #$CIFSINFO_DST_FILE=$SVMTOOL_DB_SRC_VSERVER + '\cifsdstinfo.json'
         if( ( Test-Path $CIFSINFO_FILE ) -eq $false){
-            throw "ERROR: Unable to read [$CIFSINFO_FILE]"
+            Write-LogError "ERROR: Unable to read [$CIFSINFO_FILE]"
+            clean_and_exit 1
         }
         
         $oldCIFS=Get-NcCifsServer -VserverContext $ToVserver -Controller $ToNcController -ErrorVariable ErrorVar
-        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcCifsServer failed [$ErrorVar]" }
+        if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Get-NcCifsServer failed [$ErrorVar]" }
         $oldCIFSName=$oldCIFS.CifsServer
         $oldCIFSNetbiosAliases=$oldCIFS.NetbiosAliases
         $oldCIFSState=$oldCIFS.AdministrativeStatus
         if($oldCIFSState -eq "up"){
             Write-LogDebug "Stop-NcCifsServer -VserverContext $ToVserver -controller $ToNcController"
             $out=Stop-NcCifsServer -VserverContext $ToVserver -controller $ToNcController -ErrorVariable ErrorVar -Confirm:$False
-            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Stop-NcCifsServer failed [$ErrorVar]" }
+            if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Stop-NcCifsServer failed [$ErrorVar]" ; clean_and_exit 1}
         }
         $newCIFS=Get-Content $CIFSINFO_FILE -Raw | ConvertFrom-Json
         $newCIFSName=$newCIFS.CifsServer
@@ -21387,18 +21634,20 @@ Function Set_CIFS_from_JSON (
         }
         if($newCIFSName -ne $oldCIFSName){
             Write-LogDebug "Check if at least one lif is up and ready. This is mandatory to dialog with AD"
-            Write-LogDebug "Get-NcNetInterface -Query `@`{Vserver=$ToVserver;OperationalStatus=up`;DataProtocols=cifs`} -Controller $ToNcController"
-            $ret=Get-NcNetInterface -Query @{Vserver=$ToVserver;OperationalStatus="up";DataProtocols="cifs"} -Controller $ToNcController -ErrorVariable ErrorVar
-            if( $? -ne $True ){ $Return = $False; throw "ERROR: failed Get-NcNetInterface [$ErrorVar]" }
+            Write-LogDebug "Get-NcNetInterface -Query `@`{Vserver=$ToVserver;OperationalStatus=up`} -Controller $ToNcController | Where-Object {`$_.DataProtocols -match cifs}"
+            $ret=Get-NcNetInterface -Query @{Vserver=$ToVserver;OpStatus="up"} -Controller $ToNcController -ErrorVariable ErrorVar | Where-Object {$_.DataProtocols -match "cifs"}
+            if( $? -ne $True ){ $Return = $False; Write-LogError "ERROR: failed Get-NcNetInterface [$ErrorVar]" ;clean_and_exit 1}
             if($ret.count -eq 0){
                 $Return = $False
-                throw "ERROR: You must have at least one LIF ready to talk to AD to change the status and name of your CIFS server"      
+                Write-LogError "ERROR: You must have at least one LIF ready to talk to AD to change the status and name of your CIFS server"  
+                clean_and_exit 1    
             }
 
             # before changing CIFS server name, we need to backup & remove all cifs symlink
             Write-LogDebug "Backup all CIFS Symlink from current passive Vserver [$ToVserver]"
             if ( ($ret=Save_Cifs_Symlink_To_JSON -myController $ToNcController -myVserver $ToVserver ) -eq $False){
-                Throw "ERROR: Failed to backup CIFS Symlink"    
+                Write-LogError "ERROR: Failed to backup CIFS Symlink" 
+                clean_and_exit 1  
             }
             Write-LogDebug "Remove all CIFS Symlink on current passive Vserver [$ToVserver]"
             Write-LogDebug "Get-NcCifsSymlink -VserverContext $ToVserver -Controller $ToNcController | Remove-NcCifsSymlink -Controller $ToNcController -VserverContext $ToVserver"
@@ -21407,24 +21656,82 @@ Function Set_CIFS_from_JSON (
             $ADCred = get_local_cred ($newCIFSDomain)
             if($Global:UseCifsDeleteMethod.IsPresent -eq $False){
                 Write-Log "[$ToVserver] Set CIFS server up with identity [$newCIFSName]"
-                Write-LogDebug "Set-NcCifsServer -AdministrativeStatus up -ForceAccountOverwrite -CifsServer $newCIFSName -Ou $newCIFSOU -AddNetbiosAlias $newCIFSNetbiosAliases -RemoveNetbiosAlias $oldCIFSNetbiosAliases -DefaultSite $newCIFSDefaultSite -Domain $newCIFSDomain -AdminCredential $ADCred -VserverContext $ToVserver -controller $ToNcController"
-                $out=Set-NcCifsServer -AdministrativeStatus "up" -ForceAccountOverwrite -CifsServer $newCIFSName -Ou $newCIFSOU -AddNetbiosAlias $newCIFSNetbiosAliases -RemoveNetbiosAlias $oldCIFSNetbiosAliases -DefaultSite $newCIFSDefaultSite -Domain $newCIFSDomain -AdminCredential $ADCred -VserverContext $ToVserver -controller $ToNcController  -ErrorVariable ErrorVar  -Confirm:$False
-                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcCifsServer failed [$ErrorVar]" }
-                
-                # Analyse CIFS Job
-                if( (wait_cifs_modify_job -myController $ToNcController) -eq $False){
-                    throw "ERROR: a CIFS Modifying Job is running too long or Failed"
+                if($Global:PSTKCall -ne "Rest"){
+                    Write-LogDebug "Set-NcCifsServer -AdministrativeStatus up -ForceAccountOverwrite -CifsServer $newCIFSName -Ou $newCIFSOU -AddNetbiosAlias $newCIFSNetbiosAliases -RemoveNetbiosAlias $oldCIFSNetbiosAliases -DefaultSite $newCIFSDefaultSite -Domain $newCIFSDomain -AdminCredential $ADCred -VserverContext $ToVserver -controller $ToNcController"
+                    $out=Set-NcCifsServer -AdministrativeStatus "up" -ForceAccountOverwrite -CifsServer $newCIFSName -Ou $newCIFSOU -AddNetbiosAlias $newCIFSNetbiosAliases -RemoveNetbiosAlias $oldCIFSNetbiosAliases -DefaultSite $newCIFSDefaultSite -Domain $newCIFSDomain -AdminCredential $ADCred -VserverContext $ToVserver -controller $ToNcController  -ErrorVariable ErrorVar  -Confirm:$False
+                    if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Set-NcCifsServer failed [$ErrorVar]" ;clean_and_exit 1 }
+                    
+                    # Analyse CIFS Job
+                    if( (wait_cifs_modify_job -myController $ToNcController) -eq $False){
+                        Write-LogError "ERROR: a CIFS Modifying Job is running too long or Failed"
+                        clean_and_exit 1
+                    }
+                }else{
+                    Write-LogDebug "Get-NcVserver -Name $ToVserver -Controller $ToNcController -ErrorVariable ErrorVar"
+                    $myVserver=Get-NcVserver -Name $ToVserver -Controller $ToNcController -ErrorVariable ErrorVar
+                    if( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Get-NcVserver failed [$ErrorVar]" ; clean_and_exit 1}
+                    $myVserverUuid=$myVserver.Uuid
+                    $cred=get_local_cDotcred($ToNcController)
+                    $url=$("https://"+$ToNcController.Name+"/api/protocols/cifs/services/"+$myVserverUuid+"?force=true")
+                    $body=@{}
+                    $body.ad_domain=@{
+                        fqdn=$newCIFSDomain
+                        organizational_unit=$newCIFSOU
+                        password=[Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($ADcred.Password))
+                        user=$ADcred.UserName
+                    }
+                    $body.enabled=$True
+                    $body.name=$newCIFSName
+                    if($newCIFSNetbiosAliases.count -ge 1){
+                        $body.netbios=@{}
+                        $body.netbios.aliases=@()
+                    }
+                    foreach ($netbiosalias in $newCIFSNetbiosAliases){
+                        $body.netbios.aliases+=$netbiosalias
+                    }
+                    $body=$body | ConvertTo-Json
+                    Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $Cred -SkipCertificateCheck  -body $body " #(body is intentionally hidden)"
+                    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                    if($? -ne $True){
+                        Write-LogError "ERROR: patch request [$url] reason [$ErrorVar]"
+                    }
+                    $JobUuid=$ret.job.uuid
+                    $StartTime=Get-date
+                    $Timeout=$False
+                    $JobDone=$False
+                    While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+                        $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $ToNcController
+                        if($JobDetail.JobCompletion -eq "success"){
+                            $JobDone=$True
+                            break
+                        }else{
+                            $JobStatus=$JobDetail.JobState
+                            Write-LogDebug "[$workOn] Patch CIFS server status [$JobStatus]"
+                            if($JobStatus -eq "failure"){
+                                $JobCompletion=$JobDetail.JobCompletion
+                                Write-LogError "[$workOn] Patch CIFS server failed  [$JobCompletion]"
+                                break
+                            }
+                        }
+                        $CurrentTime=Get-date
+                        $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+                        if($TimeSpend -gt $Global:STOP_TIMEOUT){
+                            Write-LogWarn "[$workOn] Patch CIFS server take too much time. Check in Ontap its status"
+                            $Timeout=$True
+                        }
+                        Start-Sleep 5
+                    }
                 }
             }else{
                 # need to backup CIFS informations before removing CIFS server on destination
                 $previousCifsServerInfos=Get-NcCifsServer -VserverContext $ToVserver -Controller $ToNcController -ErrorVariable ErrorVar
-                if ( $? -ne $True ) { throw "ERROR: Get-NcCifsServer failed [$ErrorVar]" }
+                if ( $? -ne $True ) { Write-LogError "ERROR: Get-NcCifsServer failed [$ErrorVar]"; clean_and_exit 1 }
                 $previousSearchPath=Get-NcCifsHomeDirectorySearchPath -VserverContext $ToVserver -Controller $ToNcController -ErrorVariable ErrorVar
-                if ( $? -ne $True ) { throw "ERROR: Get-NcCifsHomeDirectorySearchPath failed [$ErrorVar]" }
+                if ( $? -ne $True ) { Write-LogError "ERROR: Get-NcCifsHomeDirectorySearchPath failed [$ErrorVar]" ; clean_and_exit 1}
                 $previousCifsShare=Get-NcCifsShare -VserverContext $ToVserver -Controller $ToNcController -ErrorVariable ErrorVar
-                if ( $? -ne $True ) { throw "ERROR: Get-NcCifsShare failed [$ErrorVar]" }
+                if ( $? -ne $True ) { Write-LogError "ERROR: Get-NcCifsShare failed [$ErrorVar]"; clean_and_exit 1 }
                 $previousCifsShareAcl=Get-NcCifsShareAcl -VserverContext $ToVserver -Controller $ToNcController -ErrorVariable ErrorVar
-                if ( $? -ne $True ) { throw "ERROR: Get-NcCifsShareAcl failed [$ErrorVar]" }
+                if ( $? -ne $True ) { Write-LogError "ERROR: Get-NcCifsShareAcl failed [$ErrorVar]" ; clean_and_exit 1}
 
                 Write-Log "[$ToVserver] Recreate CIFS server with identity [$newCIFSName]"
                 Write-LogDebug "Remove-NcCifsServer -ForceAccountDelete -VserverContext $ToVserver -Controller $ToVserver"
@@ -21434,11 +21741,11 @@ Function Set_CIFS_from_JSON (
 
                 Write-LogDebug "Add-NcCifsServer -Name $newCIFSName -Domain $newCIFSDomain -OrganizationalUnit $newCIFSOU -AdminCredential $ADCred -Force -AdministrativeStatus up -NetbiosAlias $newCIFSNetbiosAliases -VserverContext $ToVserver -Controller $ToNcController" 
                 $out = Add-NcCifsServer -Name $newCIFSName -Domain $newCIFSDomain -OrganizationalUnit $newCIFSOU -AdminCredential $ADCred -Force -AdministrativeStatus "up" -NetbiosAlias $newCIFSNetbiosAliases -VserverContext $ToVserver -Controller $ToNcController  -ErrorVariable ErrorVar
-                if ( $? -ne $True ) { throw "ERROR: Add-NcCifsServer failed [$ErrorVar]" ; }else{ Write-Log "[$ToVserver] Cifs server [$newCIFSName] is joined"} 
+                if ( $? -ne $True ) { Write-LogError "ERROR: Add-NcCifsServer failed [$ErrorVar]" ; clean_and_exit 1}else{ Write-Log "[$ToVserver] Cifs server [$newCIFSName] is joined"} 
                 
                 # restore previous CIFS shares and CIFS shares ACL previsouly backed up
                 $out=create_update_CIFS_shares_dr -myPrimaryController $ToNcController -mySecondaryController $ToNcController -myPrimaryVserver $ToVserver -mySecondaryVserver $ToVserver -workOn $ToVserver -Backup $False -Restore $False -FromReactivate $False -NcCifsServerInfos $previousCifsServerInfos -NcCifsHomeDirectorySearchPath $previousSearchPath -NcCifsShare $previousCifsShare -NcCifsShareAcl $previousCifsShareAcl
-                if ( $? -ne $True ) { throw "ERROR: create_update_CIFS_shares_dr failed" ; }
+                if ( $? -ne $True ) { Write-LogError "ERROR: create_update_CIFS_shares_dr failed" ; clean_and_exit 1}
             }
 
             # recreate all CIFS Symlink on current passive Vserver with its new name
@@ -21480,7 +21787,8 @@ Function Add_CIFS_from_JSON (
 
         #$CIFSINFO_DST_FILE=$SVMTOOL_DB_SRC_VSERVER + '\cifsdstinfo.json'
         if( ( Test-Path $CIFSINFO_FILE ) -eq $false){
-            throw "ERROR: Unable to read [$CIFSINFO_FILE]"
+            Write-LogError "ERROR: Unable to read [$CIFSINFO_FILE]"
+            clean_and_exit 1
         }
         $CIFS=Get-Content $CIFSINFO_FILE -Raw | ConvertFrom-Json
         $CIFSName=$CIFS.CifsServer
@@ -21495,11 +21803,11 @@ Function Add_CIFS_from_JSON (
             $ADCred = get_local_cred ($CIFSDomain) 
             Write-LogDebug "Add-NcCifsServer -Name $CIFSName -Domain $CIFSDomain -OrganizationalUnit $CIFSOU -DefaultSite  $CIFSDefaultSite -AdminCredential $ADCred -Force -AdministrativeStatus down -VserverContext $ToVserver -Controller $ToNcController" 
             $out = Add-NcCifsServer -Name $CIFSName -Domain $CIFSDomain -OrganizationalUnit $CIFSOU -DefaultSite  $CIFSDefaultSite -AdminCredential $ADCred -Force -AdministrativeStatus down -VserverContext $ToVserver -Controller $ToNcController  -ErrorVariable ErrorVar
-            if ( $? -ne $True ) { throw "ERROR: Add-NcCifsServer failed [$ErrorVar]" }else{Write-Log "[$ToVserver] Cifs server [$CIFSName] joined"}
+            if ( $? -ne $True ) { Write-LogError "ERROR: Add-NcCifsServer failed [$ErrorVar]" ;clean_and_exit 1}else{Write-Log "[$ToVserver] Cifs server [$CIFSName] joined"}
         }elseif($CifsServerOnSource.AdministrativeStatus -eq "down" -and $CifsServerOnSource.CifsServer -eq $CIFSName){
             Write-LogDebug "Start-NcCifsServer -VserverContext $ToVserver -Controller $ToNcController" 
             $out = Start-NcCifsServer -VserverContext $ToVserver -Controller $ToNcController  -ErrorVariable ErrorVar
-            if ( $? -ne $True ) { throw "ERROR: Start-NcCifsServer failed [$ErrorVar]" }else{Write-Log "[$ToVserver] Cifs server [$CIFSName] started"}    
+            if ( $? -ne $True ) { Write-LogError "ERROR: Start-NcCifsServer failed [$ErrorVar]" ;clean_and_exit 1}else{Write-Log "[$ToVserver] Cifs server [$CIFSName] started"}    
         }elseif($CifsServerOnSource.CifsServer -ne $CIFSName){
             Write-LogWarn "CIFS server on source is already started, but with different identity [$($CifsServerOnSource.CifsServer)]"    
         }
@@ -21528,53 +21836,96 @@ Function Set_LIF_from_JSON (
         $SVMTOOL_DB_VSERVER=$SVMTOOL_DB_CLUSTER + '\' + $ToVserver + '.vserver'
         if($fromSrc){
             $LIFINFO_FILE=$SVMTOOL_DB_VSERVER + '\lifsrcinfo.json'
+            $PREVIOUS_LIFINFO=$SVMTOOL_DB_VSERVER + '\lifdstinfo.json'
         }else{
-            $LIFINFO_FILE=$SVMTOOL_DB_VSERVER + '\lifdstinfo.json'    
+            $LIFINFO_FILE=$SVMTOOL_DB_VSERVER + '\lifdstinfo.json'
+            $PREVIOUS_LIFINFO=$SVMTOOL_DB_VSERVER + '\lifsrcinfo.json'   
         }
         if(!$IsWindows){
-            $LIFINFO_FILE=$LIFINFO_FILE -Replace "\\","/"    
+            $LIFINFO_FILE=$LIFINFO_FILE -Replace "\\","/"  
+            $PREVIOUS_LIFINFO=$PREVIOUS_LIFINFO -Replace "\\","/"
         }
 
         if( ( Test-Path $LIFINFO_FILE ) -eq $false){
-            throw "ERROR: Unable to read [$LIFINFO_FILE]"
+            Write-LogError "ERROR: Unable to read [$LIFINFO_FILE]"
+            clean_and_exit 1
         }
         $NetList=Get-Content $LIFINFO_FILE -Raw | ConvertFrom-Json
+        Write-LogDebug "Get-NcNetInterface -VserverContext $ToVserver -Controller $ToNcController"
         $availableLIF=Get-NcNetInterface -VserverContext $ToVserver -Controller $ToNcController  -ErrorVariable ErrorVar
         if ( $? -ne $True ) 
         {
-            $Return = $False ; throw "ERROR: Get-NcNetInterface failed [$ErrorVar]"
+            $Return = $False ; Write-LogError "ERROR: Get-NcNetInterface failed [$ErrorVar]"
+            clean_and_exit 1
         }
         # Force config unlock on Vserver
         Write-LogDebug "Unlock-NcVserver -Name $ToVserver -Controller $ToNcController"
         $ret=Unlock-NcVserver -Name $ToVserver -Controller $ToNcController -ErrorVariable ErrorVar -ErrorAction SilentlyContinue
-
-        if($availableLIF.count -gt 0){
-            # if LIF already exist, just modify its configration
+        if($availableLIF.count -gt 0){ #-and $availableLIF.count -ne $NetList.count){
+            Write-LogDebug "Remove existing LIF"
+            $availableLIF | Remove-NcNetInterface  -Confirm:$False
+            #$availableLIF=$null
+        }else{
+            $availableLIF=Get-Content $PREVIOUS_LIFINFO -Raw | ConvertFrom-Json
+        }<# elseif($availableLIF.count -gt 0){
+            # ifcdify its configration
             foreach ( $LIF in ( $availableLIF | Skip-Null ) ) 
             {
                 $LIFname=$LIF.InterfaceName
+                $LIFuuid=$LIF.LifUuid
                 $Address=($NetList | where-object {$_.InterfaceName -eq $LIFname}).Address
                 $Netmask=($NetList | where-object {$_.InterfaceName -eq $LIFname}).Netmask
+                $NetmaskLength=($NetList | where-object {$_.InterfaceName -eq $LIFname}).NetmaskLength
                 $DnsDomainName=($NetList | where-object {$_.InterfaceName -eq $LIFname}).DnsDomainName
-                Write-Log "[$ToVserver] Configure LIF [$LIFname] with [$Address] [$Netmask] [$AdminState]"
-                Write-LogDebug "Set-NcNetInterface -Name $LIFname -Vserver $ToVserver -Address $Address -Netmask $Netmask -DnsDomain $DnsDomainName -AdministrativeStatus $AdminState -Controller $ToNcController"
-                $ret=Set-NcNetInterface -Name $LIFname -Vserver $ToVserver -Address $Address -Netmask $Netmask -DnsDomain $DnsDomainName -AdministrativeStatus $AdminState -Controller $ToNcController -ErrorVariable ErrorVar
-                if($? -ne $True){
-                    throw "ERROR: Failed to configure LIF [$LIFname] on [$ToVserver] reason [$ErrorVar]"
-                }
-            }
-        }else{
+                Write-Log "[$ToVserver] Configure LIF [$LIFname] with [$Address] [$Netmask] [$NetmaskLength] [$AdminState]"
+                if($Global:PSTKCall -ne "Rest"){
+                    Write-LogDebug "Set-NcNetInterface -Name $LIFname -Vserver $ToVserver -Address $Address -Netmask $Netmask -DnsDomain $DnsDomainName -AdministrativeStatus $AdminState -Controller $ToNcController"
+                    $ret=Set-NcNetInterface -Name $LIFname -Vserver $ToVserver -Address $Address -Netmask $Netmask -DnsDomain $DnsDomainName -AdministrativeStatus $AdminState -Controller $ToNcController -ErrorVariable ErrorVar
+                    if($? -ne $True){
+                        Write-LogError "ERROR: Failed to configure LIF [$LIFname] on [$ToVserver] reason [$ErrorVar]"
+                        clean_and_exit 1
+                    }
+                }else{
+                    <# Write-LogDebug "Set-NcNetInterface -Name $LIFname -Vserver $ToVserver -Address $Address -NetmaskLength $NetmaskLength -DnsDomain $DnsDomainName -AdministrativeStatus $AdminState -Controller $ToNcController"
+                    $ret=Set-NcNetInterface -Name $LIFname -Vserver $ToVserver -Address $Address -NetmaskLength $NetmaskLength -DnsDomain $DnsDomainName -AdministrativeStatus $AdminState -Controller $ToNcController -ErrorVariable ErrorVar
+                    if($? -ne $True){
+                        Write-LogError "ERROR: Failed to configure LIF [$LIFname] on [$ToVserver] reason [$ErrorVar]"
+                        clean_and_exit 1
+                    } #>
+                    <# $body=@{}
+                    $body.ip=@{
+                        "address"=$Address
+                        "netmask"=$NetmaskLength
+                    }
+                    if($DnsDomainName.length -gt 1){$body.dns_zone=$DnsDomainName}
+                    
+                    if($AdminState -eq "up"){
+                        $body.enabled="true"
+                    }else{
+                        $body.enabled="false"
+                    }
+                    $body=$body | ConvertTo-Json
+                    $ret=REST_set_lif -myVserver $ToVserver -myLIFuuid $LIFuuid -body $body -myController $ToNcController
+                    if($ret -ne $True){
+                        Write-LogDebug "ERROR: failed to set lif [$LIFname] reason [$ret]"
+                    } #>
+                # }
+           # }
+        #}
+        #if($null -eq $availableLIF -or $availableLIF.count -eq 0){
             # if LIF does not exist, create it
             foreach ( $Interface in ( $NetList | Skip-Null ) ) {
                 $InterfaceName=$Interface.InterfaceName
                 $Address=$Interface.Address
                 $Netmask=$Interface.Netmask
-                $CurrentPort=$Interface.CurrentPort
+                $NetmaskLength=$Interface.NetmaskLength
+                #$CurrentPort=$Interface.CurrentPort
+                $CurrentPort=($availableLIF | where-object {$_.InterfaceName -eq $InterfaceName}).CurrentPort
                 $DataProtocols=$Interface.DataProtocols
                 $DnsDomainName=$Interface.DnsDomainName
                 $Role=$Interface.Role
-                $CurrentNode=$Interface.CurrentNode
-                $CurrentPort=$Interface.CurrentPort
+                #$CurrentNode=$Interface.CurrentNode
+                $CurrentNode=($availableLIF | where-object {$_.InterfaceName -eq $InterfaceName}).CurrentNode
                 $BroadcastDomain = $PrimaryCurrentPortObj.BroadcastDomain
                 $RoutingGroupName=$Interface.RoutingGroupName
                 $FirewallPolicy=$Interface.FirewallPolicy
@@ -21583,13 +21934,13 @@ Function Set_LIF_from_JSON (
                 $FailoverGroup=$Interface.FailoverGroup
                 if($Global:PSTKCall -eq "Rest"){$ServicePolicy=$Interface.ServicePolicy}
                 $Comment=$Interface.Comment 
-                Write-Log "[$ToVserver] Create LIF [$InterfaceName] with [$Address] [$Netmask] [$AdminState]"
+                Write-Log "[$ToVserver] Create LIF [$InterfaceName] with [$Address] [$NetmaskLength] [$AdminState]"
                 if($Global:PSTKCall -match "Rest|ZapiEnforced"){
-                    Write-LogDebug "New-NcNetInterface -Name $InterfaceName -Vserver $ToVserver -Address $Address -Netmask $Netmask `
+                    Write-LogDebug "New-NcNetInterface -Name $InterfaceName -Vserver $ToVserver -Address $Address -Netmask $NetmaskLength `
                     -ServicePolicy $ServicePolicy -Node $CurrentNode -Port $CurrentPort -DataProtocols $DataProtocols `
                     -AdministrativeStatus $AdminState -RoutingGroup $RoutingGroupName -DnsDomain $DnsDomainName -FailoverPolicy $FailoverPolicy `
                     -FailoverGroup $FailoverGroup -AutoRevert $IsAutoRevert -Comment $Comment -controller $ToNcController"
-                    $ret=New-NcNetInterface -Name $InterfaceName -Vserver $ToVserver -Address $Address -Netmask $Netmask `
+                    $ret=New-NcNetInterface -Name $InterfaceName -Vserver $ToVserver -Address $Address -Netmask $NetmaskLength `
                     -ServicePolicy $ServicePolicy -Node $CurrentNode -Port $CurrentPort -DataProtocols $DataProtocols `
                     -AdministrativeStatus $AdminState -RoutingGroup $RoutingGroupName -DnsDomain $DnsDomainName -FailoverPolicy $FailoverPolicy `
                     -FailoverGroup $FailoverGroup -AutoRevert $IsAutoRevert -Comment $Comment -controller $ToNcController -ErrorVariable ErrorVar
@@ -21604,11 +21955,12 @@ Function Set_LIF_from_JSON (
                     -FailoverGroup $FailoverGroup -AutoRevert $IsAutoRevert -Comment $Comment -controller $ToNcController -ErrorVariable ErrorVar
                 }
                 if($? -ne $True){
-                    Throw "ERROR: Failed to create LIF on [$ToVserver] reason [$ErrorVar]"
+                    Write-LogError "ERROR: Failed to create LIF on [$ToVserver] reason [$ErrorVar]"
+                    clean_and_exit 1
                     $Return=$False
                 }
             }    
-        }
+        #}
         
         Write-LogDebug "end"
         return $True
@@ -21801,14 +22153,14 @@ Function Save_LIF_To_JSON (
         }
 
         $myPrimaryNetList | ConvertTo-Json -Depth 7 | Out-File -FilePath $LIFINFO_SRC_FILE -Encoding ASCII -Width 65535
-        if( ($ret=get-item $LIFINFO_SRC_FILE -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $LIFINFO_SRC_FILE -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$LIFINFO_SRC_FILE saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $LIFINFO_SRC_FILE"
             $Return=$False
         }
         $mySecondaryNetList | ConvertTo-Json -Depth 7 | Out-File -FilePath $LIFINFO_DST_FILE -Encoding ASCII -Width 65535
-        if( ($ret=get-item $LIFINFO_DST_FILE -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $LIFINFO_DST_FILE -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$LIFINFO_DST_FILE saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $LIFINFO_DST_FILE"
@@ -21822,14 +22174,14 @@ Function Save_LIF_To_JSON (
         }
 
         $myPrimaryNetList | ConvertTo-Json -Depth 7 | Out-File -FilePath $LIFINFO_SRC_FILE -Encoding ASCII -Width 65535
-        if( ($ret=get-item $LIFINFO_SRC_FILE -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $LIFINFO_SRC_FILE -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$LIFINFO_SRC_FILE saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $LIFINFO_SRC_FILE"
             $Return=$False
         }
         $mySecondaryNetList | ConvertTo-Json -Depth 7 | Out-File -FilePath $LIFINFO_DST_FILE -Encoding ASCII -Width 65535
-        if( ($ret=get-item $LIFINFO_DST_FILE -ErrorAction SilentlyContinue) -ne $null ){
+        if( $null -ne ($ret=get-item $LIFINFO_DST_FILE -ErrorAction SilentlyContinue) ){
             Write-LogDebug "$LIFINFO_DST_FILE saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $LIFINFO_DST_FILE"
@@ -23460,9 +23812,11 @@ Function create_quota_rules_from_quotadb (
                                 $ret=New-NcQuotaPolicy -PolicyName $myPolicy -Vserver $SVM -Controller $myController -ErrorVariable ErrorVar
                                 if ( $? -ne $True ) { $Return = $False ; throw "ERROR: New-NcQuotaPolicy failed [$ErrorVar]" }
                             }
-                            Write-LogDebug "Set-NcVserver -Name $SVM -QuotaPolicy $myPolicy -Controller $myController"
-                            $ret=Set-NcVserver -Name $SVM -QuotaPolicy $myPolicy -Controller $myController -ErrorVariable ErrorVar
-                            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcVserver failed [$ErrorVar]" }  
+                            if($Global:PSTKCall -ne "Rest"){
+                                Write-LogDebug "Set-NcVserver -Name $SVM -QuotaPolicy $myPolicy -Controller $myController"
+                                $ret=Set-NcVserver -Name $SVM -QuotaPolicy $myPolicy -Controller $myController -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Set-NcVserver failed [$ErrorVar]" }  
+                            }
                         }
                         Get-Content $QUOTA_DB_FILE | Select-Object -uniq | ForEach-Object {
                             Write-LogDebug "[$_]"
