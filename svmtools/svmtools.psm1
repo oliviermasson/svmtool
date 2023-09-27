@@ -15256,8 +15256,6 @@ Function show_vserver_dr (
 
         # Display volumes informations
 
-        
-
         if($SelectVolumeConf){
             Write-LogWarn "This configuration does not replicate all volumes (SelectVolume mode)"
         }
@@ -15402,35 +15400,59 @@ Function show_vserver_dr (
 
         if ( $null -ne $SecondaryVserver ) 
         {
-            Write-LogDebug "Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":*") -Expand -Controller $mySecondaryController"
-            $relationList = Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":*") -Expand -Controller $mySecondaryController  -ErrorVariable ErrorVar
+            if($Global:PSTKCall -ne "Rest"){
+                Write-LogDebug "Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":*") -Expand -Controller $mySecondaryController"
+                $relationList = Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":*") -Expand -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Get-NcSnapmirror failed [$ErrorVar]" ;clean_and_exit 1}
+            }else{
+                $Credential=get_local_cDotcred($mySecondaryController)
+                $url=$("https://"+$mySecondaryController.Name+"/api/snapmirror/relationships?source.path="+$($myPrimaryVserver+":*")+"&destination.path="+$($mySecondaryVserver+":*")+"&fields=**")
+                Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+                $relationList=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                if($? -ne $True){
+                    Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
+                    clean_and_exit 1
+                }
+                $relationList=$relationList.records
+            }
             $NumberOfRelationships=$relationList.count
             Format-ColorBrackets  "SNAPMIRROR LIST [$NumberOfRelationships] :"
             Format-ColorBrackets  "---------------------"
             foreach ( $relation in ( $relationList | Skip-Null ) ) {
-                $MirrorState=$relation.MirrorState
-                $SourceLocation=$relation.SourceLocation
-                $DestinationLocation=$relation.DestinationLocation
-                $RelationshipStatus=$relation.RelationshipStatus
-                $RelationHealth=$relation.IsHealthy
-                $RelationType=$relation.RelationshipType
-                $RelationPolicy=$relation.Policy
-                $SourceVolume=$SourceLocation.split(":")[-1]
-                $DestinationVolume=$DestinationLocation.split(":")[-1]
-                if ($RelationType -eq "extended_data_protection") {
-                    $Type="XDP"
+                if($Global:PSTKCall -ne "Rest"){
+                    $MirrorState=$relation.MirrorState
+                    $SourceLocation=$relation.SourceLocation
+                    $DestinationLocation=$relation.DestinationLocation
+                    $RelationshipStatus=$relation.RelationshipStatus
+                    $RelationHealth=$relation.IsHealthy
+                    $RelationType=$relation.RelationshipType
+                    $RelationPolicy=$relation.Policy
+                    $SourceVolume=$SourceLocation.split(":")[-1]
+                    $DestinationVolume=$DestinationLocation.split(":")[-1]
+                    if ($RelationType -eq "extended_data_protection") {
+                        $Type="XDP"
+                    }else{
+                        $Type="DP"
+                    }
+                    if($RelationPolicy -in $("Sync","StrictSync") ){
+                        $RelationShipType="Sync"    
+                    }else{
+                        $RelationShipType="Async"
+                    }
+                    $LagTime=$relation.LagTime
+                    $SmSchedule=$relation.Schedule
+                    $LagTimeDate=(Get-Date).AddSeconds(-$LagTime)
                 }else{
-                    $Type="DP"
-                }
-                if($RelationPolicy -in $("Sync","StrictSync") ){
-                    $RelationShipType="Sync"    
-                }else{
-                    $RelationShipType="Async"
-                }
-                $LagTime=$relation.LagTime
-                $SmSchedule=$relation.Schedule
-                if($Global:PSTKCall -eq "Rest"){
-                    $Credential=get_local_cDotcred($mySecondaryController)
+                    $SourceLocation=$relation.source.path
+                    $SourceVolume=$SourceLocation.split(':')[-1]
+                    $DestinationLocation=$relation.destination.path
+                    $DestinationVolume=$DestinationLocation.split(':')[-1]
+                    $ReverseRelationHealth=$relation.healthy
+                    $RelationShipType=$relation.policy.type
+                    $RelationPolicy=$relation.policy.name
+                    $RelationshipStatus=$relation.state
+                    $SmSchedule=$relation.transfer_schedule.name
+                    $LagTimeDate=$LagTime -replace "PT",""
                     $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/snapmirror?source-path="+$SourceLocation+"&destination-path="+$DestinationLocation+"&fields=state,status,type,schedule")
                     Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
                     $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
@@ -15439,13 +15461,10 @@ Function show_vserver_dr (
                     }elseif($ret.num_records -gt 0){
                         $Type=$ret.records[0].type
                         $MirrorState=$ret.records[0].status
-                        $SmSchedule=$ret.records[0].schedule
+                        #$SmSchedule=$ret.records[0].schedule
                     }else{
                         $Type=$null
                     }
-                    $LagTimeDate=$LagTime -replace "PT",""
-                }else{
-                    $LagTimeDate=(Get-Date).AddSeconds(-$LagTime)
                 }
                 $tmp_str = ""  
                 if ( $Lag ) { $tmp_str = $tmp_str + "[$LagTimeDate]"  }
@@ -15488,35 +15507,57 @@ Function show_vserver_dr (
 
         if ( $null -ne $PrimaryVserver ) 
         {
-            Write-LogDebug "Get-NcSnapmirror -DestinationLocation $($myPrimaryVserver+":*") -SourceLocation $($mySecondaryVserver+":*") -Expand -Controller $myPrimaryController"
-            $relationList = Get-NcSnapmirror -DestinationLocation $($myPrimaryVserver+":*") -SourceLocation $($mySecondaryVserver+":*") -Expand -Controller $myPrimaryController  -ErrorVariable ErrorVar
+            if($Global:PSTKCall -ne "Rest"){
+                Write-LogDebug "Get-NcSnapmirror -DestinationLocation $($myPrimaryVserver+":*") -SourceLocation $($mySecondaryVserver+":*") -Expand -Controller $myPrimaryController"
+                $relationList = Get-NcSnapmirror -DestinationLocation $($myPrimaryVserver+":*") -SourceLocation $($mySecondaryVserver+":*") -Expand -Controller $myPrimaryController  -ErrorVariable ErrorVar
+            }else{
+                $Credential=get_local_cDotcred($myPrimaryController)
+                $url=$("https://"+$myPrimaryController.Name+"/api/snapmirror/relationships?source.path="+$($mySecondaryVserver+":*")+"&destination.path="+$($myPrimaryVserver+":*")+"&fields=**")
+                Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+                $relationList=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                if($? -ne $True){
+                    Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
+                }
+                $relationList=$relationList.records
+            }
             $NumberOfRelationships=$relationList.count
             Format-ColorBrackets  "`nREVERSE SNAPMIRROR LIST [$NumberOfRelationships]:"
             Format-ColorBrackets  "-------------------------------"
             foreach ( $relation in ( $relationList | Skip-Null ) ) {
-                $MirrorState=$relation.MirrorState
-                $SourceLocation=$relation.SourceLocation
-                $SourceVolume=$SourceLocation.split(':')[-1]
-                $DestinationLocation=$relation.DestinationLocation
-                $DestinationVolume=$DestinationLocation.split(':')[-1]
-                $RelationshipStatus=$relation.RelationshipStatus
-                $RelationType=$relation.RelationshipType
-                $RelationPolicy=$relation.Policy
-                if($RelationType -eq "extended_data_protection"){
-                    $Type="XDP"
+                if($Global:PSTKCall -ne "Rest"){
+                    $MirrorState=$relation.MirrorState
+                    $SourceLocation=$relation.SourceLocation
+                    $SourceVolume=$SourceLocation.split(':')[-1]
+                    $DestinationLocation=$relation.DestinationLocation
+                    $DestinationVolume=$DestinationLocation.split(':')[-1]
+                    $RelationshipStatus=$relation.RelationshipStatus
+                    $RelationType=$relation.RelationshipType
+                    $RelationPolicy=$relation.Policy
+                    if($RelationType -eq "extended_data_protection"){
+                        $Type="XDP"
+                    }else{
+                        $Type="DP"
+                    }
+                    if($RelationPolicy -in $("Sync","StrictSync") ){
+                        $RelationShipType="Sync"    
+                    }else{
+                        $RelationShipType="Async"
+                    }
+                    $ReverseRelationHealth=$relation.IsHealthy
+                    $SmSchedule=$relation.Schedule
+                    $LagTime =$relation.LagTime
+                    $LagTimeDate=(Get-Date).AddSeconds(-$LagTime)
                 }else{
-                    $Type="DP"
-                }
-                if($RelationPolicy -in $("Sync","StrictSync") ){
-                    $RelationShipType="Sync"    
-                }else{
-                    $RelationShipType="Async"
-                }
-                $ReverseRelationHealth=$relation.IsHealthy
-                $SmSchedule=$relation.Schedule
-                $LagTime =$relation.LagTime
-                if($Global:PSTKCall -eq "Rest"){
-                    $Credential=get_local_cDotcred($myPrimaryController)
+                    $SourceLocation=$relation.source.path
+                    $SourceVolume=$SourceLocation.split(':')[-1]
+                    $DestinationLocation=$relation.destination.path
+                    $DestinationVolume=$DestinationLocation.split(':')[-1]
+                    $ReverseRelationHealth=$relation.healthy
+                    $RelationShipType=$relation.policy.type
+                    $RelationPolicy=$relation.policy.name
+                    $RelationshipStatus=$relation.state
+                    $SmSchedule=$relation.transfer_schedule.name
+                    $LagTimeDate=$LagTime -replace "PT",""
                     $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/snapmirror?source-path="+$SourceLocation+"&destination-path="+$DestinationLocation+"&fields=state,status,type,schedule")
                     Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
                     $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
@@ -15525,13 +15566,10 @@ Function show_vserver_dr (
                     }elseif($ret.num_records -gt 0){
                         $Type=$ret.records[0].type
                         $MirrorState=$ret.records[0].status
-                        $SmSchedule=$ret.records[0].schedule
+                        #$SmSchedule=$ret.records[0].schedule
                     }else{
                         $Type=$null
                     }
-                    $LagTimeDate=$LagTime -replace "PT",""
-                }else{
-                    $LagTimeDate=(Get-Date).AddSeconds(-$LagTime)
                 }
                 $tmp_str = ""  
                 if ( $Lag ) { $tmp_str = $tmp_str + "[$LagTimeDate]"  }
@@ -19615,9 +19653,20 @@ Function resync_reverse_vserver_dr (
 
 	    Write-LogDebug "start"
         # check current normal relationships
-	    Write-LogDebug "Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":*") -Controller $mySecondaryController"
-        $relationList = Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":*") -Controller $mySecondaryController  -ErrorVariable ErrorVar
-        if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
+	    if($Global:PSTKCall -ne "Rest"){
+            Write-LogDebug "Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":*") -Expand -Controller $mySecondaryController"
+            $relationList = Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":*") -Expand -Controller $mySecondaryController  -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Get-NcSnapmirror failed [$ErrorVar]" ;clean_and_exit 1}
+        }else{
+            $Credential=get_local_cDotcred($mySecondaryController)
+            $url=$("https://"+$mySecondaryController.Name+"/api/snapmirror/relationships?source.path="+$($myPrimaryVserver+":*")+"&destination.path="+$($mySecondaryVserver+":*")+"&fields=**")
+            Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+            $relationList=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+            if($? -ne $True){
+                Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
+            }
+        }
+        
         if ( $Global:ForceRecreate -and ( $null -eq $relationList ) )
         {
             if ( ( create_snapmirror_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -Force -DDR $False ) -ne $True ) 
@@ -19625,14 +19674,25 @@ Function resync_reverse_vserver_dr (
                 Write-LogError "ERROR: Failed to recreate all snapmirror relations "
                 return $False
             }
-            Write-LogDebug "Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":*") -Controller $mySecondaryController"
-            $relationList = Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":*") -Controller $mySecondaryController  -ErrorVariable ErrorVar
-            if ( $? -ne $True ) { $Return = $False ; throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }          
+            if($Global:PSTKCall -ne "Rest"){
+                Write-LogDebug "Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":*") -Expand -Controller $mySecondaryController"
+                $relationList = Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":*") -SourceLocation $($myPrimaryVserver+":*") -Expand -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Get-NcSnapmirror failed [$ErrorVar]" ;clean_and_exit 1}
+            }else{
+                $Credential=get_local_cDotcred($mySecondaryController)
+                $url=$("https://"+$mySecondaryController.Name+"/api/snapmirror/relationships?source.path="+$($myPrimaryVserver+":*")+"&destination.path="+$($mySecondaryVserver+":*")+"&fields=**")
+                Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+                $relationList=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                if($? -ne $True){
+                    Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
+                }
+            }          
         }
 
         # Process all existing normal relationship
 
         foreach ( $relation in ( $relationList | Skip-Null ) ) 	{
+            if($Global:PSTKCall -ne "Rest"){
             $MirrorState=$relation.MirrorState
             $SourceCluster=$relation.SourceCluster
             $DestinationCluster=$relation.DestinationCluster
@@ -19645,9 +19705,13 @@ Function resync_reverse_vserver_dr (
             $RelationshipType=$relation.RelationshipType
             $RelationshipSchedule=$relationship.Schedule
             $RelationPolicy=$relation.Policy
+            $RelationGroupType=$relation.RelationshipGroupType
+            }else{
+
+            }
             $myPrimaryControllerName=$myPrimaryController.Name
             $mySecondaryControllerName=$mySecondaryController.Name
-            $RelationGroupType=$relation.RelationshipGroupType
+            
             if($Global:PSTKCall -ne "Rest"){
                 $RelationshipStatus=$relation.RelationshipStatus
             }else{
@@ -21866,7 +21930,7 @@ Function Set_LIF_from_JSON (
             $availableLIF | Remove-NcNetInterface  -Confirm:$False
             #$availableLIF=$null
         }else{
-            $availableLIF=Get-Content $PREVIOUS_LIFINFO -Raw | ConvertFrom-Json
+            $availableLIF=Get-Content $LIFINFO_FILE -Raw | ConvertFrom-Json
         }<# elseif($availableLIF.count -gt 0){
             # ifcdify its configration
             foreach ( $LIF in ( $availableLIF | Skip-Null ) ) 
