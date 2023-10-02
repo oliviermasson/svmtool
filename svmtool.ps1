@@ -1811,7 +1811,7 @@ if ( $BackupMultiSVM ) {
     if ($BACKUPALLSVM -eq $True) {
         $AllSVM = Get-NcVserver -Query @{VserverType = "data"; VserverSubtype = "!sync_destination,!dp_destination" } -Controller $NcPrimaryCtrl -ErrorVariable ErrorVar 
         if ( $? -ne $True ) {
-            $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" 
+            $Return = $False ; Clean_Throw "ERROR: Get-NcVserver failed [$ErrorVar]" 
         }
         if ($AllSVM) {
             $SVMList = $AllSVM.Vserver
@@ -2204,7 +2204,7 @@ if ( $Restore ) {
 
     if ($RESTOREALLSVM -eq $True) {
         if ($null -eq ($ALLSVM = (Get-ChildItem $SVMTOOL_DB).Name)) {
-            $Return = $False ; throw "ERROR: Get-ChildItem failed for [$SVMTOOL_DB]`nERROR: no Backup available"
+            $Return = $False ; Clean_Throw "ERROR: Get-ChildItem failed for [$SVMTOOL_DB]`nERROR: no Backup available"
         }
         if ($AllSVM) {
             $SVMList = $AllSVM
@@ -2212,7 +2212,7 @@ if ( $Restore ) {
     }
     else {
         if ($null -eq (Test-Path $SVMTOOL_DB)) {
-            $Return = $False ; throw "ERROR: no Backup available for [$Restore] inside [$SVMTOOL_DB]"	
+            $Return = $False ; Clean_Throw "ERROR: no Backup available for [$Restore] inside [$SVMTOOL_DB]"	
         }
         else {
             $SVMList = @($Vserver)
@@ -2376,7 +2376,7 @@ if ( $RestoreMultiSVM ) {
     }
     if ($RESTOREALLSVM -eq $True) {
         if ($null -eq ($ALLSVM = (Get-ChildItem $SVMTOOL_DB).Name)) {
-            $Return = $False ; throw "ERROR: Get-ChildItem failed for [$SVMTOOL_DB]`nERROR: no Backup available"
+            $Return = $False ; Clean_Throw "ERROR: Get-ChildItem failed for [$SVMTOOL_DB]`nERROR: no Backup available"
         }
         if ($AllSVM) {
             $SVMList = $AllSVM
@@ -2384,7 +2384,7 @@ if ( $RestoreMultiSVM ) {
     }
     else {
         if ($null -eq (Test-Path $SVMTOOL_DB)) {
-            $Return = $False ; throw "ERROR: no Backup available for [$Restore] inside [$SVMTOOL_DB]"	
+            $Return = $False ; Clean_Throw "ERROR: no Backup available for [$Restore] inside [$SVMTOOL_DB]"	
         }
         else {
             $SVMList = @($Vserver)
@@ -3209,13 +3209,13 @@ if ( $ConfigureDR ) {
         $Global:MirrorSchedule = "none"    
     }
     if ( $? -ne $True ) {
-        $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" 
+        $Return = $False ; Clean_Throw "ERROR: Get-NcVserver failed [$ErrorVar]" 
     }
     if ($DestVserver.IsConfigLockedForChanges -eq $True) {
         Write-LogDebug "Unlock-NcVserver -Vserver $VserverDR -Force -Confirm:$False -Controller $NcSecondaryCtrl"
         $ret = Unlock-NcVserver -Vserver $VserverDR -Force -Confirm:$False -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar
         if ( $? -ne $True ) {
-            $Return = $False ; throw "ERROR: Dest Vserver [$VserverDR] has its config locked. Unlock-NcVserver failed [$ErrorVar]" 
+            $Return = $False ; Clean_Throw "ERROR: Dest Vserver [$VserverDR] has its config locked. Unlock-NcVserver failed [$ErrorVar]" 
         }
     }
     if ( ( $ret = check_cluster_peer -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl ) -ne $True ) {
@@ -3234,7 +3234,7 @@ if ( $ConfigureDR ) {
     # Verify if CIFS Service is Running if yes stop it
     $CifService = Get-NcCifsServer  -VserverContext  $VserverDR -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar
     if ( $? -ne $True ) {
-        $Return = $False ; throw "ERROR: Get-NcCifsServer failed [$ErrorVar]" 
+        $Return = $False ; Clean_Throw "ERROR: Get-NcCifsServer failed [$ErrorVar]" 
     }
     if ( $null -eq $CifService ) {
         Write-Log "[$VserverDR] No CIFS services"
@@ -3422,7 +3422,7 @@ if ($Migrate) {
             Write-LogDebug "Get-NcNfsService -VserverContext $VserverDR -Controller $NcSecondaryCtrl"
             $NfsService = Get-NcNfsService -VserverContext $VserverDR -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar
             if ( $? -ne $True ) {
-                $Return = $False ; throw "ERROR: Get-NcNfsService failed [$ErrorVar]" 
+                $Return = $False ; Clean_Throw "ERROR: Get-NcNfsService failed [$ErrorVar]" 
             }
             if ( $null -eq $NfsService ) {
                 Write-Log "[$VserverDR] No NFS services in vserver"
@@ -3444,7 +3444,7 @@ if ($Migrate) {
             Write-LogDebug "Get-NcIscsiService -VserverContext $VserverDR -Controller $NcSecondaryCtrl"
             $IscsiService = Get-NcIscsiService -VserverContext $VserverDR -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar
             if ( $? -ne $True ) {
-                $Return = $False ; throw "ERROR: Get-NcIscsiService failed [$ErrorVar]" 
+                $Return = $False ; Clean_Throw "ERROR: Get-NcIscsiService failed [$ErrorVar]" 
             }
             if ( $null -eq $IscsiService ) {
                 Write-Log "[$VserverDR] No iSCSI services in Vserver"
@@ -3466,7 +3466,7 @@ if ($Migrate) {
                 Write-LogDebug "Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl"
                 $out = Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar
                 if ( $? -ne $True ) {
-                    throw "ERROR: Rename-NcVserver failed [$ErrorVar]"
+                    Clean_Throw "ERROR: Rename-NcVserver failed [$ErrorVar]"
                 }
                 if($mySourceVserverComment.lenght -gt 1){
                     Write-LogDebug "Set-NcVserver -Name $Vserver -Controller $NcSecondaryCtrl -Comment $mySourceVserverComment"
@@ -3477,7 +3477,7 @@ if ($Migrate) {
                 Write-Log "[$Vserver] stop Vserver"
                 Write-LogDebug "Stop-NcVserver -Name $Vserver -Controller $NcPrimaryCtrl"
                 $ret=Stop-NcVserver -Name $Vserver -Controller $NcPrimaryCtrl -Confirm:$False
-                if($? -ne $True){Throw "ERROR: Failed to stop Vserver [$Vserver]"}
+                if($? -ne $True){Clean_Throw "ERROR: Failed to stop Vserver [$Vserver]"}
             }
             
             #Write-Log "[$Vserver] completely removed on [$PrimaryClusterName]"
@@ -3562,7 +3562,7 @@ if ( $DeleteSource ) {
                 Write-LogDebug "Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl"
                 $out = Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar
                 if ( $? -ne $True ) {
-                    throw "ERROR: Rename-NcVserver failed [$ErrorVar]"
+                    Clean_Throw "ERROR: Rename-NcVserver failed [$ErrorVar]"
                 }
                 if($SourceVserverComment.lenght -gt 1){
                     Write-LogDebug "Set-NcVserver -Name $Vserver -Controller $NcSecondaryCtrl -Comment $SourceVserverComment"
@@ -3712,7 +3712,7 @@ if ( $CloneDR ) {
     $CloneVserverDR = $($VserverDR + "_clone")
     $ListCloneVserver = Get-NcVserver -Query @{VserverName = $($CloneVserverDR + "*") } -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar
     if ( $? -ne $True ) {
-        $Return = $False ; throw "ERROR: Get-NcVserver failed [$ErrorVar]" 
+        $Return = $False ; Clean_Throw "ERROR: Get-NcVserver failed [$ErrorVar]" 
     }
     if ($null -eq $ListCloneVserver) {
         $CloneVserverDR += ".0"	
@@ -3894,26 +3894,26 @@ if ( $ReActivate ) {
         #add new secondary cifs with primary identity
         Write-Log "[$VserverDR] Restore CIFS server with DR configuration"
         if ( ($ret = Set_CIFS_from_JSON -ToNcController $NcSecondaryCtrl -ToVserver $VserverDR) -eq $False ) {
-            Throw "ERROR: Failed to add new CIFS server on [$VserverDR]"
+            Clean_Throw "ERROR: Failed to add new CIFS server on [$VserverDR]"
         }
     }
 
     # restore all secondary LIF address with info previously backed
     Write-Log "[$VserverDR] Restore LIF with DR configuration"
     if ( ($ret = Set_LIF_from_JSON -ToNcController $NcSecondaryCtrl -ToVserver $VserverDR) -eq $False ) {
-        Throw "ERROR: Failed to set IP address on [$VserverDR]"	
+        Clean_Throw "ERROR: Failed to set IP address on [$VserverDR]"	
     }
 
     # disable all services on secondary SVM
     Write-Log "[$VserverDR] Disable services"
     if ( ($ret = disable_network_protocol_vserver_dr -myController $NcSecondaryCtrl -myVserver $VserverDR -ForceDisable) -eq $False) {
-        Throw "ERROR: Failed to disable all services on [$VserverDR]"
+        Clean_Throw "ERROR: Failed to disable all services on [$VserverDR]"
     }
 
     # restore all LIF address on Primary with info previously backed
     Write-Log "[$Vserver] Restore LIF with Primary configuration"
     if ( ($ret = Set_LIF_from_JSON -ToNcController $NcPrimaryCtrl -ToVserver $Vserver -fromSrc) -eq $False ) {
-        Throw "ERROR: Failed to set IP address on [$Vserver]"	
+        Clean_Throw "ERROR: Failed to set IP address on [$Vserver]"	
     }
 
     if($null -ne ($CurrentPrimaryCIFSServer=Get-NcCifsServer -VserverContext $Vserver -Controller $NcPrimaryCtrl)){
@@ -3921,7 +3921,7 @@ if ( $ReActivate ) {
         #add new secondary cifs with primary identity
         Write-Log "[$Vserver] Restore CIFS server with previous configuration"
         if ( ($ret = Set_CIFS_from_JSON -ToNcController $NcPrimaryCtrl -ToVserver $Vserver -fromSrc) -eq $False ) {
-            Throw "ERROR: Failed to add new CIFS server on [$Vserver]"
+            Clean_Throw "ERROR: Failed to add new CIFS server on [$Vserver]"
         }
     }else{
         Write-Log "No CIFS server on Primary Vserver [$Vserver]"
@@ -3930,7 +3930,7 @@ if ( $ReActivate ) {
             #add primary cifs with primary identity
             Write-Log "[$Vserver] Restore CIFS server with Primary configuration"
             if ( ($ret = Add_CIFS_from_JSON -ToNcController $NcPrimaryCtrl -ToVserver $Vserver -fromSrc) -eq $False ) {
-                Throw "ERROR: Failed to add new CIFS server on [$Vserver]"
+                Clean_Throw "ERROR: Failed to add new CIFS server on [$Vserver]"
             }
         }
     }
@@ -3987,7 +3987,7 @@ if ( $ReActivate ) {
     }
 
     if ( ($ret = disable_network_protocol_vserver_dr -myController $NcSecondaryCtrl -myVserver $VserverDR -ForceDisable) -eq $False) {
-        Throw "ERROR: Failed to disable all services on [$VserverDR]"
+        Clean_Throw "ERROR: Failed to disable all services on [$VserverDR]"
     }
     clean_and_exit 0
 }
