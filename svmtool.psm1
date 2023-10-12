@@ -1217,7 +1217,7 @@ function Invoke-SvmDrResyncReverse {
         # Snapmirror Policy to use
         [Parameter(Mandatory = $false)]
         [string]$XDPPolicy,
-        
+
         <# # Force creation of DP Snapmirror relationship instead of default XDP
         [Parameter(Mandatory = $false)]
         [ValidateSet("DP", "XDP")]
@@ -1403,6 +1403,38 @@ function Update-SvmDrReverse {
         # In NonInteractive Mode, username and password of this pre-created credential are used
         # Can be used during ConfigureDR, UpdateDR, CloneDR, Restore, UpdateReverse, Migrate, ReActivate and RestoreObject
         [pscredential]$DefaultChapCredentials,
+
+        # Optional, this SvmDr solution cannot transfer the passwords for LDAP Binding
+        # In Non-Interactive Mode, the script cannot bind to new LDAP server
+        # If you pass this parameter, the password will be used to Bind LDAP server
+        [pscredential]$DefaultLDAPCredentials,
+
+        # Optional, when running in Non-Interactive mode, this script cannot prompt for AD credentials
+        # Use this parameter to join the dr vserver in AD without interaction
+        [pscredential]$ActiveDirectoryCredentials,
+
+        # Optional, when the vserver dr is created, all lifs are taken offline (duplicate ip conflicts)
+        # Hence if the vserver needs to be joined in AD, there is no lif available
+        # By passing an temporary ip-address and in combination with parameter "SecondaryCifsLifMaster"
+        # A temporary lif will be created to join the vserver dr in AD
+        [string]$TemporarySecondaryCifsIp,
+
+        # Optional, when the vserver dr is created, all lifs are taken offline (duplicate ip conflicts)
+        # Hence if the vserver needs to be joined in AD, there is no lif available
+        # So we will clone the lif that is passed in this parameter (using same port and options)
+        # Use this in combination with parameter "TemporarySecondaryCifsIp"
+        # A temporary lif will be created to join the vserver dr in AD
+        [string]$SecondaryCifsLifMaster,
+
+        # Optional, when the vserver dr is created, all lifs are taken offline (duplicate ip conflicts)
+        # Hence if the vserver needs to be joined in AD, there is no lif available
+        # So we will clone the lif used in the parameter SecondaryCifsLifMaster
+        # A temporary lif will be created to join the vserver dr in AD
+        # This parameter will override the vlan in which this temp lif is created
+        [string]$SecondaryCifsLifCustomVlan,
+
+        # When the dr cifs server is joined AD, you can override in which OU this happens with this parameter
+        [string]$ActiveDirectoryCustomOU,
 
         # Loglevel of the console output
         [ValidateSet("Debug", "Info", "Warn", "Error", "Fatal", "Off")]

@@ -227,7 +227,7 @@ Function Error_Handling([object]$object,[string]$vserver,[switch]$donotcleanlog4
 	Write-LogDebug  "Trap PipelineIterationInfo: [$PipelineIterationInfo]"
 	Write-LogDebug  "Trap ScriptStackTrace: [$ScriptStackTrace]"
 	Write-LogDebug  "Trap TargetObject: [$TargetObject]"
-    if(-not $donotcleanlog4net.IsPresent){
+    if($donotcleanlog4net.IsPresent){
         exit_log4net
     }
 }
@@ -7131,12 +7131,11 @@ Try {
                         # $PrimaryFlexgroupMaster= Get-NcVol -ONTAPI  -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
                         $PrimaryFlexgroupMaster=$PrimaryVol
                         # if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Failed to get flexgroup master informations [$PrimaryVolName] [$ErrorVar]" }
-                        if($InReverse -eq $False){
-                            Write-LogDebug "Work in normal mode with flexgroup, so add _dst ad the end of volume name"
-                            $SecondaryName=$($PrimaryFlexgroupMaster.Name+'_dst')
-                        }else{
-                            Write-LogDebug "Work in reverse mode with flexgroup, so remove _dst at the end of volume name"
-                            $SecondaryName=$PrimaryFlexgroupMaster.Name -Replace "_dst$",""
+                        Write-LogDebug "Work in normal mode with flexgroup, so add __dst at the end of volume name"
+                        $SecondaryName=$($PrimaryFlexgroupMaster.Name+'__dst')
+                        if($SecondaryName -match "__dst__dst$"){
+                            Write-LogDebug $("Work in mode ["+$Global:Run_Mode+"] with secondary name [$SecondaryName] so replace it with ["+$($SecondaryName -Replace "__dst__dst","")+"]")
+                            $SecondaryName=$SecondaryName -Replace "__dst__dst",""
                         }
                         Write-LogDebug "Secondary Name [$SecondaryName]"
                         if($SecondaryName -notin $ListFlexgroup){
@@ -7151,9 +7150,9 @@ Try {
                         if($Global:RESTORE_ORIGINAL -eq $True){
                             Write-LogDebug "[$workOn] In RESTORE_ORIGINAL mode Flexgroup volume name [$PrimaryVolName] is not changed"
                         }else{
-                            # Destination Flexgroup name must be changed only if name not already in format <name>_dst which is the name format created by snapmirror protect on flexgroup destination
-                            if($PrimaryVolName -notmatch "_dst$"){
-                                $NewVolumeName=$($PrimaryVolName+"_dst")
+                            # Destination Flexgroup name must be changed only if name not already in format <name>__dst which is the name format created by snapmirror protect on flexgroup destination
+                            if($PrimaryVolName -notmatch "__dst$"){
+                                $NewVolumeName=$($PrimaryVolName+"__dst")
                                 Write-LogDebug "[$workOn] In Restore without RESTORE_ORIGINAL mode Flexgroup volume name [$PrimaryVolName] must be changed to [$NewVolumeName]"
                                 $PrimaryVolName=$NewVolumeName
                             }
@@ -8220,7 +8219,13 @@ Try {
                     # # Write-LogDebug "Get-NcVol -VserverContext $PrimaryVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended=`"flexgroup`"`}`} -Controller $myPrimaryController"
                     # # $PrimaryFlexgroupMaster= Get-NcVol -ONTAPI  -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
                     # # if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Failed to get flexgroup master informations [$PrimaryVolName] [$ErrorVar]" }
-                    $SecondaryFlexgroupMasterName=$($PrimaryVolName+'_dst')
+                    Write-LogDebug "Work in normal mode with flexgroup, so add __dst at the end of volume name"
+                    $SecondaryFlexgroupMasterName=$($PrimaryVolName+'__dst')
+                    if($SecondaryFlexgroupMasterName -match "__dst__dst$"){
+                        Write-LogDebug $("Work in mode ["+$Global:Run_Mode+"] with secondary name [$SecondaryFlexgroupMasterName] so replace it with ["+$($SecondaryFlexgroupMasterName -Replace "__dst__dst","")+"]")
+                        $SecondaryFlexgroupMasterName=$SecondaryFlexgroupMasterName -Replace "__dst__dst",""
+                    }
+                    Write-LogDebug "Secondary Name [$SecondaryFlexgroupMasterName]"
                     $PrimaryFlexgroupMasterName=$PrimaryVolName
                     $PrimaryFlexgroupMasterState=$PrimaryVolState
                     $PrimaryFlexgroupMasterType=$PrimaryVolType
@@ -8405,7 +8410,7 @@ Catch {
 #############################################################################################
 # create an empty flexgroup based on already created flexgroup
 # used currently only in restore mode
-# in normal mode we still use a snamirror_protect job even if it requires us to add a suffix (_dst) to the name of the destination flexgroup. 
+# in normal mode we still use a snamirror_protect job even if it requires us to add a suffix (__dst) to the name of the destination flexgroup. 
 Function create_flexgroup(
     [NetApp.Ontapi.Filer.C.NcController] $myController,
     [string] $myVserver,
@@ -8761,7 +8766,12 @@ Try {
             # }else{
             #     $PrimaryFlexgroupMaster=$vol_detail
             # }
-            $SecondaryName=$($vol_detail.Name+'_dst')
+            Write-LogDebug "Work in normal mode with flexgroup, so add __dst ad the end of volume name"
+            $SecondaryName=$($vol_detail.Name+'__dst')
+            if($SecondaryName -match "__dst__dst$"){
+                Write-LogDebug $("Work in mode ["+$Global:Run_Mode+"] with secondary name [$SecondaryName] so replace it with ["+$($SecondaryName -Replace "__dst__dst","")+"]")
+                $SecondaryName=$SecondaryName -Replace "__dst__dst",""
+            }
             $vol_detail.IsFlexgroup=$True
         }else{
             $vol_detail.IsFlexgroup=$False
@@ -8845,7 +8855,13 @@ Try {
             # }else{
             #     $PrimaryFlexgroupMaster=$vol_detail
             # }
-            $SecondaryName=$($vol_detail.Name+'_dst')
+            Write-LogDebug "Work in normal mode with flexgroup, so add __dst ad the end of volume name"
+            $SecondaryName=$($vol_detail.Name+'__dst')
+            if($SecondaryName -match "__dst__dst$"){
+                Write-LogDebug $("Work in mode ["+$Global:Run_Mode+"] with secondary name [$SecondaryName] so replace it with ["+$($SecondaryName -Replace "__dst__dst","")+"]")
+                $SecondaryName=$SecondaryName -Replace "__dst__dst",""
+            }
+            Write-LogDebug "Secondary Name [$SecondaryName]"
             $vol_detail.IsFlexgroup=$True
         }else{
             $vol_detail.IsFlexgroup=$False
@@ -8967,7 +8983,7 @@ Try {
         Write-LogDebug "mount_voldr [$VolumeName]"
         $JunctionPath=$volume.JunctionPath
         if($volume.IsFlexgroup -eq $True){
-            $DestVolume=$($VolumeName+"_dst")
+            $DestVolume=$($VolumeName+"__dst")
         }else{
             $DestVolume=$VolumeName
         }
@@ -9145,7 +9161,12 @@ Try {
         $volume=$vol.Name
         Write-LogDebug "mount_voldr [$volume]"
         if($vol.IsFlexgroup -eq $True){
-            $DestVolume=$($volume+"_dst")
+            $DestVolume=$($volume+"__dst")
+            if($DestVolume -match "__dst__dst$"){
+                Write-LogDebug $("Work in mode ["+$Global:Run_Mode+"] with secondary name [$DestVolume] so replace it with ["+$($DestVolume -Replace "__dst__dst","")+"]")
+                $DestVolume=$DestVolume -Replace "__dst__dst",""
+            }
+            Write-LogDebug "Secondary Name [$DestVolume]"
         }else{
             $DestVolume=$volume
         }
@@ -10724,7 +10745,13 @@ Try {
             # Write-LogDebug "Get-NcVol -VserverContext $PrimaryVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended=`"flexgroup`"`}`} -Controller $myPrimaryController"
             # $PrimaryFlexgroupMaster= Get-NcVol -ONTAPI  -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
             # if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Failed to get flexgroup master informations [$PrimaryVolName] [$ErrorVar]" }
-            $SecondaryFlexgroupMasterName=$($PrimaryVolName+'_dst')
+            Write-LogDebug "Work in normal mode with flexgroup, so add __dst ad the end of volume name"
+            $SecondaryFlexgroupMasterName=$($PrimaryVolName+'__dst')
+            if($SecondaryFlexgroupMasterName -match "__dst__dst$"){
+                Write-LogDebug $("Work in mode ["+$Global:Run_Mode+"] with secondary name [$SecondaryFlexgroupMasterName] so replace it with ["+$($SecondaryFlexgroupMasterName -Replace "__dst__dst","")+"]")
+                $SecondaryFlexgroupMasterName=$SecondaryFlexgroupMasterName -Replace "__dst__dst",""
+            }
+            Write-LogDebug "Secondary Name [$SecondaryFlexgroupMasterName]"
             $PrimaryFlexgroupMasterName=$PrimaryVolName
             # Write-LogDebug "Get-NcVol -Name $PrimaryFlexgroupMasterName -Vserver $myPrimaryVserver -Controller $myPrimaryController"
             # $PrimaryFlexgroup= Get-NcVol -Name $PrimaryFlexgroupMasterName -Vserver $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
@@ -10757,8 +10784,13 @@ Try {
                             Write-LogDebug "[$workOn]: end"
                             return $False
                         }elseif($SnapmirrorRelationshipStatus.num_records -gt 0){
-                            $relation.MirrorState=$SnapmirrorRelationshipStatus.records[0].state
-                            $relation.RelationshipStatus=$SnapmirrorRelationshipStatus.records[0].status
+                            if($Global:PSTKCall -ne "Rest"){
+                                $relation.MirrorState=$SnapmirrorRelationshipStatus.records[0].state
+                                $relation.RelationshipStatus=$SnapmirrorRelationshipStatus.records[0].status
+                            }else{
+                                $relation | Add-Member -NotePropertyName MirrorState -NotePropertyValue $SnapmirrorRelationshipStatus.records[0].state
+                                $relation | Add-Member -NotePropertyName RelationshipStatus -NotePropertyValue $SnapmirrorRelationshipStatus.records[0].status
+                            }
                         }
                     }
                 }
@@ -10766,10 +10798,11 @@ Try {
                     # Normally the relationship should exist in status not initialized
                     # Because it is created previously (in ConfigureDR) during creation of DR flexgroup :
                     #   Protection of Flexgroup to create same constituent number and size for each existing Flexgroup through Enable-NcSnapmirrorProtect 
-                    if( (($Force -eq $False) -and ($DDR -eq $False)) -and $Global:ForceRecreate -eq $False ){
-                        # Not in Force mode
-                        Write-LogWarn "You need to add option -ForceRecreate to create missing Flexgroup relationship"
-                    }elseif( ($Force -eq $True -and $DDR -eq $False) -or ($Global:ForceRecreate -eq $True) ){
+                    # if( (($Force -eq $False) -and ($DDR -eq $False)) -and $Global:ForceRecreate -eq $False ){
+                    #     # Not in Force mode
+                    #     Write-LogWarn "You need to add option -ForceRecreate to create missing Flexgroup relationship"
+                    # }elseif( ($Force -eq $True -and $DDR -eq $False) -or ($Global:ForceRecreate -eq $True) ){
+                    if( $DDR -eq $False ){
                         # In Force mode
                         if($Global:MirrorSchedule.Length -eq 0){
                             $Schedule=$PreviousSchedule
@@ -10812,9 +10845,9 @@ Try {
                             if($null -ne $VolDetail){
                                 REST_create_snapmirror -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -PrimaryVol $PrimaryFlexgroupMasterName -SecondaryVol $SecondaryFlexgroupMasterName -Group_type "flexgroup" -Policy $SnapmirrorPolicy -Policy_type $Policy_type -Schedule $Global:MirrorSchedule -workOn $mySecondaryVserver -CreateDest $False
                                 if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: New-NcSnapmirror forced flexgroup failed [$ErrorVar]"}
-                                Write-Log "[$mySecondaryVserver] Resync relationship [$SourceLocation] --> [$DestinationLocation] "
+                                Write-Log "[$mySecondaryVserver] Resync relationship [$($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName)] --> [$($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName)] "
                                 Write-LogDebug "Invoke-NcSnapmirrorResync -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName  -Controller $mySecondaryController"
-                                $out=Invoke-NcSnapmirrorResync -DestinationVserver $mySecondaryVserver -DestinationVolume $DestinationVolume  -Controller $mySecondaryController  -ErrorVariable ErrorVar -Confirm:$False
+                                $out=Invoke-NcSnapmirrorResync -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName  -Controller $mySecondaryController  -ErrorVariable ErrorVar -Confirm:$False
                                 if ( $? -ne $True ) 
                                 {
                                     Write-LogError "ERROR: Snapmirror Resync failed" 
@@ -12572,16 +12605,24 @@ Try {
             if($Restore -eq $False){
                 $VolumeDetails= Get-NcVol -Name $Volume -Vserver $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
                 if($VolumeDetails.VolumeIdAttributes.StyleExtended -eq "flexgroup"){
-                    $Volume=$($Volume+"_dst")
+                    $Volume=$($Volume+"__dst")
+                    if($Volume -match "__dst__dst$"){
+                        Write-LogDebug $("Work in mode ["+$Global:Run_Mode+"] with secondary name [$Volume] so replace it with ["+$($Volume -Replace "__dst__dst","")+"]")
+                        $Volume=$Volume -Replace "__dst__dst",""
+                    }
                     Write-LogDebug "Flexgroup on source so volume name on secondary is [$Volume] "
                 }
             }else{
                 if($Global:RESTORE_ORIGINAL -eq $True){
                     Write-LogDebug "[$workOn] In RESTORE_ORIGINAL mode Flexgroup volume name [$Volume] is not changed"
                 }else{
-                    # Destination Flexgroup name must be changed only if name not already in format <name>_dst which is the name format created by snapmirror protect on flexgroup destination
+                    # Destination Flexgroup name must be changed only if name not already in format <name>__dst which is the name format created by snapmirror protect on flexgroup destination
                     if($Volume -notmatch "_dst$"){
                         $NewVolumeName=$($Volume+"_dst")
+                        if($NewVolumeName -match "__dst__dst$"){
+                            Write-LogDebug $("Work in mode ["+$Global:Run_Mode+"] with secondary name [$NewVolumeName] so replace it with ["+$($NewVolumeName -Replace "__dst__dst","")+"]")
+                            $NewVolumeName=$NewVolumeName -Replace "__dst__dst",""
+                        }
                         Write-LogDebug "[$workOn] In Restore without RESTORE_ORIGINAL mode Flexgroup volume name [$Volume] must be changed to [$NewVolumeName]"
                         $Volume=$NewVolumeName
                     }
@@ -12671,7 +12712,11 @@ Try {
             $Volume=$qtree.Volume
             $PrimaryVolumeType= (Get-NcVol -ONTAPI  -Name $Volume -Vserver $myPrimaryVserver -Controller $myPrimaryController).VolumeIdAttributes.StyleExtended
             if($PrimaryVolumeType -eq "flexgroup"){
-                $SecondaryVolumeName=$($Volume+"_dst")
+                $SecondaryVolumeName=$($Volume+"__dst")
+                if($SecondaryVolumeName -match "__dst__dst$"){
+                    Write-LogDebug $("Work in mode ["+$Global:Run_Mode+"] with secondary name [$SecondaryVolumeName] so replace it with ["+$($SecondaryVolumeName -Replace "__dst__dst","")+"]")
+                    $SecondaryVolumeName=$SecondaryVolumeName -Replace "__dst__dst",""
+                }
                 Write-LogDebug "Working on flexgroup volume on destination [$SecondaryVolumeName]"
             }else{
                 $SecondaryVolumeName=$Volume
@@ -14438,6 +14483,10 @@ Try {
                     # or create it, if not c$, admin$ or ipc$ shares that are create automaticaly when CIFS server is deployed
                     # in some case admin$ share is not automaticaly create during CIFS share deployement, so we will create this share too
                     $PrimaryShareName=$sharediff.ShareName
+                    if($PrimaryShareName -eq "ONTAP_ADMIN$"){
+                        Write-LogDebug "Ignore share [$PrimaryShareName]"
+                        continue
+                    }
                     Write-LogDebug "[$workOn] Working on share [$PrimaryShareName]"
                     $PrimaryAclList=$sharediff.Acl
                     $PrimaryAttributeCacheTtl=$sharediff.AttributeCacheTtl
@@ -15515,10 +15564,20 @@ Function show_vserver_dr (
                 else  
                 {
                     if($PrimaryVolExtendStyle -eq "flexgroup"){
-                        $SecondaryName=$($PrimaryVolName+'_dst') 
+                        Write-LogDebug "Work in normal mode with flexgroup, so add __dst ad the end of volume name"
+                        $SecondaryName=$($PrimaryVolName+'__dst') 
+                        if($SecondaryName -match "__dst__dst$"){
+                            Write-LogDebug $("Work in mode ["+$Global:Run_Mode+"] with secondary name [$SecondaryName] so replace it with ["+$($SecondaryName -Replace "__dst__dst","")+"]")
+                            $SecondaryName=$SecondaryName -Replace "__dst__dst",""
+                        }
                         $SecondaryVol = Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $SecondaryName  -ErrorVariable ErrorVar   
                     }elseif($PrimaryVolExtendStyle -eq "flexgroup_constituent"){
-                        $SecondaryName=$PrimaryVolName -replace "__","_dst__"
+                        $SecondaryName=$PrimaryVolName -Replace "__[0-9]{4}$",$matches[0] -replace "__","__dst__"
+                        if($SecondaryName -match "__dst__dst__dst__"){
+                            Write-LogDebug $("Work in mode ["+$Global:Run_Mode+"] with secondary name [$SecondaryName] so replace it with ["+$($SecondaryName -Replace "__dst__dst__dst","")+"]")
+                            $SecondaryName=$SecondaryName -Replace "__dst__dst__dst",""
+                        }
+                        Write-LogDebug "SecondaryName [$SecondaryName]"
                         $SecondaryVol = Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $SecondaryName  -ErrorVariable ErrorVar
                     }else{
                         $SecondaryVol = Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $PrimaryVolName  -ErrorVariable ErrorVar
@@ -17358,10 +17417,15 @@ Try {
             $RelationGroupType=$relation.RelationshipGroupType
             $UpdateRelationship=$True
             if($RelationGroupType -eq "flexgroup"){
-                $SecondaryVol=$($PrimaryVol+"_dst")    
+                $SecondaryVol=$($PrimaryVol+"_dst")  
+                if($SecondaryVol -match "__dst__dst$"){
+                    Write-LogDebug $("Work in mode ["+$Global:Run_Mode+"] with secondary name [$SecondaryVol] so replace it with ["+$($SecondaryVol -Replace "__dst__dst","")+"]")
+                    $SecondaryVol=$SecondaryVol -Replace "__dst__dst",""
+                }    
             }else{
                 $SecondaryVol=$PrimaryVol
             }
+            Write-LogDebug "Secondary Name [$SecondaryVol]"
             $RelationshipStatus=$relation.RelationshipStatus
         }else{
             $SourceLocation=$relation.source.path
@@ -17373,10 +17437,16 @@ Try {
             $RelationGroupType=$relation.group_type
             $UpdateRelationship=$True
             if($RelationGroupType -eq "flexgroup"){
-                $SecondaryVol=$($PrimaryVol+"_dst")    
+                $SecondaryVol=$($PrimaryVol+"_dst")
+                if($SecondaryVol -match "__dst__dst$"){
+                    Write-LogDebug $("Work in mode ["+$Global:Run_Mode+"] with secondary name [$SecondaryVol] so replace it with ["+$($SecondaryVol -Replace "__dst__dst","")+"]")
+                    $SecondaryVol=$SecondaryVol -Replace "__dst__dst",""
+                }
+                    
             }else{
                 $SecondaryVol=$PrimaryVol
             }
+            Write-LogDebug "Secondary Name [$SecondaryVol]"
             # ! Private CLI REST request necessary to get correct relationship-status
             $Credential = get_local_cDotcred($mySecondaryController)
             $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/snapmirror?source-path="+$SourceLocation+"&destination-path="+$DestinationLocation+"&fields=state,status")
@@ -17489,10 +17559,15 @@ Try {
         if($Global:PSTKCall -ne "Rest"){
 		    $LAG = get-lag ($LastTransferEndTimestamp)
         }else{
-            $LAG=([System.Xml.XmlConvert]::ToTimeSpan($relation.LagTime)).TotalSeconds 
+            #$LAG=([System.Xml.XmlConvert]::ToTimeSpan($relation.LagTime)).TotalSeconds 
+            $LAG=($relation.lag_time).replace("PT","")
         }
-		Write-Log "[$mySecondaryVserver] Status relation [$SourceLocation] [$DestinationLocation]:[$RelationshipStatus] [$MirrorState] Lag: [$LAG] seconds"
-	}
+        if($Global:PSTKCall -ne "Rest"){
+		    Write-Log "[$mySecondaryVserver] Status relation [$SourceLocation] [$DestinationLocation]:[$RelationshipStatus] [$MirrorState] Lag: [$LAG] seconds"
+        }else{
+            Write-Log "[$mySecondaryVserver] Status relation [$SourceLocation] [$DestinationLocation]:[$RelationshipStatus] [$MirrorState] Lag: [$LAG]"
+        }
+    	}
     Write-LogDebug "end"
 	return $Return 
 }
@@ -19616,7 +19691,7 @@ Function activate_vserver_dr (
                 $body.enabled=$False
                 $body.name=$newCIFSName
                 $body=$body | ConvertTo-Json
-                Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $Cred -SkipCertificateCheck  -body $body " #(body is intentionally hidden)"
+                Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $Cred -SkipCertificateCheck (body is intentionally hidden)"
                 $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
                 if($? -ne $True){
                     Write-LogError "ERROR: patch request [$url] reason [$ErrorVar]"
@@ -20783,7 +20858,7 @@ Function mount_volume (
     if($IsFlexgroup -eq $False){
         $FindVolume=$script:vol_junction | Where-Object {$_.Name -eq $myVolumeName}
     }else{
-        $SourceFlexgroupVolumeName=$myVolumeNAme -Replace "_dst",""
+        $SourceFlexgroupVolumeName=$myVolumeName -Replace "__dst",""
         $FindVolume=$script:vol_junction | Where-Object {$_.Name -eq $SourceFlexgroupVolumeName}    
     }
     $Parent=$FindVolume.JunctionParent
@@ -21030,6 +21105,11 @@ Try {
     if($IsFlexgroup -eq $True){
         $SourceVolume=$PrimaryVolumeName
         $DestVolume=$($PrimaryVolumeName+"_dst")
+        if($DestVolume -match "__dst__dst$"){
+            Write-LogDebug $("Work in mode ["+$Global:Run_Mode+"] with secondary name [$DestVolume] so replace it with ["+$($DestVolume -Replace "__dst__dst","")+"]")
+            $DestVolume=$DestVolume -Replace "__dst__dst",""
+        }
+        Write-LogDebug "Secondary Name [$DestVolume]"
         if($Global:PSTKCall -ne "Rest"){
             Write-LogDebug "Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":"+$DestVolume) -SourceLocation $($myPrimaryVserver+":"+$SourceVolume) -Controller $mySecondaryController"
             $relationList=Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":"+$DestVolume) -SourceLocation $($myPrimaryVserver+":"+$SourceVolume) -Controller $mySecondaryController  -ErrorVariable ErrorVar
@@ -21134,6 +21214,10 @@ Try {
     if($IsFlexgroup -eq $True){
         $SourceVolume=$PrimaryVolumeName
         $DestVolume=$($PrimaryVolumeName+"_dst")
+        if($DestVolume -match "__dst__dst$"){
+            Write-LogDebug $("Work in mode ["+$Global:Run_Mode+"] with secondary name [$DestVolume] so replace it with ["+$($DestVolume -Replace "__dst__dst","")+"]")
+            $DestVolume=$DestVolume -Replace "__dst__dst",""
+        }
         if($Global:PSTKCall -eq "Zapi"){
             Write-LogDebug "Get-NcSnapmirrorDestination  -SourceLocation $($myPrimaryVserver+":"+$SourceVolume) -DestinationLocation $($mySecondaryVserver+":"+$DestVolume) -Controller $myPrimaryController"
             $relationList=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":"+$SourceVolume) -DestinationLocation $($mySecondaryVserver+":"+$DestVolume) -Controller $myPrimaryController  -ErrorVariable ErrorVar
@@ -22254,7 +22338,7 @@ Function Set_CIFS_from_JSON (
                         $body.netbios.aliases+=$netbiosalias
                     }
                     $body=$body | ConvertTo-Json
-                    Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $Cred -SkipCertificateCheck  -body $body " #(body is intentionally hidden)"
+                    Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $Cred -SkipCertificateCheck (body is intentionally hidden)"
                     $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: patch request [$url] reason [$ErrorVar]"

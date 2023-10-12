@@ -28,6 +28,7 @@
 #   1.1.5 : Add ForceRestoreOriginal parameter to Restore-ObjectSvmDr
 #   1.1.6 : Add DefaultChapCredentials paramater
 #   1.1.7 : Change/Add some synopsis informations
+#   1.1.8 : Add new parameters for UpdateReverse
 #           
 @{
 
@@ -35,7 +36,7 @@
     RootModule        = '.\svmtool.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.1.7'
+    ModuleVersion     = '1.1.8'
 
     # Supported PSEditions
     # CompatiblePSEditions = @()
