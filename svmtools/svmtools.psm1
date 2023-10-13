@@ -442,8 +442,10 @@ function Write-LogOnly ([string]$mess, $type) {
     if($mess){
         $stack=Get-PSCallStack
         $caller1=$stack[1].Command
+        $lineCaller1=$stack[1].ScriptLineNumber
         $caller2=$stack[2].Command
-        $mess=$($caller2+":"+$caller1+":"+$mess)
+        $lineCaller2=$stack[2].ScriptLineNumber
+        $mess=$($caller2+"("+$lineCaller2+"):"+$caller1+"("+$lineCaller1+"):"+$mess)
         $Global:MasterLog.Info($mess)
         #write-host $mess
         #$Global:ConsoleLog.Info($mess)
@@ -9913,7 +9915,7 @@ Function wait_snapmirror_dr_status{
                     $SourceLocation=$rel.SourceLocation
                     $DestinationLocation=$rel.DestinationLocation
                 }
-                if( ( $relationStatus -eq $Status ) -and ( $relationMirrorState -eq $Mirrorstate) ){
+                if( ( $relationStatus -eq $Status ) -and ( $relationMirrorState -match $Mirrorstate) ){
                     $GoodStatus = $true
                 } 
             }
@@ -11014,6 +11016,12 @@ Try {
 					Write-LogError "ERROR: Unable to Break relation [$SourceLocation] --> [$DestinationLocation]" 
 					$Return = $True 
 				}
+                Write-LogDebug "wait_snapmirror_dr_status -sourceCluster $myPrimaryCluster -destinationCluster $mySecondaryCluster -sourceVserver $myPrimaryVserver -destinationVserver $mySecondaryVserver -PrimaryVolumeName $SourceVolume -SecondaryVolumeName $DestinationVolume -Status idle -MirrorState broken-off"
+                $ret=wait_snapmirror_dr_status -SourceCluster $myPrimaryCluster -SourceVserver $myPrimaryVserver -DestinationVserver $mySecondaryVserver -PrimaryVolumeName $SourceVolume -SecondaryVolumeName $DestinationVolume -Status "idle" -MirrorState "broken_off|broken-off" -mySecondaryController $mySecondaryController
+                if($ret -eq $false){
+                    $Return=$False
+                    Clean_Throw "ERROR : Failed to quiesce a snapmirror relationship. Increase timeout?"
+                }
 			}
 			Write-LogDebug "Remove-NcSnapmirror -SourceLocation $SourceLocation -DestinationLocation $DestinationLocation -Controller $mySecondaryController -Confirm:$False"
 			$out = Remove-NcSnapmirror -SourceLocation $SourceLocation -DestinationLocation $DestinationLocation -Controller $mySecondaryController  -ErrorVariable ErrorVar -Confirm:$False
@@ -12618,7 +12626,7 @@ Try {
                 }else{
                     # Destination Flexgroup name must be changed only if name not already in format <name>__dst which is the name format created by snapmirror protect on flexgroup destination
                     if($Volume -notmatch "_dst$"){
-                        $NewVolumeName=$($Volume+"_dst")
+                        $NewVolumeName=$($Volume+"__dst")
                         if($NewVolumeName -match "__dst__dst$"){
                             Write-LogDebug $("Work in mode ["+$Global:Run_Mode+"] with secondary name [$NewVolumeName] so replace it with ["+$($NewVolumeName -Replace "__dst__dst","")+"]")
                             $NewVolumeName=$NewVolumeName -Replace "__dst__dst",""
@@ -17417,7 +17425,7 @@ Try {
             $RelationGroupType=$relation.RelationshipGroupType
             $UpdateRelationship=$True
             if($RelationGroupType -eq "flexgroup"){
-                $SecondaryVol=$($PrimaryVol+"_dst")  
+                $SecondaryVol=$($PrimaryVol+"__dst")  
                 if($SecondaryVol -match "__dst__dst$"){
                     Write-LogDebug $("Work in mode ["+$Global:Run_Mode+"] with secondary name [$SecondaryVol] so replace it with ["+$($SecondaryVol -Replace "__dst__dst","")+"]")
                     $SecondaryVol=$SecondaryVol -Replace "__dst__dst",""
@@ -17437,7 +17445,7 @@ Try {
             $RelationGroupType=$relation.group_type
             $UpdateRelationship=$True
             if($RelationGroupType -eq "flexgroup"){
-                $SecondaryVol=$($PrimaryVol+"_dst")
+                $SecondaryVol=$($PrimaryVol+"__dst")
                 if($SecondaryVol -match "__dst__dst$"){
                     Write-LogDebug $("Work in mode ["+$Global:Run_Mode+"] with secondary name [$SecondaryVol] so replace it with ["+$($SecondaryVol -Replace "__dst__dst","")+"]")
                     $SecondaryVol=$SecondaryVol -Replace "__dst__dst",""
@@ -19675,7 +19683,7 @@ Function activate_vserver_dr (
                     clean_and_exit 1
                 }
             }else{
-                Write-LogDebug "Get-NcVserver -Name $currentActiveVserver -Controller $NcCurrentActiveCtrl -ErrorVariable ErrorVar"
+                Write-LogDebug "Get-NcVserver -Name $currentActiveVserver -Controller $NcCurrentActiveCtrl"
                 $ActiveVserver=Get-NcVserver -Name $currentActiveVserver -Controller $NcCurrentActiveCtrl -ErrorVariable ErrorVar
                 if( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Get-NcVserver failed [$ErrorVar]" ; clean_and_exit 1}
                 $ActiveVserverUuid=$ActiveVserver.Uuid
@@ -20591,7 +20599,7 @@ Try {
 
     }
     if ( $relationList.count -eq 0 ) {
-        Write-LogDebug "SnapMirror No Relations found" ;
+        Write-LogDebug "No SnapMirror Relationship found" ;
         Write-LogDebug "end"
         return $True 
     }
@@ -21104,7 +21112,7 @@ Try {
     $DestinationCluster = $NcCluster.ClusterName
     if($IsFlexgroup -eq $True){
         $SourceVolume=$PrimaryVolumeName
-        $DestVolume=$($PrimaryVolumeName+"_dst")
+        $DestVolume=$($PrimaryVolumeName+"__dst")
         if($DestVolume -match "__dst__dst$"){
             Write-LogDebug $("Work in mode ["+$Global:Run_Mode+"] with secondary name [$DestVolume] so replace it with ["+$($DestVolume -Replace "__dst__dst","")+"]")
             $DestVolume=$DestVolume -Replace "__dst__dst",""
@@ -21213,7 +21221,7 @@ Try {
     }
     if($IsFlexgroup -eq $True){
         $SourceVolume=$PrimaryVolumeName
-        $DestVolume=$($PrimaryVolumeName+"_dst")
+        $DestVolume=$($PrimaryVolumeName+"__dst")
         if($DestVolume -match "__dst__dst$"){
             Write-LogDebug $("Work in mode ["+$Global:Run_Mode+"] with secondary name [$DestVolume] so replace it with ["+$($DestVolume -Replace "__dst__dst","")+"]")
             $DestVolume=$DestVolume -Replace "__dst__dst",""
@@ -21356,17 +21364,11 @@ Try {
         Write-LogDebug "end"
         return $Return
     }else{
-        if($Global:PSTKCall -eq "Zapi"){
-            Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -DestinationLocation $($secondaryVserver+":*") -Controller $myController"
-            $relationList=Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -DestinationLocation $($secondaryVserver+":*") -Controller $myController  -ErrorVariable ErrorVar
-            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" } 
-        }else{
-            Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -DestinationLocation $($secondaryVserver+":*") -Controller $myController -ONTAPI"
-            $relationList=Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -DestinationLocation $($secondaryVserver+":*") -Controller $myController  -ErrorVariable ErrorVar -ONTAPI
-            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
-        }
+        Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -DestinationLocation $($secondaryVserver+":*") -Controller $myController"
+        $relationList=Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -DestinationLocation $($secondaryVserver+":*") -Controller $myController  -ErrorVariable ErrorVar
+        if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
         if ( $relationList.count -eq 0 ) { 
-            Write-LogDebug "SnapMirror No Relations found"
+            Write-LogDebug "No Snapmirror Relationship found"
             return $True
         }
         foreach ( $relation in $relationList ) {
@@ -21376,82 +21378,83 @@ Try {
             $DestinationLocation = $relation.DestinationLocation
             $SourceVolume = $SourceLocation.split(":")[-1]
             $DestinationVolume = $DestinationLocation.split(":")[-1]
-            $RelationshipType =$relation.RelationshipType
-            if ( ( $RelationshipType -eq "data_protection" -or $RelationshipType -eq "extended_data_protection") -and ( $SourceVserver -ne $DestinationVserver  )  ) {
+            #$RelationshipType =$relation.RelationshipType
+            if ( ( $SourceVserver -ne $DestinationVserver  )  ) {
                 $NcVserverPeer=Get-NcVserverPeer -Controller $myController -VserverContext $SourceVserver -PeerVserver $DestinationVserver  -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcVserverPeer failed [$ErrorVar]" } 
                 $DestinationCluster=$NcVserverPeer.PeerCluster
-                Write-LogDebug "[$SourceVserver] [$SourceVolume] -> [$DestinationCluster] [$DestinationVserver] [$DestinationVolume] [$RelationshipType]" ;
-                $NcVserver=Get-NcVserver -VserverContext $SourceVserver -Controller $myController  -ErrorVariable ErrorVar 
+                Write-LogDebug "[$SourceVserver] [$SourceVolume] -> [$DestinationCluster] [$DestinationVserver] [$DestinationVolume]" ;
+                $NcVserver=Get-NcVserver -Vserver $SourceVserver -Controller $myController  -ErrorVariable ErrorVar 
                 if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcVserver failed [$ErrorVar]" } 
                 $QuotaPolicy=Get-NcQuotaPolicy -Vserver $SourceVserver -Controller $myController  -ErrorVariable ErrorVar
-                $Policy = $QuotaPolicy.PolicyName
-                Write-LogDebug "Policy [$Policy]"
+                $Policies = $QuotaPolicy.PolicyName
+                Write-LogDebug "Policy [$Policies]"
+                foreach ($Policy in $Policies){
+                    $SVMTOOL_DB_SRC_CLUSTER=$Global:SVMTOOL_DB + '\' + $SourceCluster + '.cluster'
+                    $SVMTOOL_DB_SRC_VSERVER=$SVMTOOL_DB_SRC_CLUSTER + '\' +$SourceVserver + '.vserver'
 
-                $SVMTOOL_DB_SRC_CLUSTER=$Global:SVMTOOL_DB + '\' + $SourceCluster + '.cluster'
-                $SVMTOOL_DB_SRC_VSERVER=$SVMTOOL_DB_SRC_CLUSTER + '\' +$SourceVserver + '.vserver'
-
-                $QUOTA_DB_FILE=$SVMTOOL_DB_SRC_VSERVER + '\quotarules.' + $Policy
-                $QUOTA_DB_FILE_SWITCH=$QUOTA_DB_FILE + '.' + $switch_time
-                if(!$IsWindows){
-                    $QUOTA_DB_FILE=$QUOTA_DB_FILE -Replace "\\","/"   
-                    $QUOTA_DB_FILE_SWITCH=$QUOTA_DB_FILE_SWITCH -Replace "\\","/"  
-                }
-                if ((Test-Path $QUOTA_DB_FILE) -eq $True ) { 
-                    Write-LogDebug "switch [$QUOTA_DB_FILE_SWITCH]"
-                    Rename-Item $QUOTA_DB_FILE $QUOTA_DB_FILE_SWITCH
-                }
-                $QUOTA_DB_FILE=$SVMTOOL_DB_SRC_VSERVER + '\quotarules.' + $Policy + '.err' 
-                $QUOTA_DB_FILE_SWITCH=$QUOTA_DB_FILE + '.' + $switch_time
-                if(!$IsWindows){
-                    $QUOTA_DB_FILE=$QUOTA_DB_FILE -Replace "\\","/"   
-                    $QUOTA_DB_FILE_SWITCH=$QUOTA_DB_FILE_SWITCH -Replace "\\","/"  
-                }
-                if ((Test-Path $QUOTA_DB_FILE) -eq $True ) { 
-                    Write-LogDebug "[$QUOTA_DB_FILE_SWITCH]" ;
-                    Rename-Item $QUOTA_DB_FILE $QUOTA_DB_FILE_SWITCH
-                }
-                $VOL_DB_FILE=$SVMTOOL_DB_SRC_VSERVER + '\volume.options'
-                $VOL_DB_FILE_SWITCH=$VOL_DB_FILE + '.' + $switch_time
-                if(!$IsWindows){
-                    $VOL_DB_FILE=$VOL_DB_FILE -Replace "\\","/"   
-                    $VOL_DB_FILE_SWITCH=$VOL_DB_FILE_SWITCH -Replace "\\","/"  
-                }
-                if ((Test-Path $VOL_DB_FILE) -eq $True ) { 
-                    Write-LogDebug "switch [$VOL_DB_FILE_SWITCH]" ;
-                    Rename-Item $VOL_DB_FILE $VOL_DB_FILE_SWITCH
-                }
-                $SVMTOOL_DB_DST_CLUSTER=$Global:SVMTOOL_DB + '\' + $DestinationCluster + '.cluster'
-                $SVMTOOL_DB_DST_VSERVER=$SVMTOOL_DB_DST_CLUSTER + '\' +$DestinationVserver + '.vserver'
-                $QUOTA_DB_FILE=$SVMTOOL_DB_DST_VSERVER + '\quotarules.' + $Policy
-                $QUOTA_DB_FILE_SWITCH=$QUOTA_DB_FILE + '.' + $switch_time
-                if(!$IsWindows){
-                    $QUOTA_DB_FILE=$QUOTA_DB_FILE -Replace "\\","/"   
-                    $QUOTA_DB_FILE_SWITCH=$QUOTA_DB_FILE_SWITCH -Replace "\\","/"  
-                }
-                if ((Test-Path $QUOTA_DB_FILE) -eq $True ) { 
-                    Write-LogDebug "switch [$QUOTA_DB_FILE_SWITCH]" ;
-                    Rename-Item $QUOTA_DB_FILE $QUOTA_DB_FILE_SWITCH
-                }
-                $QUOTA_DB_FILE=$SVMTOOL_DB_DST_VSERVER + '\quotarules.' + $Policy + '.err' 
-                $QUOTA_DB_FILE_SWITCH=$QUOTA_DB_FILE + '.' + $switch_time
-                if(!$IsWindows){
-                    $QUOTA_DB_FILE=$QUOTA_DB_FILE -Replace "\\","/"   
-                    $QUOTA_DB_FILE_SWITCH=$QUOTA_DB_FILE_SWITCH -Replace "\\","/"  
-                }
-                if ((Test-Path $QUOTA_DB_FILE) -eq $True ) { 
-                    Write-LogDebug "[$QUOTA_DB_FILE_SWITCH]" ;
-                    Rename-Item $QUOTA_DB_FILE $QUOTA_DB_FILE_SWITCH
-                }
-                $VOL_DB_FILE=$SVMTOOL_DB_DST_VSERVER + '\volume.options'
-                $VOL_DB_FILE_SWITCH=$VOL_DB_FILE + '.' + $switch_time
-                if(!$IsWindows){
-                    $VOL_DB_FILE=$VOL_DB_FILE -Replace "\\","/"   
-                    $VOL_DB_FILE_SWITCH=$VOL_DB_FILE_SWITCH -Replace "\\","/"  
-                }
-                if ((Test-Path $VOL_DB_FILE) -eq $True ) { 
-                    Write-LogDebug "switch [$VOL_DB_FILE_SWITCH]" ;
-                    Rename-Item $VOL_DB_FILE $VOL_DB_FILE_SWITCH
+                    $QUOTA_DB_FILE=$SVMTOOL_DB_SRC_VSERVER + '\quotarules.' + $Policy
+                    $QUOTA_DB_FILE_SWITCH=$QUOTA_DB_FILE + '.' + $switch_time
+                    if(!$IsWindows){
+                        $QUOTA_DB_FILE=$QUOTA_DB_FILE -Replace "\\","/"   
+                        $QUOTA_DB_FILE_SWITCH=$QUOTA_DB_FILE_SWITCH -Replace "\\","/"  
+                    }
+                    if ((Test-Path $QUOTA_DB_FILE) -eq $True ) { 
+                        Write-LogDebug "switch [$QUOTA_DB_FILE_SWITCH]"
+                        Rename-Item $QUOTA_DB_FILE $QUOTA_DB_FILE_SWITCH
+                    }
+                    $QUOTA_DB_FILE=$SVMTOOL_DB_SRC_VSERVER + '\quotarules.' + $Policy + '.err' 
+                    $QUOTA_DB_FILE_SWITCH=$QUOTA_DB_FILE + '.' + $switch_time
+                    if(!$IsWindows){
+                        $QUOTA_DB_FILE=$QUOTA_DB_FILE -Replace "\\","/"   
+                        $QUOTA_DB_FILE_SWITCH=$QUOTA_DB_FILE_SWITCH -Replace "\\","/"  
+                    }
+                    if ((Test-Path $QUOTA_DB_FILE) -eq $True ) { 
+                        Write-LogDebug "[$QUOTA_DB_FILE_SWITCH]" ;
+                        Rename-Item $QUOTA_DB_FILE $QUOTA_DB_FILE_SWITCH
+                    }
+                    $VOL_DB_FILE=$SVMTOOL_DB_SRC_VSERVER + '\volume.options'
+                    $VOL_DB_FILE_SWITCH=$VOL_DB_FILE + '.' + $switch_time
+                    if(!$IsWindows){
+                        $VOL_DB_FILE=$VOL_DB_FILE -Replace "\\","/"   
+                        $VOL_DB_FILE_SWITCH=$VOL_DB_FILE_SWITCH -Replace "\\","/"  
+                    }
+                    if ((Test-Path $VOL_DB_FILE) -eq $True ) { 
+                        Write-LogDebug "switch [$VOL_DB_FILE_SWITCH]" ;
+                        Rename-Item $VOL_DB_FILE $VOL_DB_FILE_SWITCH
+                    }
+                    $SVMTOOL_DB_DST_CLUSTER=$Global:SVMTOOL_DB + '\' + $DestinationCluster + '.cluster'
+                    $SVMTOOL_DB_DST_VSERVER=$SVMTOOL_DB_DST_CLUSTER + '\' +$DestinationVserver + '.vserver'
+                    $QUOTA_DB_FILE=$SVMTOOL_DB_DST_VSERVER + '\quotarules.' + $Policy
+                    $QUOTA_DB_FILE_SWITCH=$QUOTA_DB_FILE + '.' + $switch_time
+                    if(!$IsWindows){
+                        $QUOTA_DB_FILE=$QUOTA_DB_FILE -Replace "\\","/"   
+                        $QUOTA_DB_FILE_SWITCH=$QUOTA_DB_FILE_SWITCH -Replace "\\","/"  
+                    }
+                    if ((Test-Path $QUOTA_DB_FILE) -eq $True ) { 
+                        Write-LogDebug "switch [$QUOTA_DB_FILE_SWITCH]" ;
+                        Rename-Item $QUOTA_DB_FILE $QUOTA_DB_FILE_SWITCH
+                    }
+                    $QUOTA_DB_FILE=$SVMTOOL_DB_DST_VSERVER + '\quotarules.' + $Policy + '.err' 
+                    $QUOTA_DB_FILE_SWITCH=$QUOTA_DB_FILE + '.' + $switch_time
+                    if(!$IsWindows){
+                        $QUOTA_DB_FILE=$QUOTA_DB_FILE -Replace "\\","/"   
+                        $QUOTA_DB_FILE_SWITCH=$QUOTA_DB_FILE_SWITCH -Replace "\\","/"  
+                    }
+                    if ((Test-Path $QUOTA_DB_FILE) -eq $True ) { 
+                        Write-LogDebug "[$QUOTA_DB_FILE_SWITCH]" ;
+                        Rename-Item $QUOTA_DB_FILE $QUOTA_DB_FILE_SWITCH
+                    }
+                    $VOL_DB_FILE=$SVMTOOL_DB_DST_VSERVER + '\volume.options'
+                    $VOL_DB_FILE_SWITCH=$VOL_DB_FILE + '.' + $switch_time
+                    if(!$IsWindows){
+                        $VOL_DB_FILE=$VOL_DB_FILE -Replace "\\","/"   
+                        $VOL_DB_FILE_SWITCH=$VOL_DB_FILE_SWITCH -Replace "\\","/"  
+                    }
+                    if ((Test-Path $VOL_DB_FILE) -eq $True ) { 
+                        Write-LogDebug "switch [$VOL_DB_FILE_SWITCH]" ;
+                        Rename-Item $VOL_DB_FILE $VOL_DB_FILE_SWITCH
+                    }
                 }
             }
         }	
@@ -21490,15 +21493,67 @@ Try {
     Write-LogDebug "Get-NcVserverPeer -Controller $myPrimaryController -VserverContext $myPrimaryVserver -Query @{PeerCluster=$DestCluster}"
     $AllPeerList=Get-NcVserverPeer -Controller $myPrimaryController -VserverContext $myPrimaryVserver -Query @{PeerCluster=$DestCluster} -ErrorVariable ErrorVar 
     if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcVserverPeer failed [$ErrorVar]" }
-    if($Global:PSTKCall -eq "Zapi"){
-        Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -Controller $myPrimaryController -DestinationLocation $($mySecondaryVserver+":*") -ErrorVariable ErrorVar"
-        $relationlist=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -Controller $myPrimaryController -DestinationLocation $($mySecondaryVserver+":*") -ErrorVariable ErrorVar
-    }else{
-        Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -Controller $myPrimaryController -DestinationLocation $($mySecondaryVserver+":*") -ErrorVariable ErrorVar -ONTAPI"
-        $relationlist=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -Controller $myPrimaryController -DestinationLocation $($mySecondaryVserver+":*") -ErrorVariable ErrorVar -ONTAPI
-    }
-	if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
+    Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -Controller $myPrimaryController -DestinationLocation $($mySecondaryVserver+":*") -ErrorVariable ErrorVar"
+    $relationlist=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -Controller $myPrimaryController -DestinationLocation $($mySecondaryVserver+":*") -ErrorVariable ErrorVar
+    if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
     $QuotaErrorCaptured=@()
+
+    foreach ( $relation in $relationlist ) {
+		$SourceVserver = $relation.SourceVserver
+		$DestinationVserver = $relation.DestinationVserver
+        $SourceLocation = $relation.SourceLocation
+		$DestinationLocation = $relation.DestinationLocation
+        $SourceVolume = $SourceLocation.split(":")[-1]
+        $DestinationVolume = $DestinationLocation.split(":")[-1]
+		if (  $SourceVserver -ne $DestinationVserver  ) {
+            $NcVserverPeer=$AllPeerList | Where-Object {$_.PeerVserver -eq $DestinationVserver}
+            $DestinationCluster=$NcVserverPeer.PeerCluster
+            Write-LogDebug "[$SourceVserver] [$SourceVolume] -> [$DestinationCluster] [$DestinationVserver] [$DestinationVolume] [$RelationshipType]" ;
+			$SVMTOOL_DB_SRC_CLUSTER=$Global:SVMTOOL_DB + '\' + $SourceCluster + '.cluster'
+			$SVMTOOL_DB_SRC_VSERVER=$SVMTOOL_DB_SRC_CLUSTER + '\' +$SourceVserver + '.vserver'
+			$SVMTOOL_DB_DST_CLUSTER=$Global:SVMTOOL_DB + '\' + $DestinationCluster + '.cluster'
+            $SVMTOOL_DB_DST_VSERVER=$SVMTOOL_DB_DST_CLUSTER + '\' + $DestinationVserver + '.vserver'
+        }
+        $Credential=get_local_cDotcred($myPrimaryController)
+        $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/quota/policy?vserver="+$myPrimaryVserver)
+        Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential"
+        $QuotaPolicy=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+        if($? -ne $True){
+            Write-LogError "ERROR: Unable to get quota policy rule details. Reason [$ErrorVar]"
+            Write-LogDebug "[$workOn]: end"
+            return $False
+        }elseif($QuotaPolicy.num_records -gt 0){
+            $Policies=$QuotaPolicy.records
+        }
+
+        foreach($Policy in $Policies){
+            $QUOTA_DB_SRC_FILE=$SVMTOOL_DB_SRC_VSERVER + '\quotarules.' + $Policy.policy_name
+            $QUOTA_DB_SRC_FILE_ERR=$SVMTOOL_DB_SRC_VSERVER + '\quotarules.' + $Policy.policy_name + '.err'
+            Remove-Item -Path $QUOTA_DB_SRC_FILE -Force -Confirm:$False
+            Remove-Item -Path $QUOTA_DB_SRC_FILE_ERR -Force -Confirm:$False
+        }
+
+        $Credential=get_local_cDotcred($mySecondaryController)
+        $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/quota/policy?vserver="+$mySecondaryVserver)
+        Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential"
+        $QuotaPolicy=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+        if($? -ne $True){
+            Write-LogError "ERROR: Unable to get quota policy rule details. Reason [$ErrorVar]"
+            Write-LogDebug "[$workOn]: end"
+            return $False
+        }elseif($QuotaPolicy.num_records -gt 0){
+            $Policies=$QuotaPolicy.records
+        }
+
+        foreach($Policy in $Policies){
+            $QUOTA_DB_DST_FILE=$SVMTOOL_DB_DST_VSERVER + '\quotarules.' + $Policy.policy_name
+            $QUOTA_DB_DST_FILE_ERR=$SVMTOOL_DB_DST_VSERVER + '\quotarules.' + $Policy.policy_name + '.err'
+            Remove-Item -Path $QUOTA_DB_DST_FILE -Force -Confirm:$False
+            Remove-Item -Path $QUOTA_DB_DST_FILE_ERR -Force -Confirm:$False
+        }
+        break
+    }
+
 	foreach ( $relation in $relationlist ) {
 		$SourceVserver = $relation.SourceVserver
 		$DestinationVserver = $relation.DestinationVserver
@@ -21506,8 +21561,7 @@ Try {
 		$DestinationLocation = $relation.DestinationLocation
         $SourceVolume = $SourceLocation.split(":")[-1]
         $DestinationVolume = $DestinationLocation.split(":")[-1]
-		$RelationshipType =$relation.RelationshipType
-		if ( ( $RelationshipType -eq "data_protection" -or $RelationshipType -eq "extended_data_protection" ) -and ( $SourceVserver -ne $DestinationVserver  )  ) {
+		if (  $SourceVserver -ne $DestinationVserver  ) {
             $NcVserverPeer=$AllPeerList | Where-Object {$_.PeerVserver -eq $DestinationVserver}
             $DestinationCluster=$NcVserverPeer.PeerCluster
             Write-LogDebug "[$SourceVserver] [$SourceVolume] -> [$DestinationCluster] [$DestinationVserver] [$DestinationVolume] [$RelationshipType]" ;
@@ -21520,6 +21574,7 @@ Try {
             }
             $NcQuotaList=$AllQuotaList | where-object {$_.Volume -eq $SourceVolume}
 			if ( $null -ne $NcQuotaList ) {
+                $indexquota=0
                 foreach ( $quota in $NcQuotaList ) {
                     $NcController = $quota.NcController
                     $Vserver = $quota.Vserver
@@ -21547,8 +21602,10 @@ Try {
                         if($null -eq $SoftFileLimit){$SoftFileLimit="-"}
                         if($null -eq $QuotaTarget -or $QuotaTarget.length -eq 0){$QuotaTarget="*"}
                         if($null -eq $Qtree -or $Qtree.length -eq 0){$Qtree="`"`""}
+                        # $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/volume/quota/policy/rule?vserver="+$Vserver+"&fields=vserver,type,policy-name,volume,target,qtree,user-mapping,disk-limit,file-limit,threshold,soft-disk-limit,soft-file-limit&volume="+$Volume+`
+                        #     "&type="+$QuotaType+"&disk-limit="+$BytesDiskLimit+"&target="+$QuotaTarget+"&file-limit="+$FileLimit+"&qtree="+$Qtree+"&soft-disk-limit="+$BytesSoftDiskLimit+"&soft-file-limit="+$SoftFileLimit)
                         $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/volume/quota/policy/rule?vserver="+$Vserver+"&fields=vserver,type,policy-name,volume,target,qtree,user-mapping,disk-limit,file-limit,threshold,soft-disk-limit,soft-file-limit&volume="+$Volume+`
-                            "&type="+$QuotaType+"&disk-limit="+$BytesDiskLimit+"&target="+$QuotaTarget+"&file-limit="+$FileLimit+"&qtree="+$Qtree+"&soft-disk-limit="+$BytesSoftDiskLimit+"&soft-file-limit="+$SoftFileLimit)
+                             "&type="+$QuotaType+"&disk-limit="+$BytesDiskLimit+"&target="+$QuotaTarget)
                         Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential"
                         $QuotaPolicy=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                         if($? -ne $True){
@@ -21601,9 +21658,9 @@ Try {
                     } else {
                         $DestinationQuotaTarget = $QuotaTarget
                     }
-                    Write-LogDebug "file [$QUOTA_DB_SRC_FILE]"
+                    Write-LogDebug "Add Quota rule into file [$QUOTA_DB_SRC_FILE]"
                     write-Output "${SourceCluster}:${SourceVserver}:${SourceVolume}:${Qtree}:${QuotaType}:${SourceQuotaTarget}:${DiskLimit}:${FileLimit}:${SoftDiskLimit}:${SoftFileLimit}:${Threshold}" | Out-File -FilePath $QUOTA_DB_SRC_FILE -Append
-                    Write-LogDebug "file [$QUOTA_DB_DST_FILE]"
+                    Write-LogDebug "Add Quota rule into file [$QUOTA_DB_DST_FILE]"
                     write-Output "${DestinationCluster}:${DestinationVserver}:${DestinationVolume}:${Qtree}:${QuotaType}:${DestinationQuotaTarget}:${DiskLimit}:${FileLimit}:${SoftDiskLimit}:${SoftFileLimit}:${Threshold}" | Out-File -FilePath $QUOTA_DB_DST_FILE -Append
                 }
             }
@@ -22315,7 +22372,7 @@ Function Set_CIFS_from_JSON (
                         clean_and_exit 1
                     }
                 }else{
-                    Write-LogDebug "Get-NcVserver -Name $ToVserver -Controller $ToNcController -ErrorVariable ErrorVar"
+                    Write-LogDebug "Get-NcVserver -Name $ToVserver -Controller $ToNcController"
                     $myVserver=Get-NcVserver -Name $ToVserver -Controller $ToNcController -ErrorVariable ErrorVar
                     if( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Get-NcVserver failed [$ErrorVar]" ; clean_and_exit 1}
                     $myVserverUuid=$myVserver.Uuid
@@ -22949,17 +23006,12 @@ Function save_vol_options_to_voldb (
         }
         $NcCluster = Get-NcCluster -Controller $myController
         $SourceCluster = $NcCluster.ClusterName
-        if($Global:PSTKCall -eq "Zapi"){
-            Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myController"
-            $relationlist=Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myController  -ErrorVariable ErrorVar
-            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
-        }else{
-            Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myController -ONTAPI"
-            $relationlist=Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myController  -ErrorVariable ErrorVar -ONTAPI
-            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }            
-        }
+        Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myController"
+        $relationlist=Get-NcSnapmirrorDestination -SourceLocation $($myVserver+":*") -DestinationLocation $($mySecondaryVserver+":*") -Controller $myController  -ErrorVariable ErrorVar
+        if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }            
         #$count_delete_SRC=0
         #$count_delete_DST=0
+        $indexfile=0
         foreach ( $relation in $relationlist ) {
             $SourceLocation = $relation.SourceLocation
             $DestinationLocation = $relation.DestinationLocation
@@ -22967,8 +23019,7 @@ Function save_vol_options_to_voldb (
             $SourceVserver = $SourceLocation.split(':')[0]
             $DestinationVolume = $DestinationLocation.split(':')[-1]
             $DestinationVserver = $DestinationLocation.split(':')[0]
-            $RelationshipType = $relation.RelationshipType
-            if ( ( $RelationshipType -eq "data_protection" -or $RelationshipType -eq "extended_data_protection" ) -and ( $SourceVserver -ne $DestinationVserver  )  ) 
+            if ( ( $SourceVserver -ne $DestinationVserver  )  ) 
             {
                 $NcVserverPeer=Get-NcVserverPeer -Controller $myController -VserverContext $SourceVserver -PeerVserver $DestinationVserver  -ErrorVariable ErrorVar 
                 if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcVserverPeer failed [$ErrorVar]" } 
@@ -23002,7 +23053,23 @@ Function save_vol_options_to_voldb (
                     $VOL_DB_SRC_FILE=$VOL_DB_SRC_FILE -Replace "\\","/"    
                     $VOL_DB_DST_FILE=$VOL_DB_DST_FILE -Replace "\\","/"     
                 }
-                # Create all missing Destination Volumes
+                Write-LogDebug "Remove preivous file [$VOL_DB_SRC_FILE]"
+                Remove-Item -Path $VOL_DB_SRC_FILE -Force -Confirm:$false
+                Write-LogDebug "Remove preivous file [$VOL_DB_DST_FILE]"
+                Remove-Item -Path $VOL_DB_DST_FILE -Force -Confirm:$false
+                break
+            }
+        }
+        foreach ( $relation in $relationlist ) {
+            $SourceLocation = $relation.SourceLocation
+            $DestinationLocation = $relation.DestinationLocation
+            $SourceVolume = $SourceLocation.split(':')[-1]
+            $SourceVserver = $SourceLocation.split(':')[0]
+            $DestinationVolume = $DestinationLocation.split(':')[-1]
+            $DestinationVserver = $DestinationLocation.split(':')[0]
+            $RelationshipType = $relation.RelationshipType
+            if (  ( $SourceVserver -ne $DestinationVserver  )  ) 
+            {
                 Write-LogDebug "Get-NcVol -Name $SourceVolume -Controller $myController -VserverContext $myVserver"
                 $PrimaryVol = Get-NcVol -Name $SourceVolume -Controller $myController -VserverContext $myVserver  -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
@@ -23017,34 +23084,20 @@ Function save_vol_options_to_voldb (
                 $PrimaryVolState=$PrimaryVol.State
                 $PrimaryVolJunctionPath=$PrimaryVol.VolumeIdAttributes.JunctionPath
                 $PrimaryVolIsInfiniteVolume=$PrimaryVol.IsInfiniteVolume
-                $PrimaryVolSnapshotPolicy=$PrimaryVol.VolumeSnapshotAttributes.SnapshotPolicy
+                $PrimaryVolSnapshotPolicy=$PrimaryVol.SnapshotPolicy
                 $PrimarySisSchedule=""
                 $PrimarySisPolicy=""
                 $PrimarySisState=""
-                if ($PrimaryVolIsSis -eq $True)
-                {
-                    # ! Force ZapiCall due to burt with Get-NcSis in REST mode
-                    Write-LogDebug "Get-NcSis -Name $SourceVolume -Controller $myController -Vserver $myVserver -ONTAPI"
-                    $PrimaryVol = Get-NcSis -Name $SourceVolume -Controller $myController -Vserver $myVserver  -ErrorVariable ErrorVar -ONTAPI
-                    if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcSis failed [$ErrorVar]" }
-                    $PrimarySisSchedule=$PrimaryVol.Schedule
-                    $PrimarySisPolicy=$PrimaryVol.Policy
-                    $PrimarySisState=$PrimaryVol.State   
-                }
+                Write-LogDebug "Get-NcSis -Name $SourceVolume -Controller $myController -Vserver $myVserver"
+                $PrimaryVol = Get-NcSis -Name $SourceVolume -Controller $myController -Vserver $myVserver  -ErrorVariable ErrorVar
+                if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcSis failed [$ErrorVar]" }
+                $PrimarySisSchedule=$PrimaryVol.Schedule
+                $PrimarySisPolicy=$PrimaryVol.Policy
+                $PrimarySisState=$PrimaryVol.State   
                 Write-LogDebug "file [$VOL_DB_SRC_FILE]"
-                <#if( (Test-Path $VOL_DB_SRC_FILE) -eq $True -and $count_delete_SRC -eq 0)
-                { 
-                    Remove-Item -path $VOL_DB_SRC_FILE | out-null
-                    $count_delete_SRC++
-                }#>
-                write-Output "${PrimaryVolName}:${PrimaryVolSnapshotPolicy}:${PrimarySisPolicy}:${PrimarySisSchedule}:${PrimarySisState}" | Out-File -FilePath $VOL_DB_SRC_FILE -Append -NoClobber
-                <#if( (Test-Path $VOL_DB_DST_FILE) -eq $True -and $count_delete_DST -eq 0)
-                { 
-                    Remove-Item -path $VOL_DB_DST_FILE | out-null
-                    $count_delete_DST++
-                }#>
+                write-Output "${PrimaryVolName}:${PrimaryVolSnapshotPolicy}:${PrimarySisPolicy}:${PrimarySisSchedule}:${PrimarySisState}" | Out-File -FilePath $VOL_DB_SRC_FILE -Append
                 Write-LogDebug "file [$VOL_DB_DST_FILE]"
-                write-Output "${PrimaryVolName}:${PrimaryVolSnapshotPolicy}:${PrimarySisPolicy}:${PrimarySisSchedule}:${PrimarySisState}" | Out-File -FilePath $VOL_DB_DST_FILE -Append -NoClobber
+                write-Output "${PrimaryVolName}:${PrimaryVolSnapshotPolicy}:${PrimarySisPolicy}:${PrimarySisSchedule}:${PrimarySisState}" | Out-File -FilePath $VOL_DB_DST_FILE -Append
             }
         }
         Write-LogDebug "end"
