@@ -2873,7 +2873,7 @@ Function create_update_fpolicy_dr(
         if($Restore -eq $True){Write-LogDebug "run in Restore mode [$myPrimaryVserver]"}
 
         if($Restore -eq $False){
-            Write-LogDebug "Get-NcFpolicyPolicy -Vserver $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar"
+            Write-LogDebug "Get-NcFpolicyPolicy -Vserver $myPrimaryVserver -Controller $myPrimaryController"
             $PrimaryFpolicyPolicyList=Get-NcFpolicyPolicy -Vserver $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
             # if($Global:PSTKCall -eq "Zapi"){
                 Write-LogDebug "Get-NcFpolicyExternalEngine -Vserver $myPrimaryVserver -controller $myPrimaryController"
@@ -4817,7 +4817,7 @@ Try {
                 if($Backup -eq $False){
                     Write-LogDebug "Working on [$PrimaryJobScheduleName] type [$PrimaryJobScheduleType]"
                     if($PrimaryJobScheduleType -eq "cron"){
-                        Write-LogDebug "Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController -JobScheduleCluster $SecondaryName  -ErrorVariable ErrorVar"
+                        Write-LogDebug "Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController -JobScheduleCluster $SecondaryName"
                         $SecondarySchedule = Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar
                         if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcJobCronSchedule failed [$ErrorVar]" }
                         if($null -ne $SecondarySchedule){
@@ -4829,7 +4829,7 @@ Try {
                             $SecondaryJobScheduleCronMinute = if($null -eq $SecondarySchedule.JobScheduleCronMinute){"";$SecondaryJobScheduleCronMinute_string=""}else{$SecondarySchedule.JobScheduleCronMinute;$SecondaryJobScheduleCronMinute_string=$SecondarySchedule.JobScheduleCronMonth | out-string}
                         }
                     }else{
-                        Write-LogDebug "Get-NcJobIntervalSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController  -ErrorVariable ErrorVar"
+                        Write-LogDebug "Get-NcJobIntervalSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController"
                         $SecondarySchedule = Get-NcJobIntervalSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController  -ErrorVariable ErrorVar
                         if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcJobIntervalSchedule failed [$ErrorVar]" }
                         $SecondaryJobScheduleInterval = $SecondarySchedule.Interval
@@ -4840,16 +4840,16 @@ Try {
                             if ( $PrimaryJobScheduleDescription -ne $SecondaryJobScheduleDescription ) {
                                 if($PrimaryJobScheduleType -eq "cron"){
                                     if($Global:PSTKCall -eq "Zapi"){
-                                        Write-LogDebug "Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute  -ErrorVariable ErrorVar -JobScheduleCluster $SecondaryName"
+                                        Write-LogDebug "Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -JobScheduleCluster $SecondaryName"
                                         $out=Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar
                                         if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcJobCronSchedule failed [$ErrorVar]" }
                                     }else{
-                                        Write-LogDebug "Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar -ONTAPI"
+                                        Write-LogDebug "Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -JobScheduleCluster $SecondaryName -ONTAPI"
                                         $out=Set-NcJobCronSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Month $PrimaryJobScheduleCronMonth -Day $PrimaryJobScheduleCronDay -DayOfWeek $PrimaryJobScheduleCronDayOfWeek -Hour $PrimaryJobScheduleCronHour -Minute $PrimaryJobScheduleCronMinute -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar -ONTAPI
                                         if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcJobCronSchedule failed [$ErrorVar]" }
                                     }
                                 }else{
-                                    Write-LogDebug "Set-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar"
+                                    Write-LogDebug "Set-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes -JobScheduleCluster $SecondaryName"
                                     $out=Set-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Seconds $PrimaryJobScheduleIntervalSeconds -Days $PrimaryJobScheduleIntervalDays -Hours $PrimaryJobScheduleIntervalHours -Minutes $PrimaryJobScheduleIntervalMinutes -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar
                                     if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcJobIntervalSchedule failed [$ErrorVar]" }
                                 }
@@ -4857,7 +4857,7 @@ Try {
                         }else{
                             if($PrimaryJobScheduleType -eq "interval"){
                                 if($SecondaryJobScheduleInterval -ne $PrimaryJobScheduleInterval){
-                                    Write-LogDebug "Set-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Interval $PrimaryJobScheduleInterval -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar"
+                                    Write-LogDebug "Set-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Interval $PrimaryJobScheduleInterval -JobScheduleCluster $SecondaryName"
                                     $out=Set-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Interval $PrimaryJobScheduleInterval -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar
                                     if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcJobIntervalSchedule failed [$ErrorVar]" }
                                 }
@@ -4952,7 +4952,7 @@ Try {
             if( ($Global:OntapPrimaryVersion -ge 9.10 -and $Backup -eq $True) -or ($Global:OntapSecondaryVersion -ge 9.10 -and $Restore -eq $True) -or ( ($Backup -eq $False -and $Restore -eq $False) -and ($Global:OntapPrimaryVersion -ge 9.10 -or $Global:OntapSecondaryVersion -ge 9.10) ) ){
                 if($Restore -eq $False){
                     # $PrimaryName=(Get-NcCluster -Controller $myPrimaryController).ClusterName
-                    Write-LogDebug "Get-NcJobSchedule -Controller $myPrimaryController -ErrorVariable ErrorVar -VserverContext $myPrimaryVserver -Query @{scope=svm}"
+                    Write-LogDebug "Get-NcJobSchedule -Controller $myPrimaryController -VserverContext $myPrimaryVserver -Query @{scope=svm}"
                     $PrimaryCronListVserver = Get-NcJobSchedule -Controller $myPrimaryController -ErrorVariable ErrorVar -VserverContext $myPrimaryVserver -Query @{scope="svm"}
                     if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcJobSchedule failed [$ErrorVar]" }
                 }else{
@@ -5046,7 +5046,7 @@ Try {
                     if($Backup -eq $False){
                         Write-LogDebug "Working on [$PrimaryJobScheduleName] type [$PrimaryJobScheduleType]"
                         if($PrimaryJobScheduleType -eq "cron"){
-                            Write-LogDebug "Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController  -ErrorVariable ErrorVar  -VserverContext $mySecondaryVserver"
+                            Write-LogDebug "Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController -VserverContext $mySecondaryVserver"
                             $SecondarySchedule = Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController  -ErrorVariable ErrorVar  -VserverContext $mySecondaryVserver
                             if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcJobCronSchedule failed [$ErrorVar]" }
                             if($null -ne $SecondarySchedule){
@@ -5059,7 +5059,7 @@ Try {
 
                             }
                         }else{
-                            Write-LogDebug "Get-NcJobIntervalSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController  -ErrorVariable ErrorVar  -VserverContext $mySecondaryVserver"
+                            Write-LogDebug "Get-NcJobIntervalSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController -VserverContext $mySecondaryVserver"
                             $SecondarySchedule = Get-NcJobIntervalSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController  -ErrorVariable ErrorVar  -VserverContext $mySecondaryVserver
                             if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcJobIntervalSchedule failed [$ErrorVar]" }
                             $SecondaryJobScheduleInterval = $SecondarySchedule.Interval
@@ -5097,7 +5097,7 @@ Try {
                             }else{
                                 if($PrimaryJobScheduleType -eq "interval"){
                                     if($SecondaryJobScheduleInterval -ne $PrimaryJobScheduleInterval){
-                                        Write-LogDebug "Set-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Interval $PrimaryJobScheduleInterval -ErrorVariable ErrorVar -VserverContext $mySecondaryVserver"
+                                        Write-LogDebug "Set-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Interval $PrimaryJobScheduleInterval -VserverContext $mySecondaryVserver"
                                         $out=Set-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Interval $PrimaryJobScheduleInterval -ErrorVariable ErrorVar -VserverContext $mySecondaryVserver
                                         if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcJobIntervalSchedule failed [$ErrorVar]" }
                                     }
@@ -5166,7 +5166,7 @@ Try {
                                 }
                             }else{
                                 if($PrimaryJobScheduleType -eq "interval"){
-                                    Write-LogDebug "Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Interval $PrimaryJobScheduleInterval -ErrorVariable ErrorVar -VserverContext $mySecondaryVserver"
+                                    Write-LogDebug "Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Interval $PrimaryJobScheduleInterval -VserverContext $mySecondaryVserver"
                                     $out=Add-NcJobIntervalSchedule -Controller $mySecondaryController -Name $PrimaryJobScheduleName -Interval $PrimaryJobScheduleInterval -ErrorVariable ErrorVar -ErrorAction SilentlyContinue -VserverContext $mySecondaryVserver
                                     if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Add-NcJobIntervalSchedule failed [$ErrorVar]" }
                                 }else{
@@ -7626,61 +7626,62 @@ Try {
             
             # $PrimaryVolUuid=$PrimaryVol.Uuid
             if($Global:PSTKCall -eq "Rest"){
-                # $Credential = get_local_cDotcred($myPrimaryController)
-                # $url=$("https://"+$myPrimaryController.Name+"/api/storage/volumes/"+$PrimaryVolUuid+"?fields=**,!metric,!statistics")
-                # Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-                # $PrimaryVol=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
-                # if($? -ne $True){
-                #     Write-LogError "ERROR: Unable to get volume [$PrimaryVolName] details Reason [$ErrorVar]" 
-                # }else{
-                $PrimaryVolName=$PrimaryVol.name
-                $PrimaryVolAggr=$PrimaryVol.aggregates.name
-                $PrimaryVolStyle=$PrimaryVol.nas.security_style
-                $PrimaryVolExportPolicy=$PrimaryVol.nas.export_policy.name
-                $PrimaryVolType=$PrimaryVol.type
-                $PrimaryVolLang=$PrimaryVol.language
-                $PrimaryVolSize=$PrimaryVol.size
-                # $PrimaryVolIsSis=$PrimaryVol.VolumeSisAttributes.IsSisVolume
-                $PrimaryVolSpaceGuarantee=$PrimaryVol.guarantee.type
-                $PrimaryVolSnapshotReserve=$PrimaryVol.space.snapshot.reserve_percent
-                $PrimaryVolState=$PrimaryVol.state
-                $PrimaryVolJunctionPath=$PrimaryVol.nas.path
-                # $PrimaryVolIsInfiniteVolume=$PrimaryVol.IsInfiniteVolume
-                $PrimaryVolIsVserverRoot=$PrimaryVol.is_svm_root
-                $PrimaryVolComment=$PrimaryVol.comment
-                $PrimaryVolExtendStyle=$PrimaryVol.style
-                $PrimaryVolTieringPolicy=$PrimaryVol.tiering.policy
-                # }
-                $PrimaryVolAntiRansomware=$null
-                $PrimaryVolSnaplockType=$null
-                $PrimaryVolActivityTrackState=$null
-                $PrimaryVolAnalyticsState=$null
-                $PrimaryVolTieringMinCoolDays=$null
-                $PrimaryVolTieringObjectTags=$null
-                $PrimaryVolAsyncDeleteClientState=$null
-                $PrimaryVolAsyncDeleteClientTrashDirectory=$null
-                
-                if(($Global:OntapPrimaryVersion -ge 9.10)){
-                    # ONTAP >= 9.10
-                    $PrimaryVolAntiRansomware=$PrimaryVol.anti_ransomware.state
-                    $PrimaryVolSnaplockType=$PrimaryVol.snaplock.type 
-                    $PrimaryVolActivityTrackState=$PrimaryVol.activity_tracking.state
-                }
-                if(($Global:OntapPrimaryVersion -ge 9.08)){
-                    # ONTAP >= 9.8
-                    # support of Filesystem Analytics per volume
-                    $PrimaryVolAnalyticsState=$PrimaryVol.analytics.state
-                    if($null -ne $PrimaryVol.tiering.min_cooling_days){
-                        $PrimaryVolTieringMinCoolDays=$PrimaryVol.tiering.min_cooling_days
+                $Credential = get_local_cDotcred($myPrimaryController)
+                $url=$("https://"+$myPrimaryController.Name+"/api/storage/volumes/"+$PrimaryVol.Uuid+"?fields=**,!metric,!statistics")
+                Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+                $PrimaryVol=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                if($? -ne $True){
+                    Write-LogError "ERROR: Unable to get volume [$PrimaryVol] details Reason [$ErrorVar]" 
+                }else{
+                    $PrimaryVolName=$PrimaryVol.name
+                    $PrimaryVolAggr=$PrimaryVol.aggregates.name
+                    $PrimaryVolStyle=$PrimaryVol.nas.security_style
+                    $PrimaryVolExportPolicy=$PrimaryVol.nas.export_policy.name
+                    $PrimaryVolType=$PrimaryVol.type
+                    $PrimaryVolLang=$PrimaryVol.language
+                    $PrimaryVolSize=$PrimaryVol.size
+                    # $PrimaryVolIsSis=$PrimaryVol.VolumeSisAttributes.IsSisVolume
+                    $PrimaryVolSpaceGuarantee=$PrimaryVol.guarantee.type
+                    $PrimaryVolSnapshotReserve=$PrimaryVol.space.snapshot.reserve_percent
+                    $PrimaryVolState=$PrimaryVol.state
+                    $PrimaryVolJunctionPath=$PrimaryVol.nas.path
+                    # $PrimaryVolIsInfiniteVolume=$PrimaryVol.IsInfiniteVolume
+                    $PrimaryVolIsVserverRoot=$PrimaryVol.is_svm_root
+                    $PrimaryVolComment=$PrimaryVol.comment
+                    $PrimaryVolExtendStyle=$PrimaryVol.style
+                    $PrimaryVolTieringPolicy=$PrimaryVol.tiering.policy
+                    # }
+                    $PrimaryVolAntiRansomware=$null
+                    $PrimaryVolSnaplockType=$null
+                    $PrimaryVolActivityTrackState=$null
+                    $PrimaryVolAnalyticsState=$null
+                    $PrimaryVolTieringMinCoolDays=$null
+                    $PrimaryVolTieringObjectTags=$null
+                    $PrimaryVolAsyncDeleteClientState=$null
+                    $PrimaryVolAsyncDeleteClientTrashDirectory=$null
+                    
+                    if(($Global:OntapPrimaryVersion -ge 9.10)){
+                        # ONTAP >= 9.10
+                        $PrimaryVolAntiRansomware=$PrimaryVol.anti_ransomware.state
+                        $PrimaryVolSnaplockType=$PrimaryVol.snaplock.type 
+                        $PrimaryVolActivityTrackState=$PrimaryVol.activity_tracking.state
                     }
-                    if($null -ne $PrimaryVol.tiering.object_tags){
-                        $PrimaryVolTieringObjectTags=$PrimaryVol.tiering.object_tags
+                    if(($Global:OntapPrimaryVersion -ge 9.08)){
+                        # ONTAP >= 9.8
+                        # support of Filesystem Analytics per volume
+                        $PrimaryVolAnalyticsState=$PrimaryVol.analytics.state
+                        if($null -ne $PrimaryVol.tiering.min_cooling_days){
+                            $PrimaryVolTieringMinCoolDays=$PrimaryVol.tiering.min_cooling_days
+                        }
+                        if($null -ne $PrimaryVol.tiering.object_tags){
+                            $PrimaryVolTieringObjectTags=$PrimaryVol.tiering.object_tags
+                        }
                     }
-                }
-                if(($Global:OntapPrimaryVersion -ge 9.11)){
-                    # ONTAP >= 9.11
-                    $PrimaryVolAsyncDeleteClientState=$PrimaryVol.asynchronous_directory_delete.enabled
-                    $PrimaryVolAsyncDeleteClientTrashDirectory=$PrimaryVol.asynchronous_directory_delete.trash_bin
+                    if(($Global:OntapPrimaryVersion -ge 9.11)){
+                        # ONTAP >= 9.11
+                        $PrimaryVolAsyncDeleteClientState=$PrimaryVol.asynchronous_directory_delete.enabled
+                        $PrimaryVolAsyncDeleteClientTrashDirectory=$PrimaryVol.asynchronous_directory_delete.trash_bin
+                    }
                 }
             }else{
                 $PrimaryVolName=$PrimaryVol.Name
@@ -8145,8 +8146,7 @@ Try {
                         {
                             Write-LogDebug "with `$Global:AlwaysChooseDataAggr set to False, so reusing variable `$myDataAggr"
                         }
-                    } 
-                    else {
+                    }else {
                         # Proceed with an already existing volume on secondary
                         Write-Log "[$workOn] Volume [$PrimaryVolName] already exists"
                         # ADD Volume Type
@@ -8390,8 +8390,7 @@ Try {
                         $ListFlexgroup+=$PrimaryVolName
                     }
                 }
-            }
-            else {
+            }else {
                 Write-Log "[$workOn] Ignore volume [$PrimaryVolName]"
                 Write-LogDebug "PrimaryVolState  [$PrimaryVolState]"
                 Write-LogDebug "PrimaryVolIsVserverRoot [$PrimaryVolIsVserverRoot]"
@@ -10814,9 +10813,10 @@ Try {
                         Write-Log "[$workOn] Recreate Flexgroup relationship [$myPrimaryVserver`:$PrimaryFlexgroupMasterName] --> [$mySecondaryVserver`:$SecondaryFlexgroupMasterName] schedule [$Schedule]"
                         if($Global:PSTKCall -ne "Rest"){
                             Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName) -DestinationLocation $($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName) `
-                            -Controller $myPrimaryController | Invoke-NcSnapmirrorRelease -RelationshipInfoOnly"
-                            $ret=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName) -DestinationLocation $($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName) `
-                            -Controller $myPrimaryController -ErrorVariable ErrorVar | Invoke-NcSnapmirrorRelease -RelationshipInfoOnly -ErrorVariable ErrorVar -Confirm:$False
+                            -Controller $myPrimaryController"
+                            # $ret=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName) -DestinationLocation $($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName) -Controller $myPrimaryController -ErrorVariable ErrorVar
+                            # Write-LogDebug "Invoke-NcSnapmirrorRelease -RelationshipInfoOnly -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName"
+                            $out=Invoke-NcSnapmirrorRelease -RelationshipInfoOnly -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -ErrorVariable ErrorVar -Confirm:$False
                             if($? -ne $True){$Return=$False; Clean_Throw "ERROR : Failed to release destination relationship [${mySecondaryController}:${mySecondaryVserver}:${SecondaryFlexgroupMasterName}] reason [$ErrorVar]"}
                             
                             Write-LogDebug "New-NcSnapmirror -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Type vault -Policy $PreviousRelationPolicy -Schedule $Schedule -controller $mySecondaryController"
@@ -10829,8 +10829,10 @@ Try {
                             if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
                         }else{
                             # ! Need to force an ONTAPI call becasue of burt in PSTK and i need a 'PSTK' answer to pipe it into Invoke-NcSnapmirrorRelease
-                            Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName) -DestinationLocation $($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName) -Controller $myPrimaryController -ONTAPI | Invoke-NcSnapmirrorRelease -RelationshipInfoOnly"
-                            $ret=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName) -DestinationLocation $($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName) -Controller $myPrimaryController -ErrorVariable ErrorVar -ONTAPI | Invoke-NcSnapmirrorRelease -RelationshipInfoOnly -ErrorVariable ErrorVar -Confirm:$False
+                            # Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName) -DestinationLocation $($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName) -Controller $myPrimaryController"
+                            # $ret=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName) -DestinationLocation $($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName) -Controller $myPrimaryController -ErrorVariable ErrorVar
+                            Write-LogDebug "Invoke-NcSnapmirrorRelease -RelationshipInfoOnly -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName"
+                            $out=Invoke-NcSnapmirrorRelease -RelationshipInfoOnly -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -ErrorVariable ErrorVar -Confirm:$False
                             if($? -ne $True){$Return=$False; Clean_Throw "ERROR : Failed to release destination relationship [${mySecondaryController}:${mySecondaryVserver}:${SecondaryFlexgroupMasterName}] reason [$ErrorVar]"}
 
                             <# Write-LogDebug "New-NcSnapmirror -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Type vault -Policy $PreviousRelationPolicy -Schedule $Schedule -controller $mySecondaryController"
@@ -17712,7 +17714,7 @@ Try {
                     $ret=wait_snapmirror_dr_status -DestinationVserver $mySecondaryVserver -PrimaryVolumeName $SourceVolume -SecondaryVolumeName $DestinationVolume -Status "quiesced" -MirrorState "snapmirrored" -mySecondaryController $mySecondaryController
                     if($ret -eq $false){
                         $Return=$False
-                        Clean_Throw "ERROR : Failed to quiesce a snapmirror relationship. Increase timeout?"
+                        Clean_Throw "ERROR : Failed to quiesce a snapmirror relationship."
                     }
 					Write-LogDebug "Invoke-NcSnapmirrorBreak -DestinationVserver $mySecondaryVserver -DestinationVolume $DestinationVolume -Controller $myController -Confirm:$False"
 					$out=Invoke-NcSnapmirrorBreak -DestinationVserver $mySecondaryVserver -DestinationVolume $DestinationVolume -Controller $myController  -ErrorVariable ErrorVar -Confirm:$False
@@ -17722,6 +17724,11 @@ Try {
 		}
         if ( $Global:ForceActivate -eq $True )
         {
+            $ret=wait_snapmirror_dr_status -DestinationVserver $mySecondaryVserver -PrimaryVolumeName $SourceVolume -SecondaryVolumeName $DestinationVolume -Status "idle" -MirrorState "broken-off|broken_off" -mySecondaryController $mySecondaryController
+            if($ret -eq $false){
+                $Return=$False
+                Clean_Throw "ERROR : Failed to break a snapmirror relationship. Check in ONTAP"
+            }
             Write-LogDebug "Remove-NcSnapmirror -Destination $DestinationLocation -Source $SourceLocation -Controller $myController -Confirm:$False"
             $out=Remove-NcSnapmirror -Destination $DestinationLocation -Source $SourceLocation -Controller $myController  -ErrorVariable ErrorVar -Confirm:$False   
             if ( $? -ne $True ) 
@@ -20071,8 +20078,7 @@ Function resync_reverse_vserver_dr (
             $relationList=$relationList.records
         }
         
-        if ( $Global:ForceRecreate -and ( $relationList.count -eq 0 ) )
-        {
+        if ( $Global:ForceRecreate -and ( $relationList.count -eq 0 ) ){
             if ( ( create_snapmirror_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -Force -DDR $False ) -ne $True ) 
             { 
                 Write-LogError "ERROR: Failed to recreate all snapmirror relations "
@@ -20119,7 +20125,7 @@ Function resync_reverse_vserver_dr (
                 $DestinationLocation=$relation.destination.path
                 $DestinationVolume=$DestinationLocation.split(':')[-1]
                 #$ReverseRelationHealth=$relation.healthy
-                $RelationShipType=$relation.policy.type
+                $RelationShipSnapmirrorType=$relation.policy.type
                 $RelationPolicy=$relation.policy.name
                 $RelationshipStatus=$relation.state
                 $RelationshipSchedule=$relation.transfer_schedule.name
@@ -20130,7 +20136,7 @@ Function resync_reverse_vserver_dr (
                 $RelationGroupType=$relation.group_type
                 # ! Private CLI REST request necessary to get correct relationship-status
                 $Credential = get_local_cDotcred($mySecondaryController)
-                $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/snapmirror?source-path="+$SourceLocation+"&destination-path="+$DestinationLocation+"&fields=state,status")
+                $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/snapmirror?source-path="+$SourceLocation+"&destination-path="+$DestinationLocation+"&fields=state,status,type")
                 Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
                 $SnapmirrorRelationshipStatus=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                 if($? -ne $True){
@@ -20140,6 +20146,7 @@ Function resync_reverse_vserver_dr (
                 }elseif($SnapmirrorRelationshipStatus.num_records -gt 0){
                     $RelationshipStatus=$SnapmirrorRelationshipStatus.records[0].status
                     $MirrorState=$SnapmirrorRelationshipStatus.records[0].state
+                    $RelationShipType=$SnapmirrorRelationshipStatus.records[0].type
                 }
             }
             $myPrimaryControllerName=$myPrimaryController.Name
@@ -20293,11 +20300,8 @@ Function resync_reverse_vserver_dr (
                     Write-LogDebug "Invoke-NcSnapmirrorResync -SourceVserver $DestinationVserver -DestinationVserver $SourceVserver -SourceVolume $DestinationVolume -DestinationVolume $SourceVolume  -Controller $myPrimaryController"
                     $out=Invoke-NcSnapmirrorResync -SourceVserver $DestinationVserver -DestinationVserver $SourceVserver -SourceVolume $DestinationVolume -DestinationVolume $SourceVolume -Controller $myPrimaryController  -ErrorVariable ErrorVar
                     if ( $? -ne $True ){Write-LogError "ERROR: snapmirror Resync Failed";$Return = $False}
-                } 
-                else  # reverse relationship does not exist, so creates it 
-                {
-                    if($RelationshipType -eq "extended_data_protection")
-                    {
+                }else{  # reverse relationship does not exist, so creates it 
+                    if($RelationshipType -match "extended_data_protection|xdp"){
                         <# if($Global:XDPPolicy -ne ""){
                             Write-LogDebug "Snapmirror Policy set to [$($Global:XDPPolicy)]"
                             $SnapmirrorPolicy=$Global:XDPPolicy
@@ -21487,9 +21491,23 @@ Try {
 	$SourceCluster = $NcCluster.ClusterName
     $DestNCCluster = Get-NcCluster -Controller $mySecondaryController
     $DestCluster = $DestNCCluster.clusterName
-    Write-LogDebug "Get-NcQuota -Controller $myPrimaryController -VserverContext $myPrimaryVserver"
-    $AllQuotaList=Get-NcQuota -Controller $myPrimaryController -VserverContext $myPrimaryVserver -ErrorVariable ErrorVar 
-    if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcQuota failed [$ErrorVar]" } 
+    if($Global:PSTKCall -ne "Rest"){
+        Write-LogDebug "Get-NcQuota -Controller $myPrimaryController -VserverContext $myPrimaryVserver"
+        $AllQuotaList=Get-NcQuota -Controller $myPrimaryController -VserverContext $myPrimaryVserver -ErrorVariable ErrorVar 
+        if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcQuota failed [$ErrorVar]" } 
+    }else{
+        $Credential=get_local_cDotcred($myPrimaryController)
+        $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/volume/quota/policy/rule?vserver="+$myPrimaryVserver+"&fields=vserver,type,policy-name,volume,target,qtree,user-mapping,disk-limit,file-limit,threshold,soft-disk-limit,soft-file-limit")
+        Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential"
+        $QuotaPolicyRules=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+        if($? -ne $True){
+            Write-LogError "ERROR: Unable to get quota policy rule details. Reason [$ErrorVar]"
+            Write-LogDebug "[$workOn]: end"
+            return $False
+        }elseif($QuotaPolicyRules.num_records -gt 0){
+            $AllQuotaList=$QuotaPolicyRules.records
+        }
+    }
     Write-LogDebug "Get-NcVserverPeer -Controller $myPrimaryController -VserverContext $myPrimaryVserver -Query @{PeerCluster=$DestCluster}"
     $AllPeerList=Get-NcVserverPeer -Controller $myPrimaryController -VserverContext $myPrimaryVserver -Query @{PeerCluster=$DestCluster} -ErrorVariable ErrorVar 
     if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcVserverPeer failed [$ErrorVar]" }
@@ -21529,8 +21547,8 @@ Try {
         foreach($Policy in $Policies){
             $QUOTA_DB_SRC_FILE=$SVMTOOL_DB_SRC_VSERVER + '\quotarules.' + $Policy.policy_name
             $QUOTA_DB_SRC_FILE_ERR=$SVMTOOL_DB_SRC_VSERVER + '\quotarules.' + $Policy.policy_name + '.err'
-            Remove-Item -Path $QUOTA_DB_SRC_FILE -Force -Confirm:$False
-            Remove-Item -Path $QUOTA_DB_SRC_FILE_ERR -Force -Confirm:$False
+            Remove-Item -Path $QUOTA_DB_SRC_FILE -Force -Confirm:$False -ErrorAction SilentlyContinue
+            Remove-Item -Path $QUOTA_DB_SRC_FILE_ERR -Force -Confirm:$False -ErrorAction SilentlyContinue
         }
 
         $Credential=get_local_cDotcred($mySecondaryController)
@@ -21548,8 +21566,8 @@ Try {
         foreach($Policy in $Policies){
             $QUOTA_DB_DST_FILE=$SVMTOOL_DB_DST_VSERVER + '\quotarules.' + $Policy.policy_name
             $QUOTA_DB_DST_FILE_ERR=$SVMTOOL_DB_DST_VSERVER + '\quotarules.' + $Policy.policy_name + '.err'
-            Remove-Item -Path $QUOTA_DB_DST_FILE -Force -Confirm:$False
-            Remove-Item -Path $QUOTA_DB_DST_FILE_ERR -Force -Confirm:$False
+            Remove-Item -Path $QUOTA_DB_DST_FILE -Force -Confirm:$False -ErrorAction SilentlyContinue
+            Remove-Item -Path $QUOTA_DB_DST_FILE_ERR -Force -Confirm:$False -ErrorAction SilentlyContinue
         }
         break
     }
@@ -21572,52 +21590,61 @@ Try {
             if($Global:CorrectQuotaError -eq $True){
                 check_quota_rules -myController $myPrimaryController -myVserver $Vserver -myVolume $SourceVolume 
             }
-            $NcQuotaList=$AllQuotaList | where-object {$_.Volume -eq $SourceVolume}
+            $NcQuotaList=$AllQuotaList | where-object {($_.Volume -eq $SourceVolume) -or ($_.volume.name -eq $SourceVolume)}
 			if ( $null -ne $NcQuotaList ) {
-                $indexquota=0
                 foreach ( $quota in $NcQuotaList ) {
-                    $NcController = $quota.NcController
-                    $Vserver = $quota.Vserver
-                    $Volume = $quota.Volume
-                    $Qtree = $quota.Qtree
-                    $QuotaType = $quota.QuotaType
-                    $QuotaTarget = $quota.QuotaTarget
-                    $QuotaError = $quota.QuotaError
-                    $DiskLimit = $quota.DiskLimit
-                    $FileLimit = $quota.FileLimit
-                    $SoftDiskLimit = $quota.SoftDiskLimit
-                    $SoftFileLimit = $quota.SoftFileLimit
-                    $Threshold = $quota.Threshold
                     if($Global:PSTKCall -ne "Rest"){
+                        $NcController = $quota.NcController
+                        $Vserver = $quota.Vserver
+                        $Volume = $quota.Volume
+                        $Qtree = $quota.Qtree
+                        $QuotaType = $quota.QuotaType
+                        $QuotaTarget = $quota.QuotaTarget
+                        $QuotaError = $quota.QuotaError
+                        $DiskLimit = $quota.DiskLimit
+                        $FileLimit = $quota.FileLimit
+                        $SoftDiskLimit = $quota.SoftDiskLimit
+                        $SoftFileLimit = $quota.SoftFileLimit
+                        $Threshold = $quota.Threshold
                         $Policy = $quota.Policy
                     }else{
-                        # * In REST there is no quota policy scope, all quota are by default associated to the one and only quota policy rule that is activated on SVM
-                        # ! but REST return all rule even the ones that are part of a non-activated policy
-                        # ! so filter through private cli is mandatory
-                        # $Policy="activated"
-                        $Credential=get_local_cDotcred($myPrimaryController)
-                        if($null -ne $DiskLimit){$BytesDiskLimit=$DiskLimit*1024}else{$BytesDiskLimit="-"}
-                        if($null -eq $FileLimit){$FileLimit="-"}
-                        if($null -ne $SoftDiskLimit){$BytesSoftDiskLimit=$SoftDiskLimit*1024}else{$BytesSoftDiskLimit="-"}
-                        if($null -eq $SoftFileLimit){$SoftFileLimit="-"}
-                        if($null -eq $QuotaTarget -or $QuotaTarget.length -eq 0){$QuotaTarget="*"}
-                        if($null -eq $Qtree -or $Qtree.length -eq 0){$Qtree="`"`""}
+                        $DiskLimit = $quota.disk_limit
+                        $FileLimit = $quota.file_limit
+                        $SoftDiskLimit = $quota.soft_disk_limit
+                        $SoftFileLimit = $quota.soft_file_limit
+                        $Volume = $quota.volume
+                        $Vserver = $quota.vserver
+                        $Qtree = $quota.qtree
+                        $QuotaType = $quota.type
+                        $QuotaTarget = $quota.target
+                        $Threshold = $quota.threshold
+                        $Policy = $quota.policy_name
+                        # # * In REST there is no quota policy scope, all quota are by default associated to the one and only quota policy rule that is activated on SVM
+                        # # ! but REST return all rule even the ones that are part of a non-activated policy
+                        # # ! so filter through private cli is mandatory
+                        # # $Policy="activated"
+                        # $Credential=get_local_cDotcred($myPrimaryController)
+                        # if($null -ne $DiskLimit){$BytesDiskLimit=$DiskLimit*1024}else{$BytesDiskLimit="-"}
+                        # if($null -eq $FileLimit){$FileLimit="-"}
+                        # if($null -ne $SoftDiskLimit){$BytesSoftDiskLimit=$SoftDiskLimit*1024}else{$BytesSoftDiskLimit="-"}
+                        # if($null -eq $SoftFileLimit){$SoftFileLimit="-"}
+                        # if($null -eq $QuotaTarget -or $QuotaTarget.length -eq 0){$QuotaTarget="*"}
+                        # # $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/volume/quota/policy/rule?vserver="+$Vserver+"&fields=vserver,type,policy-name,volume,target,qtree,user-mapping,disk-limit,file-limit,threshold,soft-disk-limit,soft-file-limit&volume="+$Volume+`
+                        # #     "&type="+$QuotaType+"&disk-limit="+$BytesDiskLimit+"&target="+$QuotaTarget+"&file-limit="+$FileLimit+"&qtree="+$Qtree+"&soft-disk-limit="+$BytesSoftDiskLimit+"&soft-file-limit="+$SoftFileLimit)
                         # $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/volume/quota/policy/rule?vserver="+$Vserver+"&fields=vserver,type,policy-name,volume,target,qtree,user-mapping,disk-limit,file-limit,threshold,soft-disk-limit,soft-file-limit&volume="+$Volume+`
-                        #     "&type="+$QuotaType+"&disk-limit="+$BytesDiskLimit+"&target="+$QuotaTarget+"&file-limit="+$FileLimit+"&qtree="+$Qtree+"&soft-disk-limit="+$BytesSoftDiskLimit+"&soft-file-limit="+$SoftFileLimit)
-                        $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/volume/quota/policy/rule?vserver="+$Vserver+"&fields=vserver,type,policy-name,volume,target,qtree,user-mapping,disk-limit,file-limit,threshold,soft-disk-limit,soft-file-limit&volume="+$Volume+`
-                             "&type="+$QuotaType+"&disk-limit="+$BytesDiskLimit+"&target="+$QuotaTarget)
-                        Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential"
-                        $QuotaPolicy=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
-                        if($? -ne $True){
-                            Write-LogError "ERROR: Unable to get quota policy rule details. Reason [$ErrorVar]"
-                            Write-LogDebug "[$workOn]: end"
-                            return $False
-                        }elseif($QuotaPolicy.num_records -gt 0){
-                            $Policy=$QuotaPolicy.records[0].policy_name
-                        }
+                        #      "&type="+$QuotaType+"&disk-limit="+$BytesDiskLimit+"&target="+$QuotaTarget)
+                        # Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential"
+                        # $QuotaPolicy=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                        # if($? -ne $True){
+                        #     Write-LogError "ERROR: Unable to get quota policy rule details. Reason [$ErrorVar]"
+                        #     Write-LogDebug "[$workOn]: end"
+                        #     return $False
+                        # }elseif($QuotaPolicy.num_records -gt 0){
+                        #     $Policy=$QuotaPolicy.records[0].policy_name
+                        # }
                         $query=@{vserver=$Vserver;volume=$Volume} | ConvertTo-Json
-                        Write-LogDebug "Invoke-NcCli -Command 'volume quota show' -Query $query -Controller $myPrimaryController -Fields 'state,scan-status,logging,sub-status,last-error,errors'"
-                        $ret=Invoke-NcCli -Command "volume quota show" -Query $query -Controller $myPrimaryController -Fields "state,scan-status,logging,sub-status,last-error,errors"
+                        Write-LogDebug "Invoke-NcCli -Command 'volume quota show' -Query $query -Controller $myPrimaryController -Fields 'state,scan-status,logging,sub-status,last-error,errors,scan-status,is-user-quota-enforced,logging,last-error,is-group-quota-enforced,logging-interval'"
+                        $ret=Invoke-NcCli -Command "volume quota show" -Query $query -Controller $myPrimaryController -Fields "state,scan-status,logging,sub-status,last-error,errors,scan-status,is-user-quota-enforced,logging,last-error,is-group-quota-enforced,logging-interval"
                         $DetailQuota=$ret.Value | ConvertFrom-Json
                         if($null -ne $DetailQuota.errors){
                             $QuotaError=$DetailQuota.errors
@@ -23053,10 +23080,10 @@ Function save_vol_options_to_voldb (
                     $VOL_DB_SRC_FILE=$VOL_DB_SRC_FILE -Replace "\\","/"    
                     $VOL_DB_DST_FILE=$VOL_DB_DST_FILE -Replace "\\","/"     
                 }
-                Write-LogDebug "Remove preivous file [$VOL_DB_SRC_FILE]"
-                Remove-Item -Path $VOL_DB_SRC_FILE -Force -Confirm:$false
-                Write-LogDebug "Remove preivous file [$VOL_DB_DST_FILE]"
-                Remove-Item -Path $VOL_DB_DST_FILE -Force -Confirm:$false
+                Write-LogDebug "Remove previous file [$VOL_DB_SRC_FILE]"
+                Remove-Item -Path $VOL_DB_SRC_FILE -Force -Confirm:$false -ErrorAction SilentlyContinue
+                Write-LogDebug "Remove previous file [$VOL_DB_DST_FILE]"
+                Remove-Item -Path $VOL_DB_DST_FILE -Force -Confirm:$false -ErrorAction SilentlyContinue
                 break
             }
         }
@@ -23068,8 +23095,7 @@ Function save_vol_options_to_voldb (
             $DestinationVolume = $DestinationLocation.split(':')[-1]
             $DestinationVserver = $DestinationLocation.split(':')[0]
             $RelationshipType = $relation.RelationshipType
-            if (  ( $SourceVserver -ne $DestinationVserver  )  ) 
-            {
+            if (  ( $SourceVserver -ne $DestinationVserver  )  ){
                 Write-LogDebug "Get-NcVol -Name $SourceVolume -Controller $myController -VserverContext $myVserver"
                 $PrimaryVol = Get-NcVol -Name $SourceVolume -Controller $myController -VserverContext $myVserver  -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
@@ -23097,7 +23123,7 @@ Function save_vol_options_to_voldb (
                 Write-LogDebug "file [$VOL_DB_SRC_FILE]"
                 write-Output "${PrimaryVolName}:${PrimaryVolSnapshotPolicy}:${PrimarySisPolicy}:${PrimarySisSchedule}:${PrimarySisState}" | Out-File -FilePath $VOL_DB_SRC_FILE -Append
                 Write-LogDebug "file [$VOL_DB_DST_FILE]"
-                write-Output "${PrimaryVolName}:${PrimaryVolSnapshotPolicy}:${PrimarySisPolicy}:${PrimarySisSchedule}:${PrimarySisState}" | Out-File -FilePath $VOL_DB_DST_FILE -Append
+                write-Output "${DestinationVolume}:${PrimaryVolSnapshotPolicy}:${PrimarySisPolicy}:${PrimarySisSchedule}:${PrimarySisState}" | Out-File -FilePath $VOL_DB_DST_FILE -Append
             }
         }
         Write-LogDebug "end"
@@ -23570,7 +23596,7 @@ Function set_vol_options_from_voldb (
                                         }
                                         if ($myVolSisPolicy -ne $VolSisPolicy)
                                         {
-                                            Write-LogDebug "Current Efficiency Policy [$VolName] [$myVolSisPolicy] [$VolSisPolicy]"
+                                            Write-LogDebug "Current Efficiency Policy [$VolName] is [$myVolSisPolicy], need this one [$VolSisPolicy]"
                                             Write-LogDebug "Set-NcSis -name $VolName -VserverContext $myVserver -controller $myController -policy $VolSisPolicy  -ErrorVariable ErrorVar"
                                             Write-Log "[$myVserver] Set Efficiency Policy [$VolSisPolicy] on volume [$VolName]"
                                             try{
@@ -24476,7 +24502,12 @@ Function create_quota_rules_from_quotadb (
                     return $True    
                 }else{
                     $QUOTA_DB_FILE=$available_QUOTA_DB_FILE.FullName
-                    $myPolicy=(@($available_QUOTA_DB_FILE.Name.split(".")))[-1]
+                    if( [regex]::Matches($available_QUOTA_DB_FILE.Name,'[.]').count -eq 1){
+                        $myPolicy=(@($available_QUOTA_DB_FILE.Name.split(".")))[-1]
+                    }else{
+                        # case where there's only one dbswitched file
+                        $myPolicy=(@($available_QUOTA_DB_FILE.Name.split(".")))[1]
+                    }
                 }
                 Write-LogDebug "read QUOTA_DB_FILE for Cluster [$ClusterName] Vserver [$VserverName] Policy [$myPolicy] "
                 if ( ( Test-Path $QUOTA_DB_FILE  )  -eq $false ) 
@@ -24491,7 +24522,9 @@ Function create_quota_rules_from_quotadb (
                     }else{
                         $SVM=$myVserver
                     }
-                    $CheckVserver=Get-NcVserver -Controller $myController -Name $SVM
+                    # ! Force ONTAPI call to get real quota policy name
+                    # ! but with REST API only one quota policy can exists and its "default"
+                    $CheckVserver=Get-NcVserver -Controller $myController -Name $SVM -ONTAPI
                     if ( $null -eq $CheckVserver ) 
                     {
                         
@@ -24643,7 +24676,7 @@ Function create_quota_rules_from_quotadb (
                                             $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
                                             if($? -ne $True){
                                                 Write-LogError "ERROR: Unable to post [$url]. Reason [$ErrorVar]"
-                                                Write-LogDebug "[$workOn]: end"
+                                                Write-LogDebug "[$SVM]: end"
                                                 return $False
                                             }
                                             $JobUuid=$ret.job.uuid
@@ -24658,10 +24691,10 @@ Function create_quota_rules_from_quotadb (
                                                     break
                                                 }else{
                                                     $JobStatus=$JobDetail.JobState
-                                                    Write-LogDebug "[$workOn] Create quota rule job status [$JobStatus]"
+                                                    Write-LogDebug "[$SVM] Create quota rule job status [$JobStatus]"
                                                     if($JobStatus -eq "failure"){
                                                         $JobCompletion=$JobDetail.JobCompletion
-                                                        Write-LogError "[$workOn] Create quota rule failed [$JobCompletion]"
+                                                        Write-LogError "[$SVM] Create quota rule failed [$JobCompletion]"
                                                         break
                                                     }
                                                 }
@@ -24725,7 +24758,13 @@ Function create_quota_rules_from_quotadb (
                                             $body.type="user"
                                             $body.volume=@{"name"=$Volume}
                                             $body.svm=@{"name"=$SVM}
-                                            if ($QuotaTarget -eq '-' -or $null -eq $QuotaTarget){$body.users=@();$body.users+=@{"name"=""}}else{$body.users=$QuotaTarget}
+                                            if ($QuotaTarget -eq '-' -or $null -eq $QuotaTarget){
+                                                $body.users=@()
+                                                $body.users+=@{"name"=""}
+                                            }else{
+                                                $body.users=@()
+                                                $body.users+=@{"name"=$QuotaTarget}
+                                            }
                                             $body=$body | ConvertTo-Json
                                             $Cred=get_local_cDotcred($myController)
                                             $url=$("https://"+$myController.Name+"/api/storage/quota/rules")
@@ -24733,7 +24772,7 @@ Function create_quota_rules_from_quotadb (
                                             $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
                                             if($? -ne $True){
                                                 Write-LogError "ERROR: Unable to post [$url]. Reason [$ErrorVar]"
-                                                Write-LogDebug "[$workOn]: end"
+                                                Write-LogDebug "[$SVM]: end"
                                                 return $False
                                             }
                                             $JobUuid=$ret.job.uuid
@@ -24748,10 +24787,10 @@ Function create_quota_rules_from_quotadb (
                                                     break
                                                 }else{
                                                     $JobStatus=$JobDetail.JobState
-                                                    Write-LogDebug "[$workOn] Create quota rule job status [$JobStatus]"
+                                                    Write-LogDebug "[$SVM] Create quota rule job status [$JobStatus]"
                                                     if($JobStatus -eq "failure"){
                                                         $JobCompletion=$JobDetail.JobCompletion
-                                                        Write-LogError "[$workOn] Create quota rule failed [$JobCompletion]"
+                                                        Write-LogError "[$SVM] Create quota rule failed [$JobCompletion]"
                                                         break
                                                     }
                                                 }
@@ -24813,7 +24852,12 @@ Function create_quota_rules_from_quotadb (
                                             $body.type="group"
                                             $body.volume=@{"name"=$Volume}
                                             $body.svm=@{"name"=$SVM}
-                                            if ($QuotaTarget -eq '-' -or $null -eq $QuotaTarget){$body.group=@{"name"=""}}else{$body.group=@{"name"=$QuotaTarget}}
+                                            if ($QuotaTarget -eq '-' -or $null -eq $QuotaTarget){
+                                                $body.group=@{"name"=""}
+                                            }else{
+                                                $body.group=@()
+                                                $body.group+=@{"name"=$QuotaTarget}
+                                            }
                                             $body=$body | ConvertTo-Json
                                             $Cred=get_local_cDotcred($myController)
                                             $url=$("https://"+$myController.Name+"/api/storage/quota/rules")
@@ -24821,7 +24865,7 @@ Function create_quota_rules_from_quotadb (
                                             $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
                                             if($? -ne $True){
                                                 Write-LogError "ERROR: Unable to post [$url]. Reason [$ErrorVar]"
-                                                Write-LogDebug "[$workOn]: end"
+                                                Write-LogDebug "[$SVM]: end"
                                                 return $False
                                             }
                                             $JobUuid=$ret.job.uuid
@@ -24836,10 +24880,10 @@ Function create_quota_rules_from_quotadb (
                                                     break
                                                 }else{
                                                     $JobStatus=$JobDetail.JobState
-                                                    Write-LogDebug "[$workOn] Create quota rule job status [$JobStatus]"
+                                                    Write-LogDebug "[$SVM] Create quota rule job status [$JobStatus]"
                                                     if($JobStatus -eq "failure"){
                                                         $JobCompletion=$JobDetail.JobCompletion
-                                                        Write-LogError "[$workOn] Create quota rule failed [$JobCompletion]"
+                                                        Write-LogError "[$SVM] Create quota rule failed [$JobCompletion]"
                                                         break
                                                     }
                                                 }

@@ -3801,11 +3801,11 @@ if ( $ActivateDR ) {
     Write-LogOnly "SVMTOOL running ActivateDR"
     
     if ( test_primary_alive -PrimaryCluster $PRIMARY_CLUSTER -SecondaryCluster $SECONDARY_CLUSTER -PrimaryVserver $Vserver -SecondaryVserver $VserverDR ) {
-        $ForceActivate = $False
+        $Global:ForceActivate = $False
         Write-Log "[$PRIMARY_CLUSTER] is alive"
     }
     else {
-        $ForceActivate = $True
+        $Global:ForceActivate = $True
         Write-LogWarn "[$PRIMARY_CLUSTER] is not alive"
     }
     $ProgressPreference = 'Continue'
