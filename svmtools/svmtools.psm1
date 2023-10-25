@@ -11240,17 +11240,20 @@ Try {
         # LIF Treatment
         if($Backup -eq $False)
         {
+            Write-LogDebug "Get-NcNetInterface -InterfaceName $PrimaryInterfaceName -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
             $SecondaryInterface  = Get-NcNetInterface -InterfaceName $PrimaryInterfaceName -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
             if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
-            if($Restore -eq $True -and $Global:Run_Mode -eq "Migrate"){
-                # With Migrate step and during the restoration of a LIF from JSON, if the LIF already exist on secondary, we will first delete it, to allow the complete recreation of itself
-                Write-LogDebug "Set-NcNetInterface -Name $SecondaryInterface -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController"
-                $ret=Set-NcNetInterface -Name $SecondaryInterface -Vserver $mySecondaryVserver -AdministrativeStatus "down" -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
-                if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcNetInterface failed [$ErrorVar]" }
-                Write-LogDebug "Remove-NcNetInterface -Name $SecondaryInterface -Vserver $mySecondaryVserver -Controller $mySecondaryController"
-                $ret=Remove-NcNetInterface -Name $SecondaryInterface -Vserver $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
-                if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Remove-NcNetInterface failed [$ErrorVar]" }
-                $SecondaryInterface = $null
+            if($null -ne $SecondaryInterface){
+                if($Restore -eq $True -and $Global:Run_Mode -eq "Migrate"){
+                    # With Migrate step and during the restoration of a LIF from JSON, if the LIF already exist on secondary, we will first delete it, to allow the complete recreation of itself
+                    Write-LogDebug "Set-NcNetInterface -Name $SecondaryInterface -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController"
+                    $ret=Set-NcNetInterface -Name $SecondaryInterface -Vserver $mySecondaryVserver -AdministrativeStatus "down" -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcNetInterface failed [$ErrorVar]" }
+                    Write-LogDebug "Remove-NcNetInterface -Name $SecondaryInterface -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+                    $ret=Remove-NcNetInterface -Name $SecondaryInterface -Vserver $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Remove-NcNetInterface failed [$ErrorVar]" }
+                    $SecondaryInterface = $null
+                }
             }
             if ( $null -eq $SecondaryInterface ) 
             {
@@ -11334,8 +11337,12 @@ Try {
                         $myNode=select_node_from_cli -myController $mySecondaryController -myQuestion "Please select secondary node for LIF [$PrimaryInterfaceName] :" -regExMatch $nodeRegEx
                         $myPort=select_nodePort_from_cli -myController $mySecondaryController -myNode $myNode -myQuestion "Please select Port for LIF [$PrimaryInterfaceName] on node [$myNode] " -default $PrimaryCurrentPort -broadcastDomain $PrimaryBroadcastDomain
                         if($myPort){
-                            $LIF = '[' + $PrimaryInterfaceName + '] [' + $myIpAddr + '] [' + $myNetMask +  '] [' + $myGateway + '] [' +$myNode + '] [' + $myPort + ']'					
-                                $ANS2 = Read-HostOptions -question "[$mySecondaryVserver] Ready to create the LIF $LIF ?" -options "y/n" -default "y"
+                            if($Global:PSTKCall -ne "Rest"){
+                                $LIF = '[' + $PrimaryInterfaceName + '] [' + $myIpAddr + '] [' + $myNetMask +  '] [' + $myGateway + '] [' +$myNode + '] [' + $myPort + ']'	
+                            }else{
+                                $LIF = '[' + $PrimaryInterfaceName + '] [' + $myIpAddr + '] [ netmask length /' + $PrimaryNetMaskLength + '] [' + $myGateway + '] [' +$myNode + '] [' + $myPort + ']'	
+                            }				
+                            $ANS2 = Read-HostOptions -question "[$mySecondaryVserver] Ready to create the LIF $LIF ?" -options "y/n" -default "y"
                             if ( $ANS2 -eq 'y' ) 
                             {
                                 Write-Log "[$workOn] Create the LIF $LIF"
@@ -11363,8 +11370,8 @@ Try {
                                     # $SecondaryInterface=New-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver  -Role $PrimaryRole -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -FirewallPolicy $PrimaryFirewallPolicy -Address $myIpAddr -Netmask $myNetMask -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus down -AutoRevert $PrimaryIsAutoRevert  -Controller $mySecondaryController  -ErrorVariable ErrorVar
                                 }
                                 if($Global:PSTKCall -match "Rest|ZapiEnforced"){
-                                    Write-LogDebug "New-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver -ServicePolicy $PrimaryServicePolicy -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -Address $myIpAddr -Netmask $myNetMask -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus $AdminStatus -AutoRevert $PrimaryIsAutoRevert -Controller $mySecondaryController -ErrorVariable ErrorVar"
-                                    $SecondaryInterface=New-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver -ServicePolicy $PrimaryServicePolicy -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -Address $myIpAddr -Netmask $myNetMask -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus $AdminStatus -AutoRevert $PrimaryIsAutoRevert -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                    Write-LogDebug "New-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver -ServicePolicy $PrimaryServicePolicy -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -Address $myIpAddr -NetmaskLength $PrimaryNetMaskLength -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus $AdminStatus -AutoRevert $PrimaryIsAutoRevert -Controller $mySecondaryController -ErrorVariable ErrorVar"
+                                    $SecondaryInterface=New-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver -ServicePolicy $PrimaryServicePolicy -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -Address $myIpAddr -NetmaskLength $PrimaryNetMaskLength -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus $AdminStatus -AutoRevert $PrimaryIsAutoRevert -Controller $mySecondaryController -ErrorVariable ErrorVar
                                 }else{
                                     Write-LogDebug "New-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver  -Role $PrimaryRole -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -FirewallPolicy $PrimaryFirewallPolicy -Address $myIpAddr -Netmask $myNetMask -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus $AdminStatus -AutoRevert $PrimaryIsAutoRevert  -Controller $mySecondaryController"
                                     $SecondaryInterface=New-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver  -Role $PrimaryRole -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -FirewallPolicy $PrimaryFirewallPolicy -Address $myIpAddr -Netmask $myNetMask -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus $AdminStatus -AutoRevert $PrimaryIsAutoRevert  -Controller $mySecondaryController -ErrorVariable ErrorVar
@@ -13631,8 +13638,8 @@ Try {
                 $SecondaryCifsLifCreated=$false
                 #if($Global:NonInteractive -or $ForClone -or $Global:PreserveIdentity -eq $True){
                 Write-Log "[$workOn] getting master lif to clone"
-                $InterfaceMasterPrimary = Get-NcNetInterface $SecondaryCifsLifMaster -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar 
-                $InterfaceMaster = Get-NcNetInterface $SecondaryCifsLifMaster -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
+                $InterfaceMasterPrimary = Get-NcNetInterface -Name $SecondaryCifsLifMaster -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar 
+                $InterfaceMaster = Get-NcNetInterface -Name $SecondaryCifsLifMaster -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
                 #}
                 if($InterfaceMaster){
                     $TempInterfaceName=("tmp_lif_to_join_in_ad_" + $InterfaceMaster.InterfaceName)
@@ -18456,7 +18463,7 @@ try{
 
         ###### 4 Disable LIF on source Vserver
 
-        Write-Log "Disable LIF on source SVM"
+        Write-Log "[$myPrimaryVserver] Disable LIF on source SVM"
         if (($ret=set_all_lif -mySecondaryVserver $myPrimaryVserver -myPrimaryVserver $myPrimaryVserver -mySecondaryController $myPrimaryController -myPrimaryController $myPrimaryController -state down -Force) -ne $True ) {
             Write-LogError "ERROR: Failed to set all lif up on [$myPrimaryVserver]"
             clean_and_exit 1
@@ -20370,8 +20377,8 @@ Function resync_reverse_vserver_dr (
             } 
             else 
             {
-                Write-LogError "ERROR: The relation [$SourceLocation] --> [$DestinationLocation] status is [$RelationshipStatus] [$MirrorState]" 
-                $Return = $False
+                Write-LogWarn "WARNING: The relation [$SourceLocation] --> [$DestinationLocation] status is [$RelationshipStatus] [$MirrorState]" 
+                #$Return = $False
             }
         }
         
@@ -22621,6 +22628,7 @@ Function Set_LIF_from_JSON (
             $availableLIF | Remove-NcNetInterface  -Confirm:$False
             #$availableLIF=$null
         }else{
+            Write-LogDebug "availableLIF=Get-Content $LIFINFO_FILE -Raw | ConvertFrom-Json"
             $availableLIF=Get-Content $LIFINFO_FILE -Raw | ConvertFrom-Json
         }<# elseif($availableLIF.count -gt 0){
             # ifcdify its configration
@@ -22676,11 +22684,17 @@ Function Set_LIF_from_JSON (
                 $NetmaskLength=$Interface.NetmaskLength
                 #$CurrentPort=$Interface.CurrentPort
                 $CurrentPort=($availableLIF | where-object {$_.InterfaceName -eq $InterfaceName}).CurrentPort
+                if($null -eq $CurrentPort -or $CurrentPort.lenght -eq 0){
+                    Write-LogDebug "CurrentPort is empty"
+                }
                 $DataProtocols=$Interface.DataProtocols
                 $DnsDomainName=$Interface.DnsDomainName
                 $Role=$Interface.Role
                 #$CurrentNode=$Interface.CurrentNode
                 $CurrentNode=($availableLIF | where-object {$_.InterfaceName -eq $InterfaceName}).CurrentNode
+                if($null -eq $CurrentNode -or $CurrentNode.lenght -eq 0){
+                    Write-LogDebug "CurrentNode is empty"
+                }
                 $BroadcastDomain = $PrimaryCurrentPortObj.BroadcastDomain
                 $RoutingGroupName=$Interface.RoutingGroupName
                 $FirewallPolicy=$Interface.FirewallPolicy
@@ -22689,7 +22703,7 @@ Function Set_LIF_from_JSON (
                 $FailoverGroup=$Interface.FailoverGroup
                 if($Global:PSTKCall -eq "Rest"){$ServicePolicy=$Interface.ServicePolicy}
                 $Comment=$Interface.Comment 
-                Write-Log "[$ToVserver] Create LIF [$InterfaceName] with [$Address] [$NetmaskLength] [$AdminState]"
+                Write-Log "[$ToVserver] Create LIF [$InterfaceName] with [$Address] [$NetmaskLength] [$Netmask] [$AdminState] [$CurrentNode] [$CurrentPort]"
                 if($Global:PSTKCall -match "Rest|ZapiEnforced"){
                     Write-LogDebug "New-NcNetInterface -Name $InterfaceName -Vserver $ToVserver -Address $Address -Netmask $NetmaskLength `
                     -ServicePolicy $ServicePolicy -Node $CurrentNode -Port $CurrentPort -DataProtocols $DataProtocols `
