@@ -3118,7 +3118,7 @@ if ( $ShowDR ) {
     $Global:Run_Mode = "ShowDR"
     Write-LogOnly "SVMTOOL running ShowDR"
     $Global:LOGFILE=$LOGFILE
-    Write-Log "LOGFILE [$Global:LOGFILE]"
+    #Write-Log "LOGFILE [$Global:LOGFILE]"
     if($NoVolumeDetail.IsPresent -eq $False ){
         $Global:NoVolumeDetail=$False
     }else{
@@ -3964,7 +3964,7 @@ if ( $ReActivate ) {
     Write-Log "[$Vserver] Restore original SnapMirror relationship to [$VserverDR]"
     $Global:ForceRecreate=$True
     if ( ( $ret = resync_vserver_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR ) -ne $True ) { 
-        Write-LogError "ERROR: Resync failed" 
+        Write-LogError "ERROR: Resync failed reason [$ret]" 
         clean_and_exit 1
     }
     if ( ( $ret = set_vol_options_from_voldb -myController $NcPrimaryCtrl -myVserver $Vserver ) -ne $True ) {

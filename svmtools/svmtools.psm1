@@ -371,7 +371,13 @@ function Write-LogError ([string]$mess) {
         if($mess){
             get-wfalogger -error -message $mess
         }
-    } 
+    }
+    $stack=Get-PSCallStack
+    $caller1=$stack[1].Command
+    $lineCaller1=$stack[1].ScriptLineNumber
+    $caller2=$stack[2].Command
+    $lineCaller2=$stack[2].ScriptLineNumber
+    $mess=$($caller2+"("+$lineCaller2+"):"+$caller1+"("+$lineCaller1+"):"+$mess) 
     if($ConsoleThreadingRequired -or $multithreaded){
         $Global:ConsoleLog.Error($mess)
         #write-error $mess
@@ -8155,7 +8161,7 @@ Try {
                         }else{
                             $SecondaryVolType=$SecondaryVol.records.type
                         }
-                        if ( $SecondaryVolType -ne "DP" -and $Restore -eq $False -and $Backup -eq $False) {
+                        if ( $SecondaryVolType -ne "dp" -and $Restore -eq $False -and $Backup -eq $False) {
                             Write-LogError "ERROR: volume $SecondaryVol is not a DP Volume"
                         }
                         # If possible, convert destination volumes into encrypted volumes
@@ -15741,9 +15747,9 @@ Function show_vserver_dr (
                 }
                 $tmp_str = ""  
                 if ( $Lag ) { 
-                    if($LagTimeDate -match "^PT"){
-                        $LagTimeDate=$LagTimeDate -replace "PT",""
-                        $tmp_str = $tmp_str + [string]::Format("{0,-10}",`
+                    if($LagTimeDate -match "^P"){
+                        $LagTimeDate=$LagTimeDate -replace "P",""
+                        $tmp_str = $tmp_str + [string]::Format("{0,-15}",`
                             "["+$LagTimeDate+"]")
                     }else{
                         if($LagTimeDate -gt 3600){
@@ -15865,9 +15871,9 @@ Function show_vserver_dr (
                 }
                 $tmp_str = ""  
                 if ( $Lag ) { 
-                    if($LagTimeDate -match "^PT"){
-                        $LagTimeDate=$LagTimeDate -replace "PT",""
-                        $tmp_str = $tmp_str + [string]::Format("{0,-10}",`
+                    if($LagTimeDate -match "^P"){
+                        $LagTimeDate=$LagTimeDate -replace "^P",""
+                        $tmp_str = $tmp_str + [string]::Format("{0,-15}",`
                             "["+$LagTimeDate+"]")
                     }else{
                         if($LagTimeDate -gt 3600){
@@ -20311,6 +20317,10 @@ Function resync_reverse_vserver_dr (
                         } #>
                         Write-Log "[$SourceVserver] Create Reverse VF SnapMirror [${mySecondaryControllerName}:${DestinationVserver}/$DestinationVolume] --> [${myPrimaryControllerName}:${SourceVserver}/$SourceVolume]"
                         if($RelationPolicy -notin $("Sync","StrictSync")){
+                            if($SourceVolume -match "flexgroup"){
+                                Write-LogDebug "recreate flexgroup relationship"
+                                start-sleep 5
+                            }
                             Write-LogDebug "New-NcSnapmirror -Type vault -Policy $SnapmirrorPolicy -DestinationVserver $SourceVserver -DestinationVolume $SourceVolume -SourceVserver $DestinationVserver -SourceVolume $DestinationVolume -Schedule $SnapmirrorSchedule -Controller $myPrimaryController "
                             $relation=New-NcSnapmirror -Type vault -Policy $SnapmirrorPolicy -DestinationVserver $SourceVserver -DestinationVolume $SourceVolume -SourceVserver $DestinationVserver -SourceVolume $DestinationVolume -Schedule $SnapmirrorSchedule -Controller $myPrimaryController  -ErrorVariable ErrorVar     
                             if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: New-NcSnapmirror failed [$ErrorVar]" ;clean_and_exit 1}
@@ -20376,7 +20386,8 @@ Function resync_reverse_vserver_dr (
             $AllExistingReverseRelationships=Get-NcSnapmirror -VserverContext $myPrimaryVserver -Query @{MirrorState="snapmirrored|broken-off";RelationshipStatus="idle"} -Controller $myPrimaryController  -ErrorVariable ErrorVa
         }else{
             $Credential=get_local_cDotcred($myPrimaryController)
-            $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/snapmirror?fields=state,status,type,schedule&destination-vserver="+$myPrimaryVserver+"&state=snapmirrored|broken-off&status=idle")
+            #$url=$("https://"+$myPrimaryController.Name+"/api/private/cli/snapmirror?fields=state,status,type,schedule&destination-vserver="+$myPrimaryVserver+"&state=snapmirrored|broken-off&status=idle")
+            $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/snapmirror?fields=state,status,type,schedule&destination-vserver="+$myPrimaryVserver+"&state=snapmirrored|broken-off")
             Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
             $AllExistingReverseRelationships=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
@@ -20424,7 +20435,11 @@ Function resync_reverse_vserver_dr (
                         } #>
                     }
                 }elseif($AllExistingReverseRelationships.count -gt 0){
-                    $ret=($ExistingReverseRelationships | Invoke-NcSnapmirrorResync -Controller $myPrimaryController -ErrorVariable ErrorVar)   
+                    foreach($relation in $AllExistingReverseRelationships){
+                        $destinationpath=$relation.destination_path
+                        Write-LogDebug "Invoke-NcSnapmirrorResync -Controller $myPrimaryController -Destination $destinationpath"
+                        $ret=Invoke-NcSnapmirrorResync -Controller $myPrimaryController -Destination $relation.destination_path 
+                    }
                     #Get-NcSnapmirror -VserverContext $myPrimaryVserver -Query @{MirrorState="snapmirrored|broken-off";RelationshipStatus="idle"} -Controller $myPrimaryController  -ErrorVariable ErrorVar | Invoke-NcSnapmirrorResync -Controller $myPrimaryController -ErrorVariable ErrorVar    
                     $Return=$True
                 }elseif($null -ne $MissingRelationship){
@@ -20432,9 +20447,14 @@ Function resync_reverse_vserver_dr (
                     Write-LogDebug "[$MissingRelationship]"
                     $Return=$False
                 }
-            }elseif(($ExistingReverseRelationShipMirrorState -match "broken-off|broken_off").count -ge 1){
+            #}elseif(($ExistingReverseRelationShipMirrorState -match "broken-off|broken_off").count -ge 1){
+            }else{
                 Write-LogDebug "Force Resync of present reversed relationship on [$myPrimaryController]"
-                $ret=($ExistingReverseRelationShip | Invoke-NcSnapmirrorResync -Controller $myPrimaryController)
+                foreach($relation in $AllExistingReverseRelationships){
+                    $destinationpath=$relation.destination_path
+                    Write-LogDebug "Invoke-NcSnapmirrorResync -Controller $myPrimaryController -Destination $destinationpath"
+                    $ret=Invoke-NcSnapmirrorResync -Controller $myPrimaryController -Destination $relation.destination_path 
+                }
                 $Return=$True
             }
         }
@@ -20534,18 +20554,13 @@ Function resync_vserver_dr (
                     $Return = $False
                 }
             } 
-            elseif ( ( $MirrorState -eq 'snapmirrored' ) -and ( ( $RelationshipStatus -eq 'idle' ) -or (( $RelationshipStatus -eq 'transferring' ) -and ( $MirrorState -match 'broken-off|broken_off') ) ) ) 
-            {
-                Write-Log "The relation [$SourceLocation] ---> [$DestinationLocation] status is [$RelationshipStatus] [$MirrorState] " 
-            } 
             elseif ( $RelationHealth -eq $False )
             {
                 Write-LogWarn "The relation [$SourceLocation] ---> [$DestinationLocation] is not healthy, check status"
             }
             else 
             {
-                Write-LogError "ERROR: The relation [$SourceLocation] ---> [$DestinationLocation] status is [$RelationshipStatus] [$MirrorState] " 
-                $Return = $False
+                Write-LogWarn "The relation [$SourceLocation] ---> [$DestinationLocation] status is [$RelationshipStatus] [$MirrorState] "
             }			
         }
         return $Return
@@ -21336,17 +21351,17 @@ Try {
         }
 
         $QUOTA_DB_FILE=$SVMTOOL_DB_SRC_VSERVER + '\quotarules.' + $Policy
-        $QUOTA_DB_FILE_SWITCH=$QUOTA_DB_FILE + '.' + $switch_time
+        $QUOTA_DB_FILE_SWITCH=$SVMTOOL_DB_SRC_VSERVER + '\' + $switch_time + '.quotarules.' + $Policy
         if(!$IsWindows){
             $QUOTA_DB_FILE=$QUOTA_DB_FILE -Replace "\\","/"   
             $QUOTA_DB_FILE_SWITCH=$QUOTA_DB_FILE_SWITCH -Replace "\\","/"  
         }
         if ((Test-Path $QUOTA_DB_FILE) -eq $True ) { 
-            Write-LogDebug "switch [$QUOTA_DB_FILE_SWITCH]"
+            Write-LogDebug "switch [$QUOTA_DB_FILE] to [$QUOTA_DB_FILE_SWITCH]"
             Rename-Item $QUOTA_DB_FILE $QUOTA_DB_FILE_SWITCH
         }
         $QUOTA_DB_FILE=$SVMTOOL_DB_SRC_VSERVER + '\quotarules.' + $Policy + '.err' 
-        $QUOTA_DB_FILE_SWITCH=$QUOTA_DB_FILE + '.' + $switch_time
+        $QUOTA_DB_FILE_SWITCH=$SVMTOOL_DB_SRC_VSERVER + '\' + $switch_time + '.quotarules.' + $Policy + '.err'
         if(!$IsWindows){
             $QUOTA_DB_FILE=$QUOTA_DB_FILE -Replace "\\","/"   
             $QUOTA_DB_FILE_SWITCH=$QUOTA_DB_FILE_SWITCH -Replace "\\","/"  
@@ -21356,13 +21371,13 @@ Try {
             Rename-Item $QUOTA_DB_FILE $QUOTA_DB_FILE_SWITCH
         }
         $VOL_DB_FILE=$SVMTOOL_DB_SRC_VSERVER + '\volume.options'
-        $VOL_DB_FILE_SWITCH=$VOL_DB_FILE + '.' + $switch_time
+        $VOL_DB_FILE_SWITCH=$SVMTOOL_DB_SRC_VSERVER + '\' + $switch_time + '.volume.options'
         if(!$IsWindows){
             $VOL_DB_FILE=$VOL_DB_FILE -Replace "\\","/"   
             $VOL_DB_FILE_SWITCH=$VOL_DB_FILE_SWITCH -Replace "\\","/"  
         }
         if ((Test-Path $VOL_DB_FILE) -eq $True ) { 
-            Write-LogDebug "switch [$VOL_DB_FILE_SWITCH]"
+            Write-LogDebug "switch [$VOL_DB_FILE] to [$VOL_DB_FILE_SWITCH]"
             Rename-Item $VOL_DB_FILE $VOL_DB_FILE_SWITCH
         }
         Write-LogDebug "end"
@@ -21398,17 +21413,17 @@ Try {
                     $SVMTOOL_DB_SRC_VSERVER=$SVMTOOL_DB_SRC_CLUSTER + '\' +$SourceVserver + '.vserver'
 
                     $QUOTA_DB_FILE=$SVMTOOL_DB_SRC_VSERVER + '\quotarules.' + $Policy
-                    $QUOTA_DB_FILE_SWITCH=$QUOTA_DB_FILE + '.' + $switch_time
+                    $QUOTA_DB_FILE_SWITCH=$SVMTOOL_DB_SRC_VSERVER + '\' + $switch_time + '.quotarules.' + $Policy
                     if(!$IsWindows){
                         $QUOTA_DB_FILE=$QUOTA_DB_FILE -Replace "\\","/"   
                         $QUOTA_DB_FILE_SWITCH=$QUOTA_DB_FILE_SWITCH -Replace "\\","/"  
                     }
                     if ((Test-Path $QUOTA_DB_FILE) -eq $True ) { 
-                        Write-LogDebug "switch [$QUOTA_DB_FILE_SWITCH]"
+                        Write-LogDebug "switch [$QUOTA_DB_FILE] to [$QUOTA_DB_FILE_SWITCH]"
                         Rename-Item $QUOTA_DB_FILE $QUOTA_DB_FILE_SWITCH
                     }
                     $QUOTA_DB_FILE=$SVMTOOL_DB_SRC_VSERVER + '\quotarules.' + $Policy + '.err' 
-                    $QUOTA_DB_FILE_SWITCH=$QUOTA_DB_FILE + '.' + $switch_time
+                    $QUOTA_DB_FILE_SWITCH=$SVMTOOL_DB_SRC_VSERVER + '\' + $switch_time + '.quotarules.' + $Policy + '.err'
                     if(!$IsWindows){
                         $QUOTA_DB_FILE=$QUOTA_DB_FILE -Replace "\\","/"   
                         $QUOTA_DB_FILE_SWITCH=$QUOTA_DB_FILE_SWITCH -Replace "\\","/"  
@@ -21418,29 +21433,29 @@ Try {
                         Rename-Item $QUOTA_DB_FILE $QUOTA_DB_FILE_SWITCH
                     }
                     $VOL_DB_FILE=$SVMTOOL_DB_SRC_VSERVER + '\volume.options'
-                    $VOL_DB_FILE_SWITCH=$VOL_DB_FILE + '.' + $switch_time
+                    $VOL_DB_FILE_SWITCH=$SVMTOOL_DB_SRC_VSERVER + '\' + $switch_time + '.volume.options'
                     if(!$IsWindows){
                         $VOL_DB_FILE=$VOL_DB_FILE -Replace "\\","/"   
                         $VOL_DB_FILE_SWITCH=$VOL_DB_FILE_SWITCH -Replace "\\","/"  
                     }
                     if ((Test-Path $VOL_DB_FILE) -eq $True ) { 
-                        Write-LogDebug "switch [$VOL_DB_FILE_SWITCH]" ;
+                        Write-LogDebug "switch [$VOL_DB_FILE] to [$VOL_DB_FILE_SWITCH]" ;
                         Rename-Item $VOL_DB_FILE $VOL_DB_FILE_SWITCH
                     }
                     $SVMTOOL_DB_DST_CLUSTER=$Global:SVMTOOL_DB + '\' + $DestinationCluster + '.cluster'
                     $SVMTOOL_DB_DST_VSERVER=$SVMTOOL_DB_DST_CLUSTER + '\' +$DestinationVserver + '.vserver'
                     $QUOTA_DB_FILE=$SVMTOOL_DB_DST_VSERVER + '\quotarules.' + $Policy
-                    $QUOTA_DB_FILE_SWITCH=$QUOTA_DB_FILE + '.' + $switch_time
+                    $QUOTA_DB_FILE_SWITCH=$SVMTOOL_DB_DST_VSERVER + '\' + $switch_time + '.quotarules.' + $Policy
                     if(!$IsWindows){
                         $QUOTA_DB_FILE=$QUOTA_DB_FILE -Replace "\\","/"   
                         $QUOTA_DB_FILE_SWITCH=$QUOTA_DB_FILE_SWITCH -Replace "\\","/"  
                     }
                     if ((Test-Path $QUOTA_DB_FILE) -eq $True ) { 
-                        Write-LogDebug "switch [$QUOTA_DB_FILE_SWITCH]" ;
+                        Write-LogDebug "switch [$QUOTA_DB_FILE] to [$QUOTA_DB_FILE_SWITCH]" ;
                         Rename-Item $QUOTA_DB_FILE $QUOTA_DB_FILE_SWITCH
                     }
                     $QUOTA_DB_FILE=$SVMTOOL_DB_DST_VSERVER + '\quotarules.' + $Policy + '.err' 
-                    $QUOTA_DB_FILE_SWITCH=$QUOTA_DB_FILE + '.' + $switch_time
+                    $QUOTA_DB_FILE_SWITCH=$SVMTOOL_DB_DST_VSERVER + '\' + $switch_time + '.quotarules.' + $Policy + '.err'
                     if(!$IsWindows){
                         $QUOTA_DB_FILE=$QUOTA_DB_FILE -Replace "\\","/"   
                         $QUOTA_DB_FILE_SWITCH=$QUOTA_DB_FILE_SWITCH -Replace "\\","/"  
@@ -21450,13 +21465,13 @@ Try {
                         Rename-Item $QUOTA_DB_FILE $QUOTA_DB_FILE_SWITCH
                     }
                     $VOL_DB_FILE=$SVMTOOL_DB_DST_VSERVER + '\volume.options'
-                    $VOL_DB_FILE_SWITCH=$VOL_DB_FILE + '.' + $switch_time
+                    $VOL_DB_FILE_SWITCH=$SVMTOOL_DB_DST_VSERVER + '\' + $switch_time + '.volume.options'
                     if(!$IsWindows){
                         $VOL_DB_FILE=$VOL_DB_FILE -Replace "\\","/"   
                         $VOL_DB_FILE_SWITCH=$VOL_DB_FILE_SWITCH -Replace "\\","/"  
                     }
                     if ((Test-Path $VOL_DB_FILE) -eq $True ) { 
-                        Write-LogDebug "switch [$VOL_DB_FILE_SWITCH]" ;
+                        Write-LogDebug "switch [$VOL_DB_FILE] to [$VOL_DB_FILE_SWITCH]" ;
                         Rename-Item $VOL_DB_FILE $VOL_DB_FILE_SWITCH
                     }
                 }
@@ -22421,8 +22436,14 @@ Function Set_CIFS_from_JSON (
                     foreach ($netbiosalias in $newCIFSNetbiosAliases){
                         $body.netbios.aliases+=$netbiosalias
                     }
+                    $cleanbody=$body
                     $body=$body | ConvertTo-Json
-                    Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $Cred -SkipCertificateCheck (body is intentionally hidden)"
+                    #Write-LogDebug "$body"
+                    $cleanbody.ad_domain.password="xxxxxxxxxxxxxx"
+                    $cleanbody=$cleanbody | ConvertTo-Json
+                    #Write-logdebug "$cleanbody"
+                    Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $Cred -SkipCertificateCheck -bbody $cleanbody"
+                    #Write-LogDebug "$body"
                     $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: patch request [$url] reason [$ErrorVar]"
@@ -22442,6 +22463,7 @@ Function Set_CIFS_from_JSON (
                             if($JobStatus -eq "failure"){
                                 $JobCompletion=$JobDetail.JobCompletion
                                 Write-LogError "[$workOn] Patch CIFS server failed  [$JobCompletion]"
+                                $Return=$False
                                 break
                             }
                         }
@@ -22450,6 +22472,7 @@ Function Set_CIFS_from_JSON (
                         if($TimeSpend -gt $Global:STOP_TIMEOUT){
                             Write-LogWarn "[$workOn] Patch CIFS server take too much time. Check in Ontap its status"
                             $Timeout=$True
+                            $Return=$False
                         }
                         Start-Sleep 5
                     }
@@ -22488,7 +22511,7 @@ Function Set_CIFS_from_JSON (
             Write-LogDebug "CIFS server already with good name on [$ToVserver]. No need to modify"
         }
         Write-LogDebug "end"
-        return $True
+        return $Return
     }catch{
         Error_Handling $_ $ToVserver
     	return $Return    
@@ -23111,6 +23134,7 @@ Function save_vol_options_to_voldb (
                 $PrimaryVolJunctionPath=$PrimaryVol.VolumeIdAttributes.JunctionPath
                 $PrimaryVolIsInfiniteVolume=$PrimaryVol.IsInfiniteVolume
                 $PrimaryVolSnapshotPolicy=$PrimaryVol.SnapshotPolicy
+                $VolumeUUID=$PrimaryVol.Uuid
                 $PrimarySisSchedule=""
                 $PrimarySisPolicy=""
                 $PrimarySisState=""
@@ -23120,10 +23144,41 @@ Function save_vol_options_to_voldb (
                 $PrimarySisSchedule=$PrimaryVol.Schedule
                 $PrimarySisPolicy=$PrimaryVol.Policy
                 $PrimarySisState=$PrimaryVol.State   
-                Write-LogDebug "file [$VOL_DB_SRC_FILE]"
-                write-Output "${PrimaryVolName}:${PrimaryVolSnapshotPolicy}:${PrimarySisPolicy}:${PrimarySisSchedule}:${PrimarySisState}" | Out-File -FilePath $VOL_DB_SRC_FILE -Append
-                Write-LogDebug "file [$VOL_DB_DST_FILE]"
-                write-Output "${DestinationVolume}:${PrimaryVolSnapshotPolicy}:${PrimarySisPolicy}:${PrimarySisSchedule}:${PrimarySisState}" | Out-File -FilePath $VOL_DB_DST_FILE -Append
+                $OntapVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $myController)[0].VersionTuple.Generation)+','+[string]((Get-NcSystemVersionInfo -Controller $myController)[0].VersionTuple.Major)))
+                $OntapVer=(Get-NcSystemVersionInfo -Controller $myController)[0].VersionTuple | Join-String
+                Write-LogDebug "[$myController] ONTAP Version       [$OntapVer]" 
+                if($OntapVersion -ge 9.10){
+                    
+                    <# $Credential = get_local_cDotcred($myPrimaryController)
+                    $url="https://"+$myPrimaryController.Name+"/api/storage/volumes?svm="+$myVserver+"&name="+$SourceVolume+"&fields=efficiency"
+                    Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+                    $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                    if($? -ne $True){
+                        Write-LogError "ERROR: Unable to get volume details. Reason [$ErrorVar]" 
+                    }else{
+                        $PrimaryStorageEfficiencyMode=$ret.records[0].efficiency.storage_efficiency_mode
+                        Write-LogDebug "file [$VOL_DB_SRC_FILE]"
+                        write-Output "${PrimaryVolName}:${PrimaryVolSnapshotPolicy}:${PrimarySisPolicy}:${PrimarySisSchedule}:${PrimarySisState}:${PrimaryStorageEfficiencyMode}" | Out-File -FilePath $VOL_DB_SRC_FILE -Append
+                        Write-LogDebug "file [$VOL_DB_DST_FILE]"
+                        write-Output "${DestinationVolume}:${PrimaryVolSnapshotPolicy}:${PrimarySisPolicy}:${PrimarySisSchedule}:${PrimarySisState}:${PrimaryStorageEfficiencyMode}" | Out-File -FilePath $VOL_DB_DST_FILE -Append
+                    } #>
+                    $query=@{vserver=$myVserver;volume=$SourceVolume} | ConvertTo-Json
+                    Write-LogDebug "Invoke-NcCli -Command volume efficiency show -Query $query -Controller $myController -Fields storage-efficiency-mode,compression-algorithm"
+                    $SISdetails=Invoke-NcCli -Command "volume efficiency show" -Query $query -Controller $myController -Fields "storage-efficiency-mode,compression-algorithm"
+                    if($? -ne $True){Write-LogError "Failed to get volume infos"}
+                    $SISdetails=$SISdetails.Value | ConvertFrom-Json
+                    $PrimaryStorageEfficiencyMode=$SISdetails.storage_efficiency_mode
+                    $PrimaryCompressionAlgorithm=$SISdetails.compression_algorithm
+                    Write-LogDebug "file [$VOL_DB_SRC_FILE]"
+                    write-Output "${PrimaryVolName}:${PrimaryVolSnapshotPolicy}:${PrimarySisPolicy}:${PrimarySisSchedule}:${PrimarySisState}:${PrimaryStorageEfficiencyMode}:${PrimaryCompressionAlgorithm}" | Out-File -FilePath $VOL_DB_SRC_FILE -Append
+                    Write-LogDebug "file [$VOL_DB_DST_FILE]"
+                    write-Output "${DestinationVolume}:${PrimaryVolSnapshotPolicy}:${PrimarySisPolicy}:${PrimarySisSchedule}:${PrimarySisState}:${PrimaryStorageEfficiencyMode}:${PrimaryCompressionAlgorithm}" | Out-File -FilePath $VOL_DB_DST_FILE -Append
+                }else{ 
+                    Write-LogDebug "file [$VOL_DB_SRC_FILE]"
+                    write-Output "${PrimaryVolName}:${PrimaryVolSnapshotPolicy}:${PrimarySisPolicy}:${PrimarySisSchedule}:${PrimarySisState}" | Out-File -FilePath $VOL_DB_SRC_FILE -Append
+                    Write-LogDebug "file [$VOL_DB_DST_FILE]"
+                    write-Output "${DestinationVolume}:${PrimaryVolSnapshotPolicy}:${PrimarySisPolicy}:${PrimarySisSchedule}:${PrimarySisState}" | Out-File -FilePath $VOL_DB_DST_FILE -Append
+                }
             }
         }
         Write-LogDebug "end"
@@ -23320,12 +23375,9 @@ Function set_vol_options_from_voldb (
             }else{
                 $VserverListItem = Get-Item "${SVMTOOL_DB_CLUSTER}/${myVserver}.vserver"
             }
-            if ( $null -eq $VserverListItem ) 
-            {
+            if ( $null -eq $VserverListItem ){
                 Write-LogWarn "No Vserver File found in SVMTOOL_DB_CLUSTER [$SVMTOOL_DB_CLUSTER]"  
-            } 
-            else 
-            {
+            }else{
                 foreach ( $VserverItem in  ( $VserverListItem  | Skip-Null ) ) 
                 {
                     $VserverItemName=$VserverItem.Name
@@ -23352,20 +23404,30 @@ Function set_vol_options_from_voldb (
                         } 
                         else 
                         {
-                            Get-Content $VOL_DB_FILE | Select-Object -uniq | foreach {
+                            Get-Content $VOL_DB_FILE | Select-Object -uniq | ForEach-Object {
                                 $VolName=$_.split(':')[0]
                                 $VolSnapshotPolicy=$_.split(':')[1]
                                 $VolSisPolicy=$_.split(':')[2]
                                 $VolSisSchedule=$_.split(':')[3]
                                 $VolSisState=$_.split(':')[4]
-                                Write-LogDebug "Volume Options [$VolName] SnapshotPolicy [$VolSnapshotPolicy] SisPolicy [$VolSisPolicy] SisSchedule [$VolSisSchedule]"
-                                if($VolSisPolicy.length -eq 0 -and $VolSisSchedule.length -eq 0){
-                                    Write-LogDebug "Ignore volume [$VolName]"
-                                    return
+                                if($_.split(':').count -gt 5){
+                                    $VolSisEfficiencyMode=$_.split(':')[5]
+                                    $VolSisCompressionAlgorithm=$_.split(':')[6]
+                                    Write-LogDebug "Volume Options [$VolName] SnapshotPolicy [$VolSnapshotPolicy] SisPolicy [$VolSisPolicy] SisSchedule [$VolSisSchedule] EfficiencyMode [$VolSisEfficiencyMode] CompressionAlgorithm [$VolSisCompressionAlgorithm]"
                                 }
+                                else{
+                                    $VolSisEfficiencyMode=$null
+                                    $VolSisCompressionAlgorithm=$null
+                                    Write-LogDebug "Volume Options [$VolName] SnapshotPolicy [$VolSnapshotPolicy] SisPolicy [$VolSisPolicy] SisSchedule [$VolSisSchedule]"
+                                }
+                                
                                 Write-LogDebug "Get-NcVol -Controller $myController -VserverContext $CloneDR -Volume $VolName"
                                 $myVol = Get-NcVol -Controller $myController -VserverContext $CloneDR -Volume $VolName  -ErrorVariable ErrorVar
                                 if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+                                <# if($VolSisPolicy.length -eq 0 -and $VolSisSchedule.length -eq 0){
+                                    Write-LogDebug "Ignore volume [$VolName]"
+                                    continue
+                                } #>
                                 if ( $null -ne $myVol ) 
                                 {
                                     $myVolSnapshotPolicy=$myVol.VolumeSnapshotAttributes.SnapshotPolicy
@@ -23459,6 +23521,28 @@ Function set_vol_options_from_voldb (
                                             Write-LogDebug "Failed to disable SIS reason [$ErrorVar]"
                                         }
                                     }
+                                    if($null -ne $VolSisEfficiencyMode -or $null -ne  $VolSisCompressionAlgorithm){
+                                        # need to check ontap version to see iof we can apply these settings
+                                        $OntapVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $myController)[0].VersionTuple.Generation)+','+[string]((Get-NcSystemVersionInfo -Controller $myController)[0].VersionTuple.Major)))
+                                        $OntapVer=(Get-NcSystemVersionInfo -Controller $myController)[0].VersionTuple | Join-String
+                                        Write-LogDebug "[$myController] ONTAP Version       [$OntapVer]" 
+                                        if($OntapVersion -ge 9.10){
+                                            $query=@{vserver=$CloneDR;volume=$VolName} | ConvertTo-Json
+                                            Write-LogDebug "Invoke-NcCli -Command volume efficiency show -Query $query -Controller $myController -Fields storage-efficiency-mode,compression-algorithm"
+                                            $SISdetails=Invoke-NcCli -Command "volume efficiency show" -Query $query -Controller $myController -Fields "storage-efficiency-mode,compression-algorithm"
+                                            if($? -ne $True){Write-LogError "Failed to get volume infos"}
+                                            $mySISdetails=$SISdetails.Value | ConvertFrom-Json
+                                            $myPrimaryStorageEfficiencyMode=$mySISdetails.storage_efficiency_mode
+                                            $myPrimaryCompressionAlgorithm=$mySISdetails.compression_algorithm
+                                            if($myPrimaryStorageEfficiencyMode -ne $VolSisEfficiencyMode -or $myPrimaryCompressionAlgorithm -ne $VolSisCompressionAlgorithm){
+                                                Write-Log "[$CloneDR] volume [$VolName] need to change Storage Efficiency mode with [$VolSisEfficiencyMode] and Compression Algotrithm with [$VolSisCompressionAlgorithm]"
+                                                $body=@{"storage-efficiency-mode"=$VolSisEfficiencyMode}
+                                                Write-LogDebug "Invoke-NcCli -Command vol efficiency modify -query $query -body $body -Controller $myController"
+                                                $ret=Invoke-NcCli -Command "vol efficiency modify" -query $query -body $body -Controller $myController -ErrorVariable ErrorVar
+                                                if($? -ne $True){Write-LogError "Failed to modify storage efficiency mode on volume [$VolName] reason [$ErrorVar]"}
+                                            }
+                                        }
+                                    }
                                 }
                             }   
                         }
@@ -23540,20 +23624,30 @@ Function set_vol_options_from_voldb (
                         } 
                         else 
                         {
-                            Get-Content $VOL_DB_FILE | Select-Object -uniq | foreach {
+                            Get-Content $VOL_DB_FILE | Select-Object -uniq | ForEach-Object {
                                 $VolName=$_.split(':')[0]
                                 $VolSnapshotPolicy=$_.split(':')[1]
                                 $VolSisPolicy=$_.split(':')[2]
                                 $VolSisSchedule=$_.split(':')[3]
                                 $VolSisState=$_.split(':')[4]
-                                Write-LogDebug "Volume Options [$VolName] SnapshotPolicy [$VolSnapshotPolicy] SisPolicy [$VolSisPolicy] SisSchedule [$VolSisSchedule]"
-                                if($VolSisPolicy.length -eq 0 -and $VolSisSchedule.length -eq 0){
-                                    Write-LogDebug "Ignore volume [$VolName]"
-                                    return
+                                if($_.split(':').count -gt 5){
+                                    $VolSisEfficiencyMode=$_.split(':')[5]
+                                    $VolSisCompressionAlgorithm=$_.split(':')[6]
+                                    Write-LogDebug "Volume Options [$VolName] SnapshotPolicy [$VolSnapshotPolicy] SisPolicy [$VolSisPolicy] SisSchedule [$VolSisSchedule] EfficiencyMode [$VolSisEfficiencyMode] CompressionAlgorithm [$VolSisCompressionAlgorithm]"
                                 }
+                                else{
+                                    $VolSisEfficiencyMode=$null
+                                    $VolSisCompressionAlgorithm=$null
+                                    Write-LogDebug "Volume Options [$VolName] SnapshotPolicy [$VolSnapshotPolicy] SisPolicy [$VolSisPolicy] SisSchedule [$VolSisSchedule]"
+                                }
+                                
                                 Write-LogDebug "Get-NcVol -Controller $myController -VserverContext $myVserver -Volume $VolName"
                                 $myVol = Get-NcVol -Controller $myController -VserverContext $myVserver -Volume $VolName  -ErrorVariable ErrorVar
                                 if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+                                <# if($VolSisPolicy.length -eq 0 -and $VolSisSchedule.length -eq 0){
+                                    Write-LogDebug "Ignore volume [$VolName]"
+                                    continue
+                                } #>
                                 if ( $null -ne $myVol ) 
                                 {
                                     $myVolSnapshotPolicy=$myVol.VolumeSnapshotAttributes.SnapshotPolicy
@@ -23650,6 +23744,28 @@ Function set_vol_options_from_voldb (
                                         }catch{
                                             $ErrorVar = $_.Exception.Message
                                             Write-LogDebug "Failed to disable SIS reason [$ErrorVar]"
+                                        }
+                                    }
+                                    if($null -ne $VolSisEfficiencyMode -or $null -ne  $VolSisCompressionAlgorithm){
+                                        # need to check ontap version to see iof we can apply these settings
+                                        $OntapVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $myController)[0].VersionTuple.Generation)+','+[string]((Get-NcSystemVersionInfo -Controller $myController)[0].VersionTuple.Major)))
+                                        $OntapVer=(Get-NcSystemVersionInfo -Controller $myController)[0].VersionTuple | Join-String
+                                        Write-LogDebug "[$myController] ONTAP Version       [$OntapVer]" 
+                                        if($OntapVersion -ge 9.10){
+                                            $query=@{vserver=$myVserver;volume=$VolName} | ConvertTo-Json
+                                            Write-LogDebug "Invoke-NcCli -Command volume efficiency show -Query $query -Controller $myController -Fields storage-efficiency-mode,compression-algorithm"
+                                            $SISdetails=Invoke-NcCli -Command "volume efficiency show" -Query $query -Controller $myController -Fields "storage-efficiency-mode,compression-algorithm"
+                                            if($? -ne $True){Write-LogError "Failed to get volume infos"}
+                                            $mySISdetails=$SISdetails.Value | ConvertFrom-Json
+                                            $myPrimaryStorageEfficiencyMode=$mySISdetails.storage_efficiency_mode
+                                            $myPrimaryCompressionAlgorithm=$mySISdetails.compression_algorithm
+                                            if($myPrimaryStorageEfficiencyMode -ne $VolSisEfficiencyMode){
+                                                Write-Log "[$myVserver] volume [$VolName] need to change Storage Efficiency mode with [$VolSisEfficiencyMode] and Compression Algotrithm with [$VolSisCompressionAlgorithm]"
+                                                $body=@{"storage-efficiency-mode"=$VolSisEfficiencyMode} | ConvertTo-Json
+                                                Write-LogDebug "Invoke-NcCli -Command vol efficiency modify -query $query -body $body -Controller $myController"
+                                                $ret=Invoke-NcCli -Command "vol efficiency modify" -query $query -body $body -Controller $myController -ErrorVariable ErrorVar
+                                                if($? -ne $True){Write-LogError "Failed to modify storage efficiency mode on volume [$VolName] reason [$ErrorVar]"}
+                                            }
                                         }
                                     }
                                 }
@@ -23926,10 +24042,10 @@ Function set_shareacl_options_from_shareacldb (
                         {
                             $out=$ShareAclList_DB.Add($temp)    
                         }
-                        $ShareList=$ShareAclList_DB | foreach{$_.split(";")[0]} | sort -Unique
+                        $ShareList=$ShareAclList_DB | ForEach-Object{$_.split(";")[0]} | Sort-Object -Unique
                         Write-LogDebug "ShareList [$ShareList]"
                         foreach($Share in $ShareList){
-                            $AclList_from_File=$ShareAclList_DB | sls $($Share.Replace("$","\$")+";")
+                            $AclList_from_File=$ShareAclList_DB | Select-String $($Share.Replace("$","\$")+";")
                             Write-LogDebug "AclList_from_File [$AclList_from_File]"
                             Write-LogDebug "Get-NcCifsShareACL -VserverContext $myVserver -controller $myController -Share $Share  -ErrorVariable ErrorVar"
         					$ShareAclList_LIVE = Get-NcCifsShareACL -VserverContext $myVserver -controller $myController -Share $Share  -ErrorVariable ErrorVar 
@@ -24554,6 +24670,7 @@ Function create_quota_rules_from_quotadb (
                         }
                         Get-Content $QUOTA_DB_FILE | Select-Object -uniq | ForEach-Object {
                             Write-LogDebug "[$_]"
+                            $bodyquota=''
                             $ClusterName=$_.split(':')[0]
                             if($CloneDR.length -eq 0){
                                 $SVM=$_.split(':')[1]
@@ -24567,7 +24684,14 @@ Function create_quota_rules_from_quotadb (
                             $SoftDiskLimit=$_.split(':')[8]
                             $SoftFileLimit=$_.split(':')[9]
                             $Threshold=$_.split(':')[10]
-                            Write-LogDebug "${ClusterName}:${SVM}:${Volume}:${Qtree}:${QuotaType}:${QuotaTarget}:${DiskLimit}:${FileLimit}:${SoftDiskLimit}:${SoftFileLimit}:${Threshold}"
+                            if($QuotaType -eq "tree"){
+                                if($QuotaTarget.split("/").count -eq 4){
+                                    $QtreeFound=$QuotaTarget.split('/')[-1]
+                                    Write-LogDebug "change Qtree [$Qtree] with Quotatarget [$QuotaTarget] qtree [$QtreeFound]"
+                                    $Qtree=$QtreeFound
+                                }
+                            }
+                            Write-LogDebug "[${ClusterName}]:[${SVM}]:[${Volume}]:[${Qtree}]:[${QuotaType}]:[${QuotaTarget}]:[${DiskLimit}]:[${FileLimit}]:[${SoftDiskLimit}]:[${SoftFileLimit}]:[${Threshold}]"
                             Write-LogDebug "volume informations [${ClusterName}] [${SVM}] [${Volume}]"
                             Write-LogDebug "Get-NcVol -Controller $myController -VserverContext $SVM -Name $Volume"
                             $VOL= Get-NcVol -Controller $myController -VserverContext $SVM -Name $Volume
@@ -24660,20 +24784,22 @@ Function create_quota_rules_from_quotadb (
                                             if ( $? -ne $True -and $ErrorVar -ne "duplicate entry" ) { Write-LogDebug "Add-NcQuota failed on a duplicate entry [$ErrorVar]"; $Return = $False }
                                             if(-not $VolumeListToRestartQuota.Contains($($SVM + ':' + $Volume))){$VolumeListToRestartQuota+=$SVM + ':' + $Volume}
                                         }else{
-                                            $body=@{}
-                                            if ( $DiskLimit -ne '-' -and $null -ne $DiskLimit ){$body.space+=@{"hard_limit"=$DiskLimit}}
-                                            if ( $SoftDiskLimit -ne '-' -and $null -ne $SoftDiskLimit ){$body.space+=@{"soft_limit"=$SoftDiskLimit}}
-                                            if ( $FileLimit -ne '-' -and $null -ne $FileLimit ){$body.files+=@{"hard_limit"=$FileLimit}}
-                                            if ( $SoftFileLimit -ne '-' -and $null -ne $SoftFileLimit ){$body.files+=@{"soft_limit"=$SoftFileLimit}}
-                                            if ( $Qtree -eq '-' -or $null -eq $Qtree){$body.qtree=@{"name"=""}}else{$body.qtree=@{"name"=$Qtree}}
-                                            $body.type="tree"
-                                            $body.volume=@{"name"=$Volume}
-                                            $body.svm=@{"name"=$SVM}
-                                            $body=$body | ConvertTo-Json
+                                            $bodyquota=@{}
+                                            $bodyquota.space=@{}
+                                            $bodyquota.files=@{}
+                                            if ( $DiskLimit -ne '-' -and $null -ne $DiskLimit ){$bodyquota.space+=@{"hard_limit"=$DiskLimit}}
+                                            if ( $SoftDiskLimit -ne '-' -and $null -ne $SoftDiskLimit ){$bodyquota.space+=@{"soft_limit"=$SoftDiskLimit}}
+                                            if ( $FileLimit -ne '-' -and $null -ne $FileLimit ){$bodyquota.files+=@{"hard_limit"=$FileLimit}}
+                                            if ( $SoftFileLimit -ne '-' -and $null -ne $SoftFileLimit ){$bodyquota.files+=@{"soft_limit"=$SoftFileLimit}}
+                                            if ( $Qtree -eq '-' -or $null -eq $Qtree){$bodyquota.qtree=@{"name"=""}}else{$bodyquota.qtree=@{"name"=$Qtree}}
+                                            $bodyquota.type="tree"
+                                            $bodyquota.volume=@{"name"=$Volume}
+                                            $bodyquota.svm=@{"name"=$SVM}
+                                            $bodyquota=$bodyquota | ConvertTo-Json
                                             $Cred=get_local_cDotcred($myController)
                                             $url=$("https://"+$myController.Name+"/api/storage/quota/rules")
-                                            Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck"
-                                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                            Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck"
+                                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck -ErrorVariable ErrorVar
                                             if($? -ne $True){
                                                 Write-LogError "ERROR: Unable to post [$url]. Reason [$ErrorVar]"
                                                 Write-LogDebug "[$SVM]: end"
@@ -24741,6 +24867,15 @@ Function create_quota_rules_from_quotadb (
                                         if($null -eq $Qtree -or $Qtree.length -eq 0){
                                             $Qtree=""
                                         }
+                                        if( ( $DiskLimit -eq '-' -or $null -eq $DiskLimit ) -and 
+                                            ( $SoftDiskLimit -eq '-' -or $null -eq $SoftDiskLimit ) -and 
+                                            ( $FileLimit -eq '-' -or $null -eq $FileLimit ) -and 
+                                            ( $SoftFileLimit -eq '-' -or $null -eq $SoftFileLimit ) -and 
+                                            ( $Qtree -eq '-' -or $null -eq $Qtree -or $Qtree -eq "" ) -and 
+                                            ($QuotaTarget -eq "*")){
+                                                Write-LogDebug "Ignore this default USER quota rule"
+                                                break
+                                            }
                                         if($Global:PSTKCall -ne "Rest"){
                                             Write-LogDebug "Add-NcQuota -User $QuotaTarget -Volume $Volume -Controller $myController -Vserver $SVM -Qtree $Qtree $Opts -Policy $myPolicy"
                                             $Output=Add-NcQuota -User $QuotaTarget -Volume $Volume -Controller $myController -Vserver $SVM -Qtree $Qtree @NcQuotaParamList -Policy $myPolicy  -ErrorVariable ErrorVar
@@ -24748,28 +24883,30 @@ Function create_quota_rules_from_quotadb (
                                             if ( $? -ne $True ) {Write-LogDebug "Add-NcQuota failed [$ErrorVar]"; $Return = $False }
                                             if(-not $VolumeListToRestartQuota.Contains($($SVM + ':' + $Volume))){$VolumeListToRestartQuota+=$SVM + ':' + $Volume}
                                         }else{
-                                            $body=@{}
-                                            if ( $DiskLimit -ne '-' -and $null -ne $DiskLimit ){$body.space+=@{"hard_limit"=$DiskLimit}}
-                                            if ( $SoftDiskLimit -ne '-' -and $null -ne $SoftDiskLimit ){$body.space+=@{"soft_limit"=$SoftDiskLimit}}
-                                            if ( $FileLimit -ne '-' -and $null -ne $FileLimit ){$body.files+=@{"hard_limit"=$FileLimit}}
-                                            if ( $SoftFileLimit -ne '-' -and $null -ne $SoftFileLimit ){$body.files+=@{"soft_limit"=$SoftFileLimit}}
-                                            if ( $Qtree -eq '-' -or $null -eq $Qtree){$body.qtree=@{"name"=""}}else{$body.qtree=@{"name"=$Qtree}}
-                                            if ( $PerformUserMapping -eq $True ){$body.user_mapping=$True}else{$body.user_mapping=$False}
-                                            $body.type="user"
-                                            $body.volume=@{"name"=$Volume}
-                                            $body.svm=@{"name"=$SVM}
+                                            $bodyquota=@{}
+                                            $bodyquota.space=@{}
+                                            $bodyquota.files=@{}
+                                            if ( $DiskLimit -ne '-' -and $null -ne $DiskLimit ){$bodyquota.space+=@{"hard_limit"=$DiskLimit}}
+                                            if ( $SoftDiskLimit -ne '-' -and $null -ne $SoftDiskLimit ){$bodyquota.space+=@{"soft_limit"=$SoftDiskLimit}}
+                                            if ( $FileLimit -ne '-' -and $null -ne $FileLimit ){$bodyquota.files+=@{"hard_limit"=$FileLimit}}
+                                            if ( $SoftFileLimit -ne '-' -and $null -ne $SoftFileLimit ){$bodyquota.files+=@{"soft_limit"=$SoftFileLimit}}
+                                            if ( $Qtree -eq '-' -or $null -eq $Qtree){$bodyquota.qtree=@{"name"=""}}else{$bodyquota.qtree=@{"name"=$Qtree}}
+                                            if ( $PerformUserMapping -eq $True ){$bodyquota.user_mapping=$True}else{$bodyquota.user_mapping=$False}
+                                            $bodyquota.type="user"
+                                            $bodyquota.volume=@{"name"=$Volume}
+                                            $bodyquota.svm=@{"name"=$SVM}
                                             if ($QuotaTarget -eq '-' -or $null -eq $QuotaTarget){
-                                                $body.users=@()
-                                                $body.users+=@{"name"=""}
+                                                $bodyquota.users=@()
+                                                $bodyquota.users+=@{"name"=""}
                                             }else{
-                                                $body.users=@()
-                                                $body.users+=@{"name"=$QuotaTarget}
+                                                $bodyquota.users=@()
+                                                $bodyquota.users+=@{"name"=$QuotaTarget}
                                             }
-                                            $body=$body | ConvertTo-Json
+                                            $bodyquota=$bodyquota | ConvertTo-Json
                                             $Cred=get_local_cDotcred($myController)
                                             $url=$("https://"+$myController.Name+"/api/storage/quota/rules")
-                                            Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck"
-                                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                            Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck"
+                                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck -ErrorVariable ErrorVar
                                             if($? -ne $True){
                                                 Write-LogError "ERROR: Unable to post [$url]. Reason [$ErrorVar]"
                                                 Write-LogDebug "[$SVM]: end"
@@ -24843,26 +24980,28 @@ Function create_quota_rules_from_quotadb (
                                             if ( $? -ne $True -and $ErrorVar -ne "duplicate entry" ) {Write-LogDebug "Add-NcQuota failed on a duplicate entry [$ErrorVar]"; $Return = $False }
                                             if(-not $VolumeListToRestartQuota.Contains($($SVM + ':' + $Volume))){$VolumeListToRestartQuota+=$SVM + ':' + $Volume}
                                         }else{
-                                            $body=@{}
-                                            if ( $DiskLimit -ne '-' -and $null -ne $DiskLimit ){$body.space+=@{"hard_limit"=$DiskLimit}}
-                                            if ( $SoftDiskLimit -ne '-' -and $null -ne $SoftDiskLimit ){$body.space+=@{"soft_limit"=$SoftDiskLimit}}
-                                            if ( $FileLimit -ne '-' -and $null -ne $FileLimit ){$body.files+=@{"hard_limit"=$FileLimit}}
-                                            if ( $SoftFileLimit -ne '-' -and $null -ne $SoftFileLimit ){$body.files+=@{"soft_limit"=$SoftFileLimit}}
-                                            if ( $Qtree -eq '-' -or $null -eq $Qtree){$body.qtree=@{"name"=""}}else{$body.qtree=@{"name"=$Qtree}}
-                                            $body.type="group"
-                                            $body.volume=@{"name"=$Volume}
-                                            $body.svm=@{"name"=$SVM}
+                                            $bodyquota=@{}
+                                            $bodyquota.space=@{}
+                                            $bodyquota.files=@{}
+                                            if ( $DiskLimit -ne '-' -and $null -ne $DiskLimit ){$bodyquota.space+=@{"hard_limit"=$DiskLimit}}
+                                            if ( $SoftDiskLimit -ne '-' -and $null -ne $SoftDiskLimit ){$bodyquota.space+=@{"soft_limit"=$SoftDiskLimit}}
+                                            if ( $FileLimit -ne '-' -and $null -ne $FileLimit ){$bodyquota.files+=@{"hard_limit"=$FileLimit}}
+                                            if ( $SoftFileLimit -ne '-' -and $null -ne $SoftFileLimit ){$bodyquota.files+=@{"soft_limit"=$SoftFileLimit}}
+                                            if ( $Qtree -eq '-' -or $null -eq $Qtree){$bodyquota.qtree=@{"name"=""}}else{$bodyquota.qtree=@{"name"=$Qtree}}
+                                            $bodyquota.type="group"
+                                            $bodyquota.volume=@{"name"=$Volume}
+                                            $bodyquota.svm=@{"name"=$SVM}
                                             if ($QuotaTarget -eq '-' -or $null -eq $QuotaTarget){
-                                                $body.group=@{"name"=""}
+                                                $bodyquota.group=@{"name"=""}
                                             }else{
-                                                $body.group=@()
-                                                $body.group+=@{"name"=$QuotaTarget}
+                                                $bodyquota.group=@()
+                                                $bodyquota.group+=@{"name"=$QuotaTarget}
                                             }
-                                            $body=$body | ConvertTo-Json
+                                            $bodyquota=$bodyquota | ConvertTo-Json
                                             $Cred=get_local_cDotcred($myController)
                                             $url=$("https://"+$myController.Name+"/api/storage/quota/rules")
-                                            Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck"
-                                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                            Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck"
+                                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck -ErrorVariable ErrorVar
                                             if($? -ne $True){
                                                 Write-LogError "ERROR: Unable to post [$url]. Reason [$ErrorVar]"
                                                 Write-LogDebug "[$SVM]: end"
@@ -25040,7 +25179,7 @@ Try {
                 Start-Sleep 2 
             }
 
-            Write-Log "[$Vserver] Restart Quota on volume [$Volume]"
+            Write-Log "[$Vserver] Restart quota on volume [$Volume]"
             Write-LogDebug "restart_quota_vol_from_list: Enable-NcQuota -Vserver $Vserver -Volume $Volume"
             Start-Sleep 5 
             $isTimeOut = $false
