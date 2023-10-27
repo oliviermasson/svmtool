@@ -6697,6 +6697,72 @@ Catch {
 }
 }
 
+Function REST_patch_CIFS_server(
+    [System.Collections.Hashtable] $bodycifs,
+    [System.Management.Automation.PSCredential] $ADcred,
+    [NetApp.Ontapi.Filer.C.NcController] $controller,
+    [string] $myVserver
+){
+try{
+    $Return=$True
+    Write-LogDebug "[$myVserver]: start"
+
+    $cred=get_local_cDotcred($controller)
+    Write-LogDebug "Get-NcVserver -Name $myVserver -Controller $controller"
+    $VserverDetails=Get-NcVserver -Name $myVserver -Controller $controller -ErrorVariable ErrorVar
+    if($? -ne $True){Write-LogError "ERROR: Failed to get Vserver detail reason [$ErrorVar]"}
+    $VserverDetailsUUID=$VserverDetails.UUid
+    $url=$("https://"+$controller.Name+"/api/protocols/cifs/services/"+$VserverDetailsUUID+"?force=true")
+    $bodycifs.ad_domain+=@{
+        password=[Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($ADcred.Password))
+        user=$ADcred.UserName
+    }
+    [System.Collections.Hashtable]$cleanbody=$bodycifs
+    [string]$bodycifs=$bodycifs | ConvertTo-Json
+    $cleanbody.ad_domain.password="xxxxxxxxxxxxxx"
+    [string]$cleanbody=$cleanbody | ConvertTo-Json
+    Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $cred -Body $cleanbody -SkipCertificateCheck"
+    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $cred -Body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
+    if($? -ne $True){
+        Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
+        $Return=$ret
+    }
+    $JobUuid=$ret.job.uuid
+    $StartTime=Get-date
+    $Timeout=$False
+    $JobDone=$False
+    While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+        $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $controller
+        if($JobDetail.JobCompletion -eq "success"){
+            $JobDone=$True
+            break
+        }else{
+            $JobStatus=$JobDetail.JobState
+            Write-LogDebug "[$myVserver] Patch CIFS server status [$JobStatus]"
+            if($JobStatus -eq "failure"){
+                $JobCompletion=$JobDetail.JobCompletion
+                Write-LogError "[$myVserver] Patch CIFS server failed  [$JobCompletion]"
+                $Return=$False
+                break
+            }
+        }
+        $CurrentTime=Get-date
+        $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+        if($TimeSpend -gt $Global:STOP_TIMEOUT){
+            Write-LogWarn "[$myVserver] Patch CIFS server take too much time. Check in Ontap its status"
+            $Timeout=$True
+            return $False
+        }
+        Start-Sleep 5
+    }
+    Write-LogDebug "[$myVserver]: end"
+    return $Return
+}catch{
+    Error_Handling $_ $myPrimaryVserver
+    return $False
+}   
+}
+
 Function REST_set_lif(
     [string] $myVserver,
     [string] $myLIFuuid,
@@ -10055,6 +10121,75 @@ Function wait_snapmirror_dr(
     }
 }
 
+#############################################################################################
+# Create lif with REST only
+
+Function REST_create_lif(
+    [string] $Name, 
+    [string] $Vserver,
+    [string] $ServicePolicy,
+    [string] $Node,
+    [string] $Port,
+    [string] $DataProtocols,
+    [string] $Address,
+    [string] $NetmaskLength,
+    [string] $DnsDomain,
+    [string] $AdministrativeStatus,
+    [string] $AutoRevert,
+    [NetApp.Ontapi.Filer.C.NcController] $Controller
+) {
+try{
+    Write-LogDebug "[$Vserver]: start"
+    $myCredential = get_local_cDotcred($Controller)
+    $url=$("https://"+$Controller.Name+"/api/network/ip/interfaces")
+    $bodylif=@{
+        svm=@{
+            name=$Vserver
+        }
+        ip=@{
+            address=$Address
+            netmask=$NetmaskLength
+        }
+        location=@{
+            home_node=$Node
+            home_port=$Port
+        }
+        name=$Name
+        scope="svm"
+        service_policy=$ServicePolicy
+    }
+    if($DnsDomain.length -gt 0){
+        $bodylif.dns_zone=$DnsDomain
+    }
+    if($AdministrativeStatus -eq "up"){
+        $bodylif.enabled=$True
+    }else{
+        $bodylif.enabled=$False
+    }
+    if($Autorevert -eq "True"){
+        $bodylif.location+=@{
+            auto_revert=$True
+        }
+    }
+    $bodylif=$bodylif | ConvertTo-Json
+    Write-LogDebug "Invoke-RestMethod -Method post -Uri $url -Credential $myCredential -body $bodylif -SkipCertificateCheck"
+    $LifCreate=Invoke-RestMethod -Method 'post' -Uri $url -Credential $myCredential -body $bodylif -SkipCertificateCheck -ErrorVariable ErrorVar
+    if($? -ne $True){
+        Write-LogError "ERROR: Unable to create lif. Reason [$ErrorVar]"
+        Write-LogDebug "[$Vserver]: end"
+        return $False
+    }
+    Write-LogDebug "[$Vserver]: stop"
+    return $True
+}catch{
+    Error_Handling $_ $Vserver
+	return $False
+}
+}
+
+#############################################################################################
+# Create snapmirror relationship with REST only
+
 Function REST_create_snapmirror(
     [NetApp.Ontapi.Filer.C.NcController] $myPrimaryController,
 	[NetApp.Ontapi.Filer.C.NcController] $mySecondaryController,
@@ -11257,6 +11392,7 @@ Try {
             }
             if ( $null -eq $SecondaryInterface ) 
             {
+                Write-LogDebug "Lif [$SecondaryInterface] does not exists on secondary"
                 $ANS1 = 'y' ; $ANS2 = 'n'
                 while ( ( $ANS1 -eq 'y' ) -and ( $ANS2 -eq 'n' ) ) 
                 {
@@ -11370,11 +11506,18 @@ Try {
                                     # $SecondaryInterface=New-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver  -Role $PrimaryRole -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -FirewallPolicy $PrimaryFirewallPolicy -Address $myIpAddr -Netmask $myNetMask -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus down -AutoRevert $PrimaryIsAutoRevert  -Controller $mySecondaryController  -ErrorVariable ErrorVar
                                 }
                                 if($Global:PSTKCall -match "Rest|ZapiEnforced"){
-                                    Write-LogDebug "New-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver -ServicePolicy $PrimaryServicePolicy -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -Address $myIpAddr -NetmaskLength $PrimaryNetMaskLength -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus $AdminStatus -AutoRevert $PrimaryIsAutoRevert -Controller $mySecondaryController -ErrorVariable ErrorVar"
-                                    $SecondaryInterface=New-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver -ServicePolicy $PrimaryServicePolicy -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -Address $myIpAddr -NetmaskLength $PrimaryNetMaskLength -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus $AdminStatus -AutoRevert $PrimaryIsAutoRevert -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                    $ret=REST_create_lif -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver -ServicePolicy $PrimaryServicePolicy -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -Address $myIpAddr -NetmaskLength $PrimaryNetMaskLength -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus $AdminStatus -AutoRevert $PrimaryIsAutoRevert -Controller $mySecondaryController
+                                    if($ret -eq $False){
+                                        Write-LogError "ERROR : Failed to create lif [$PrimaryInterfaceName]"
+                                        clean_and_exit 1
+                                    }
                                 }else{
                                     Write-LogDebug "New-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver  -Role $PrimaryRole -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -FirewallPolicy $PrimaryFirewallPolicy -Address $myIpAddr -Netmask $myNetMask -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus $AdminStatus -AutoRevert $PrimaryIsAutoRevert  -Controller $mySecondaryController"
                                     $SecondaryInterface=New-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver  -Role $PrimaryRole -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -FirewallPolicy $PrimaryFirewallPolicy -Address $myIpAddr -Netmask $myNetMask -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus $AdminStatus -AutoRevert $PrimaryIsAutoRevert  -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                }
+                                if($? -ne $True){
+                                    Write-LogError "Failed to create LIT [$PrimaryInterfaceName] reason [$ErrorVar]"
+                                    clean_and_exit 1
                                 }
                                 #exit 0
                                 if($BackupOfGateway){
@@ -11453,16 +11596,42 @@ Try {
                         }
                     }
                 }
-            }
-            else 
-            {
+            }else{
                 $Return = $True
                 Write-Log "[$workOn] Network Interface [$PrimaryInterfaceName] already exists"
+                Write-LogDebug "Get-NcNetInterface -InterfaceName $PrimaryInterfaceName -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
                 $SecondaryInterface  = Get-NcNetInterface -InterfaceName $PrimaryInterfaceName -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
+                if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
                 $SecondaryFirewallPolicy=$SecondaryInterface.FirewallPolicy
                 $SecondaryInterfaceUuid=$SecondaryInterface.LifUuid
-                if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcNetInterface failed [$ErrorVar]" }
+                $SecondaryAdminStatus=$SecondaryInterface.AdministrativeStatus
+                $SecondaryServicePolicy=$SecondaryInterface.ServicePolicy
                 $SecondaryInterfaceAutoReverse=$SecondaryInterface.IsAutoRevert
+                if($SecondaryAdminStatus -eq "up"){
+                    Write-Log "[$workOn] set lif [$PrimaryInterfaceName] down"
+                    Write-LogDebug "Set-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController"
+                    $ret=Set-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController -ErrorVariable ErrorVar
+                    if($? -ne $True){Write-LogError "ERROR: Failed to set lif [$PrimaryInterfaceName] down. Reason [$ErrorVar]"}
+                }
+                if($SecondaryServicePolicy -ne $PrimaryServicePolicy){
+                    if($Global:OntapSecondaryVersion -ge 9.10){
+                        Write-Log "[$workOn] Modify lif [$PrimaryInterfaceName] from Service Policy [$SecondaryServicePolicy] to [$PrimaryServicePolicy]"
+                        $myCred=get_local_cDotcred($mySecondaryController)
+                        $bodylif=@{
+                            service_policy=@{
+                                name=$PrimaryServicePolicy
+                            }
+                        } | ConvertTo-Json
+                        $url=$("https://"+$mySecondaryController.Name+"/api/network/ip/interfaces/"+$SecondaryInterfaceUuid)
+                        Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $myCred -body $bodylif -SkipCertificateCheck"
+                        $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $myCred -body $bodylif -SkipCertificateCheck -ErrorVariable ErrorVar
+                        if($? -ne $True){
+                            Write-LogError "ERROR: Unable to patch LIF service-policy. Reason [$ErrorVar]"
+                            Write-LogDebug "[$workOn]: end"
+                            return $False
+                        }
+                    }
+                }
                 if($PrimaryIsAutoRevert -ne $SecondaryInterfaceAutoReverse)
                 {
                     Write-Log "[$workOn] Network Interface [$PrimaryInterfaceName] Auto Reverse is different"
@@ -16729,10 +16898,10 @@ Try {
                 $TempCifsLif=Get-NcNetInterface -Vserver $mySecondaryVserver -Controller $mySecondaryController | Where-Object {$_.InterfaceName -match "^tmp_lif_to_join_in_ad_"}
                 if($null -ne $TempCifsLif){
                     Write-LogDebug "[$workOn] Removing Temporary LIF"
-                    Write-LogDebug "Set-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController -ErrorVariable ErrorVar"
+                    Write-LogDebug "Set-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController"
                     $out = Set-NcNetInterface -Name $TempCifsLif.InterfaceName -Vserver $mySecondaryVserver -AdministrativeStatus down -Controller $mySecondaryController -ErrorVariable ErrorVar
                     if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcNetInterface failed [$ErrorVar]" ; }
-                    Write-LogDebug "Remove-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $mySecondaryVserver -Confirm:$false -Controller $mySecondaryController -ErrorVariable ErrorVar"
+                    Write-LogDebug "Remove-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $mySecondaryVserver -Confirm:$false -Controller $mySecondaryController"
                     $out = Remove-NcNetInterface -Name $TempCifsLif.InterfaceName -Vserver $mySecondaryVserver -Confirm:$false -Controller $mySecondaryController -ErrorVariable ErrorVar
                     if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Remove-NcNetInterface failed [$ErrorVar]" ; }
                 }
@@ -18222,15 +18391,33 @@ try{
     $Return = $True
     Write-LogDebug "start migrate_cifs_server"
     Write-LogDebug "Get-NcCifsServer -VserverContext $myPrimaryVserver -Controller $myPrimaryController"
-    $PrimaryCIFSserver=Get-NcCifsServer -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
-	if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcCifsServer failed [$ErrorVar]" }
+    if($Global:PSTKCall -ne "Rest"){
+        $PrimaryCIFSserver=Get-NcCifsServer -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
+	    if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcCifsServer failed [$ErrorVar]" }
+    }else{
+        $Credential = get_local_cDotcred($myPrimaryController)
+        $url=$("https://"+$myPrimaryController.Name+"/api/protocols/cifs/services?svm.name="+$myPrimaryVserver+"&fields=**")
+        Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+        $PrimaryCIFSserver=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+        if($? -ne $True){
+            Write-LogError "ERROR: Unable to get CIFS server details. Reason [$ErrorVar]"
+            return $False
+        }elseif($PrimaryCIFSserver.num_records -gt 0){
+            $PrimaryCIFSserver=$PrimaryCIFSserver.records[0]
+            $PrimaryCIFSidentity=$PrimaryCIFSserver.name
+            $PrimaryCIFSdomain=$PrimaryCIFSserver.ad_domain.fqdn
+            $PrimaryCIFSOU=$PrimaryCIFSserver.ad_domain.organizational_unit
+        }
+    }
     if ($null -eq $PrimaryCIFSserver){Write-LogDebug "No CIFS server, skip"; return $Return}
     
-
-    $PrimaryCIFSidentity=$PrimaryCIFSserver.CIFSServer
-    $PrimaryCIFSdomain=$PrimaryCIFSserver.Domain
-    $PrimaryCIFSOU=$PrimaryCIFSserver.OrganizationalUnit
+    if($Global:PSTKCall -ne "Rest"){
+        $PrimaryCIFSidentity=$PrimaryCIFSserver.CIFSServer
+        $PrimaryCIFSdomain=$PrimaryCIFSserver.Domain
+        $PrimaryCIFSOU=$PrimaryCIFSserver.OrganizationalUnit
+    }
     $PrimaryClusterName = $myPrimaryController.Name
+    $PrimaryCIFSComment = $PrimaryCIFSserver.Comment
     $SecondaryClusterName=$mySecondaryController.Name
     if($Global:InsideMCC -eq $True){
     ###############################################################################
@@ -18438,23 +18625,43 @@ try{
 
         $Temporary_CIFS_server_identity="tmp_for_migrate" # Max 15 chars for netbios name
         Write-Log "[$myPrimaryVserver] Set CIFS server with a temporary name [$Temporary_CIFS_server_identity] on Cluster [$myPrimaryController]"
-        Write-LogDebug "Set-NcCifsServer -AdministrativeStatus down -ForceAccountOverwrite -CifsServer $Temporary_CIFS_server_identity -Domain $PrimaryCIFSdomain -AdminCredential $ADCred -VserverContext $myPrimaryVserver -controller $myPrimaryController"
-        $CifsServerInformations=Set-NcCifsServer -AdministrativeStatus "down" -ForceAccountOverwrite -CifsServer $Temporary_CIFS_server_identity -Domain $PrimaryCIFSdomain -AdminCredential $ADCred -VserverContext $myPrimaryVserver -controller $myPrimaryController  -ErrorVariable ErrorVar  -Confirm:$False
-        if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcCifsServer rename failed [$ErrorVar]" }
-       
-        # Analyse CIFS Job
-        if( (wait_cifs_modify_job -myController $myPrimaryController) -eq $False){
-            Clean_Throw "ERROR: a CIFS Modifying Job is running too long or Failed"
-        }
-
-        $NetBiosAliaseList=$CifsServerInformations.NetbiosAliases
-        Write-Log "[$myPrimaryVserver] Remove NetBios Aliases"
-        $out=Set-NcCifsServer -AdministrativeStatus "down" -CifsServer $Temporary_CIFS_server_identity -Domain $PrimaryCIFSdomain -AdminCredential $ADCred -VserverContext $myPrimaryVserver -controller $myPrimaryController  -ErrorVariable ErrorVar  -Confirm:$False -RemoveNetbiosAlias $NetBiosAliaseList
-        if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcCifsServer failed to remove NetBios Aliases [$ErrorVar]" }
+        Write-Log "[$myPrimaryVserver] and Remove NetBios Aliases"
+        if($Global:PSTKCall -ne "Rest"){
+            Write-LogDebug "Set-NcCifsServer -AdministrativeStatus down -ForceAccountOverwrite -CifsServer $Temporary_CIFS_server_identity -Domain $PrimaryCIFSdomain -AdminCredential $ADCred -VserverContext $myPrimaryVserver -controller $myPrimaryController"
+            $CifsServerInformations=Set-NcCifsServer -AdministrativeStatus "down" -ForceAccountOverwrite -CifsServer $Temporary_CIFS_server_identity -Domain $PrimaryCIFSdomain -AdminCredential $ADCred -VserverContext $myPrimaryVserver -controller $myPrimaryController  -ErrorVariable ErrorVar  -Confirm:$False
+            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcCifsServer rename failed [$ErrorVar]" }
         
-        # Analyse CIFS Job
-        if( (wait_cifs_modify_job -myController $myPrimaryController) -eq $False){
-            Clean_Throw "ERROR: a CIFS Modifying Job is running too long or Failed"
+            # Analyse CIFS Job
+            if( (wait_cifs_modify_job -myController $myPrimaryController) -eq $False){
+                Clean_Throw "ERROR: a CIFS Modifying Job is running too long or Failed"
+            }
+            $NetBiosAliaseList=$CifsServerInformations.NetbiosAliases
+            Write-LogDebug "Set-NcCifsServer -AdministrativeStatus down -CifsServer $Temporary_CIFS_server_identity -Domain $PrimaryCIFSdomain -AdminCredential $ADCred -VserverContext $myPrimaryVserver -controller $myPrimaryController -Confirm:False -RemoveNetbiosAlias $NetBiosAliaseList"
+            $out=Set-NcCifsServer -AdministrativeStatus "down" -CifsServer $Temporary_CIFS_server_identity -Domain $PrimaryCIFSdomain -AdminCredential $ADCred -VserverContext $myPrimaryVserver -controller $myPrimaryController  -ErrorVariable ErrorVar  -Confirm:$False -RemoveNetbiosAlias $NetBiosAliaseList
+            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcCifsServer failed to remove NetBios Aliases [$ErrorVar]" }
+
+            # Analyse CIFS Job
+            if( (wait_cifs_modify_job -myController $myPrimaryController) -eq $False){
+                Clean_Throw "ERROR: a CIFS Modifying Job is running too long or Failed"
+            }
+        }else{
+            $bodycifs=@{
+                ad_domain=@{
+                    fqdn=$PrimaryCIFSdomain
+                    organizational_unit=$PrimaryCIFSOU 
+                }
+                comment=$PrimaryCIFSComment
+                enabled=$False
+                name=$Temporary_CIFS_server_identity
+                netbios=@{
+                    aliases=@()
+                    enabled=$False
+                }
+            }
+            $ret=REST_patch_CIFS_server -bodycifs $bodycifs -ADCred $ADCred -controller $myPrimaryController -myVserver $myPrimaryVserver
+            if($ret -ne $True){
+                clean_Throw "ERROR: Fail to modify CIFS server"
+            }
         }
 
         Write-Log "[$myPrimaryVserver] Modify existing CIFS symlink with new identity [$Temporary_CIFS_server_identity]"
@@ -18495,26 +18702,46 @@ try{
             $Return = $False
         }
 
-        Write-Log "[$mySecondaryVserver] Set CIFS server up with identity of [$myPrimaryVserver] : [$PrimaryCIFSidentity]"
-        Write-LogDebug "Set-NcCifsServer -AdministrativeStatus up -ForceAccountOverwrite -CifsServer $PrimaryCIFSidentity -Domain $PrimaryCIFSdomain -AdminCredential $ADCred -VserverContext $mySecondaryVserver -controller $mySecondaryController"
-        $out=Set-NcCifsServer -AdministrativeStatus "up" -ForceAccountOverwrite -CifsServer $PrimaryCIFSidentity -Domain $PrimaryCIFSdomain -AdminCredential $ADCred -VserverContext $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar  -Confirm:$False
-        if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcCifsServer rename failed [$ErrorVar]" }
-        
-        # Analyse CIFS Job
-        if( (wait_cifs_modify_job -myController $mySecondaryController) -eq $False){
-            Clean_Throw "ERROR: a CIFS Modifying Job is running too long or Failed"
-        }
+        Write-Log "[$mySecondaryVserver] Set CIFS server up with identity [$PrimaryCIFSidentity] from [$myPrimaryVserver]"
+        Write-Log "[$mySecondaryVserver] and Set CIFS NetBios Aliases"
+        if($Global:PSTKCall -ne "Rest"){
+            Write-LogDebug "Set-NcCifsServer -AdministrativeStatus up -ForceAccountOverwrite -CifsServer $PrimaryCIFSidentity -Domain $PrimaryCIFSdomain -AdminCredential $ADCred -VserverContext $mySecondaryVserver -controller $mySecondaryController"
+            $out=Set-NcCifsServer -AdministrativeStatus "up" -ForceAccountOverwrite -CifsServer $PrimaryCIFSidentity -Domain $PrimaryCIFSdomain -AdminCredential $ADCred -VserverContext $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar  -Confirm:$False
+            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcCifsServer rename failed [$ErrorVar]" }
+            
+            # Analyse CIFS Job
+            if( (wait_cifs_modify_job -myController $mySecondaryController) -eq $False){
+                Clean_Throw "ERROR: a CIFS Modifying Job is running too long or Failed"
+            }
 
-        if($null -ne $NetBiosAliaseList -and $NetBiosAliaseList.count -ge 1){
-            Write-Log "[$mySecondaryVserver] Set CIFS NetBios Aliases"
-            $out=Set-NcCifsServer -CifsServer $PrimaryCIFSidentity -Domain $PrimaryCIFSdomain -AdminCredential $ADCred -VserverContext $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar -AddNetbiosAlias $NetBiosAliaseList -Confirm:$False 
+            if($null -ne $NetBiosAliaseList -and $NetBiosAliaseList.count -ge 1){
+                Write-LogDebug  "Set-NcCifsServer -CifsServer $PrimaryCIFSidentity -Domain $PrimaryCIFSdomain -AdminCredential $ADCred -VserverContext $mySecondaryVserver -controller $mySecondaryController -AddNetbiosAlias $NetBiosAliaseList -Confirm:False"
+                $out=Set-NcCifsServer -CifsServer $PrimaryCIFSidentity -Domain $PrimaryCIFSdomain -AdminCredential $ADCred -VserverContext $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar -AddNetbiosAlias $NetBiosAliaseList -Confirm:$False 
+            }
+            
+            # Analyse CIFS Job
+            if( (wait_cifs_modify_job -myController $mySecondaryController) -eq $False){
+                Clean_Throw "ERROR: a CIFS Modifying Job is running too long or Failed"
+            }
+        }else{
+            $bodycifs=@{
+                ad_domain=@{
+                    fqdn=$PrimaryCIFSdomain
+                    organizational_unit=$PrimaryCIFSOU 
+                }
+                comment=$PrimaryCIFSComment
+                enabled=$True
+                name=$PrimaryCIFSidentity
+                netbios=@{
+                    aliases=$PrimaryCIFSserver.netbios.aliases
+                    enabled=$True
+                }
+            }
+            $ret=REST_patch_CIFS_server -bodycifs $bodycifs -ADCred $ADCred -controller $myPrimaryController -myVserver $myPrimaryVserver
+            if($ret -ne $True){
+                clean_Throw "ERROR: Fail to modify CIFS server"
+            }
         }
-        
-        # Analyse CIFS Job
-        if( (wait_cifs_modify_job -myController $mySecondaryController) -eq $False){
-            Clean_Throw "ERROR: a CIFS Modifying Job is running too long or Failed"
-        }
-
         ###### 7 Modify dest CIFS symlink server name with source's name
 
         Write-Log "[$mySecondaryVserver] Modify existing CIFS symlink with new identity [$PrimaryCIFSidentity]"
@@ -20326,8 +20553,9 @@ Function resync_reverse_vserver_dr (
                         if($RelationPolicy -notin $("Sync","StrictSync")){
                             if($SourceVolume -match "flexgroup"){
                                 Write-LogDebug "recreate flexgroup relationship"
-                                start-sleep 5
+                                
                             }
+                            start-sleep 3
                             Write-LogDebug "New-NcSnapmirror -Type vault -Policy $SnapmirrorPolicy -DestinationVserver $SourceVserver -DestinationVolume $SourceVolume -SourceVserver $DestinationVserver -SourceVolume $DestinationVolume -Schedule $SnapmirrorSchedule -Controller $myPrimaryController "
                             $relation=New-NcSnapmirror -Type vault -Policy $SnapmirrorPolicy -DestinationVserver $SourceVserver -DestinationVolume $SourceVolume -SourceVserver $DestinationVserver -SourceVolume $DestinationVolume -Schedule $SnapmirrorSchedule -Controller $myPrimaryController  -ErrorVariable ErrorVar     
                             if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: New-NcSnapmirror failed [$ErrorVar]" ;clean_and_exit 1}
@@ -21533,7 +21761,7 @@ Try {
     Write-LogDebug "Get-NcVserverPeer -Controller $myPrimaryController -VserverContext $myPrimaryVserver -Query @{PeerCluster=$DestCluster}"
     $AllPeerList=Get-NcVserverPeer -Controller $myPrimaryController -VserverContext $myPrimaryVserver -Query @{PeerCluster=$DestCluster} -ErrorVariable ErrorVar 
     if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcVserverPeer failed [$ErrorVar]" }
-    Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -Controller $myPrimaryController -DestinationLocation $($mySecondaryVserver+":*") -ErrorVariable ErrorVar"
+    Write-LogDebug "Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -Controller $myPrimaryController -DestinationLocation $($mySecondaryVserver+":*")"
     $relationlist=Get-NcSnapmirrorDestination -SourceLocation $($myPrimaryVserver+":*") -Controller $myPrimaryController -DestinationLocation $($mySecondaryVserver+":*") -ErrorVariable ErrorVar
     if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcSnapmirrorDestination failed [$ErrorVar]" }
     $QuotaErrorCaptured=@()
