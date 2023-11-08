@@ -1139,7 +1139,12 @@ function Invoke-SvmDrResync {
 
         # Optional, sets the XDP Policy
         # Defaults to MirrorAllSnapshots
+        [Parameter(Mandatory = $false)]
         [string]$XDPPolicy,
+
+        # Optional, sets the snapmirror Schedule
+        [Parameter(Mandatory = $false)]
+        [string]$MirrorSchedule,
 
         # Enables Non-Interactive Mode
         # Is default enabled in Wfa-Integration Mode
@@ -1217,6 +1222,10 @@ function Invoke-SvmDrResyncReverse {
         # Snapmirror Policy to use
         [Parameter(Mandatory = $false)]
         [string]$XDPPolicy,
+
+        # Optional, sets the snapmirror Schedule
+        [Parameter(Mandatory = $false)]
+        [string]$MirrorSchedule,
 
         <# # Force creation of DP Snapmirror relationship instead of default XDP
         [Parameter(Mandatory = $false)]

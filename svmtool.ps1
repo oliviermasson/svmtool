@@ -647,7 +647,9 @@ Param (
 
     [Parameter(Mandatory = $true, ParameterSetName = 'MirrorSchedule')]
     [Parameter(Mandatory = $false, ParameterSetName = 'ConfigureDR')]
-    [Parameter(Mandatory = $false, ParameterSetName = 'UpdateDR')]  
+    [Parameter(Mandatory = $false, ParameterSetName = 'UpdateDR')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'Resync')]  
+    [Parameter(Mandatory = $false, ParameterSetName = 'ResyncReverse')] 
     [string]$MirrorSchedule = "",
 
     [Parameter(Mandatory = $true, ParameterSetName = 'MirrorScheduleReverse')]
@@ -837,7 +839,7 @@ Param (
     [Parameter(Mandatory = $false, ParameterSetName = 'UpdateReverse')]
     [switch]$ForceDeleteQuota,
 
-    [Parameter(Mandatory = $true, ParameterSetName = 'DeleteSource')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'DeleteSource')]
     [switch]$ForceDelete,
 
     [Parameter(Mandatory = $false, ParameterSetName = 'CloneDR')]
@@ -3552,7 +3554,7 @@ if ( $DeleteSource ) {
         clean_and_exit 1
     }
     else {
-        Write-LogWarn "[$Vserver] Delete Source SVM cannot be interrupted or rolled back"
+        Write-LogWarn "[$Vserver] WARNING: Delete Source SVM cannot be interrupted or rolled back"
         #Write-LogWarn "[$Vserver] SVM must already be in stopped state"
         $ASK_WAIT = Read-HostOptions -question "Do you want to completely delete [$Vserver] on [$PrimaryClusterName] ?" -options "y/n" -default "y"
         if ($ASK_WAIT -eq 'y'){
@@ -3567,7 +3569,7 @@ if ( $DeleteSource ) {
             }
             
             if($VserverDR -ne $Vserver){
-                Write-Log "[$VserverDR] Renamed to [$Vserver]"
+                Write-Log "[$VserverDR] Renamed to [$Vserver] on cluster [$SecondaryClusterName]"
                 Write-LogDebug "Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl"
                 $out = Rename-NcVserver -Name $VserverDR -NewName $Vserver -Controller $NcSecondaryCtrl  -ErrorVariable ErrorVar
                 if ( $? -ne $True ) {
@@ -3578,6 +3580,8 @@ if ( $DeleteSource ) {
                     $ret=Set-NcVserver -Name $Vserver -Controller $NcSecondaryCtrl -Comment $SourceVserverComment
                 }
             }
+
+            #! Need to delete iSCSI security settings here, before removing SVM
 
             Write-Log "[$Vserver] will be deleted on cluster [$PrimaryClusterName]"
             Write-LogDebug "remove_vserver_source -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $Vserver"
@@ -4063,6 +4067,8 @@ if ( $Resync ) {
             Write-LogDebug "XDPPolicy [$XDPPolicy] does not exist on [$SECONDARY_CLUSTER]. Will not change XDPPolicy"
             Write-LogWarn "XDPPolicy [$XDPPolicy] does not exist on [$SECONDARY_CLUSTER]. Will not change XDPPolicy"
             $Global:XDPPolicy = ""
+        }else{
+            $Global:XDPPolicy = $XDPPolicy
         }
     }
     $numDestVolRW= (Get-NcVol -Controller $NcSecondaryCtrl -VserverContext $VserverDR -Query @{VolumeStateAttributes=@{IsVserverRoot=$false};VolumeIdAttributes=@{Type="rw";StyleExtended="flexvol|flexgroup"}}).count

@@ -3122,34 +3122,34 @@ Function create_update_fpolicy_dr(
                                         Write-LogDebug "Get SVM uuid"
                                         $SVMUuid=(Get-NcVserver -Name $mySecondaryVserver -Controller $myPrimaryController).Uuid
                                         $CredSecondary=get_local_cDotcred($mySecondaryController)
-                                        $body=@{
+                                        $bodyfpolicy=@{
                                             port=$PrimaryFpolicyEnginePort
                                             type="synchronous"
                                             ssl_option=$PrimaryFpolicyEngineSslOption
                                         } 
                                         if($Global:OntapSecondaryVersion -ge 9.12){
-                                            $body.request_cancel_timeout=$PrimaryFpolicyEngineRequestCancelTimeout
-                                            $body.request_abort_timeout=$PrimaryFpolicyEngineRequestAbortTimeout
-                                            $body.status_request_interval=$PrimaryFpolicyEngineStatusRequestInterval
-                                            $body.server_progress_timeout=$PrimaryFpolicyEngineServerProgressTimeout
+                                            $bodyfpolicy.request_cancel_timeout=$PrimaryFpolicyEngineRequestCancelTimeout
+                                            $bodyfpolicy.request_abort_timeout=$PrimaryFpolicyEngineRequestAbortTimeout
+                                            $bodyfpolicy.status_request_interval=$PrimaryFpolicyEngineStatusRequestInterval
+                                            $bodyfpolicy.server_progress_timeout=$PrimaryFpolicyEngineServerProgressTimeout
                                         }
                                         if($Global:OntapSecondaryVersion -ge 9.11){
-                                            $body.max_server_requests=$PrimaryFpolicyEngineMaxServerRequests
-                                            $body.certificate=@{
+                                            $bodyfpolicy.max_server_requests=$PrimaryFpolicyEngineMaxServerRequests
+                                            $bodyfpolicy.certificate=@{
                                                 name=$PrimaryFpolicyEngineCertificateCommonName
                                                 ca=$PrimaryFpolicyEngineCertificateCa
                                                 serial_number=$PrimaryFpolicyEngineCertificateSerial
                                             }
-                                            $body.format=$PrimaryFpolicyEngineFormat
-                                            $body.buffer_size=@{
+                                            $bodyfpolicy.format=$PrimaryFpolicyEngineFormat
+                                            $bodyfpolicy.buffer_size=@{
                                                 recv_buffer=$PrimaryFpolicyEngineRecvBufferSize
                                                 send_buffer=$PrimaryFpolicyEngineSendBufferSize
                                             }
                                         }
-                                        $body=$body | ConvertTo-Json
+                                        $bodyfpolicy=$bodyfpolicy | ConvertTo-Json
                                         $url=$("https://"+$mySecondaryController.Name+"/api/protocols/fpolicy/"+$SVMUuid+"/engines/"+$PrimaryFpolicyEngineName)
-                                        Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
-                                        $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                        Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyfpolicy -SkipCertificateCheck"
+                                        $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyfpolicy -SkipCertificateCheck -ErrorVariable ErrorVar
                                         if($? -ne $True){
                                             Write-LogError "ERROR: Unable to patch fpolicy external engine [$PrimaryFpolicyEngineName] Reason [$ErrorVar]"
                                             Write-LogDebug "[$workOn]: end"
@@ -3200,35 +3200,35 @@ Function create_update_fpolicy_dr(
                                         Write-LogDebug "Get SVM uuid"
                                         $SVMUuid=(Get-NcVserver -Name $mySecondaryVserver -Controller $mySecondaryController).Uuid
                                         $CredSecondary=get_local_cDotcred($mySecondaryController)
-                                        $body=@{
+                                        $bodyfpolicy=@{
                                             port=$PrimaryFpolicyEnginePort
                                             type="asynchronous"
                                             ssl_option=$PrimaryFpolicyEngineSslOption
                                         } 
                                         if($Global:OntapSecondaryVersion -ge 9.12){
-                                            $body.request_cancel_timeout=$PrimaryFpolicyEngineRequestCancelTimeout
-                                            $body.request_abort_timeout=$PrimaryFpolicyEngineRequestAbortTimeout
-                                            $body.status_request_interval=$PrimaryFpolicyEngineStatusRequestInterval
-                                            $body.server_progress_timeout=$PrimaryFpolicyEngineServerProgressTimeout
+                                            $bodyfpolicy.request_cancel_timeout=$PrimaryFpolicyEngineRequestCancelTimeout
+                                            $bodyfpolicy.request_abort_timeout=$PrimaryFpolicyEngineRequestAbortTimeout
+                                            $bodyfpolicy.status_request_interval=$PrimaryFpolicyEngineStatusRequestInterval
+                                            $bodyfpolicy.server_progress_timeout=$PrimaryFpolicyEngineServerProgressTimeout
 
                                         }
                                         if($Global:OntapSecondaryVersion -ge 9.11){
-                                            $body.max_server_requests=$PrimaryFpolicyEngineMaxServerRequests
-                                            $body.certificate=@{
+                                            $bodyfpolicy.max_server_requests=$PrimaryFpolicyEngineMaxServerRequests
+                                            $bodyfpolicy.certificate=@{
                                                 name=$PrimaryFpolicyEngineCertificateCommonName
                                                 ca=$PrimaryFpolicyEngineCertificateCa
                                                 serial_number=$PrimaryFpolicyEngineCertificateSerial
                                             }
-                                            $body.format=$PrimaryFpolicyEngineFormat
-                                            $body.buffer_size=@{
+                                            $bodyfpolicy.format=$PrimaryFpolicyEngineFormat
+                                            $bodyfpolicy.buffer_size=@{
                                                 recv_buffer=$PrimaryFpolicyEngineRecvBufferSize
                                                 send_buffer=$PrimaryFpolicyEngineSendBufferSize
                                             }
                                         }
-                                        $body=$body | ConvertTo-Json
+                                        $bodyfpolicy=$bodyfpolicy | ConvertTo-Json
                                         $url=$("https://"+$mySecondaryController.Name+"/api/protocols/fpolicy/"+$SVMUuid+"/engines/"+$PrimaryFpolicyEngineName)
-                                        Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
-                                        $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                        Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyfpolicy -SkipCertificateCheck"
+                                        $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyfpolicy -SkipCertificateCheck -ErrorVariable ErrorVar
                                         if($? -ne $True){
                                             Write-LogError "ERROR: Unable to patch fpolicy external engine [$PrimaryFpolicyEngineName] Reason [$ErrorVar]"
                                             Write-LogDebug "[$workOn]: end"
@@ -3347,66 +3347,66 @@ Function create_update_fpolicy_dr(
                                 if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: New-NcFpolicyExternalEngine failed [$ErrorVar]" } #>
                                 $myVserver=Get-NcVserver -Name $mySecondaryVserver -controller $mySecondaryController
                                 $CredSecondary=get_local_cDotcred($mySecondaryController)
-                                $body=@{
+                                $bodyfpolicy=@{
                                     name=$PrimaryFpolicyEngineName
                                     port=$PrimaryFpolicyEnginePort
                                     primary_servers=$PrimaryFpolicyEnginePrimaryServers
                                     secondary_servers=$PrimaryFpolicyEngineSecondaryServers
                                 }
                                 if($PrimaryFpolicyEngineExternEngineType -eq "Synchronous"){
-                                    $body.type="synchronous"
+                                    $bodyfpolicy.type="synchronous"
                                 }else{
-                                    $body.type="asynchronous"
+                                    $bodyfpolicy.type="asynchronous"
                                 }
                                 if($Global:OntapSecondaryVersion -ge 9.11){
                                     if($PrimaryFpolicyEngineSslOption.Length -gt 0){
-                                        $body.ssl_option=$PrimaryFpolicyEngineSslOption
+                                        $bodyfpolicy.ssl_option=$PrimaryFpolicyEngineSslOption
                                     }
-                                    $body.max_server_requests=$PrimaryFpolicyEngineMaxServerRequests
-                                    $body.certificate=@{}
+                                    $bodyfpolicy.max_server_requests=$PrimaryFpolicyEngineMaxServerRequests
+                                    $bodyfpolicy.certificate=@{}
                                     if($null -ne $PrimaryFpolicyEngineCertificateCommonName){
-                                        $body.certificate=@{name=$PrimaryFpolicyEngineCertificateCommonName}
+                                        $bodyfpolicy.certificate=@{name=$PrimaryFpolicyEngineCertificateCommonName}
                                     }
                                     if($null -ne $PrimaryFpolicyEngineCertificateSerial){
-                                        $body.certificate=@{serial_number=$PrimaryFpolicyEngineCertificateSerial}
+                                        $bodyfpolicy.certificate=@{serial_number=$PrimaryFpolicyEngineCertificateSerial}
                                     }
                                     if($null -ne $PrimaryFpolicyEngineCertificateCa){
-                                        $body.certificate=@{ca=$PrimaryFpolicyEngineCertificateCa}
+                                        $bodyfpolicy.certificate=@{ca=$PrimaryFpolicyEngineCertificateCa}
                                     }
                                     if($null -ne $PrimaryFpolicyEngineRecvBufferSize -and $null -ne $PrimaryFpolicyEngineSendBufferSize){
-                                        $body.buffer_size=@{
+                                        $bodyfpolicy.buffer_size=@{
                                             recv_buffer=$PrimaryFpolicyEngineRecvBufferSize
                                             send_buffer=$PrimaryFpolicyEngineSendBufferSize
                                         }
-                                    $body.format=$PrimaryFpolicyEngineFormat
+                                    $bodyfpolicy.format=$PrimaryFpolicyEngineFormat
                                     }
                                 }
                                 if($Global:OntapSecondaryVersion -ge 9.12){
                                     if($PrimaryFpolicyEngineRequestCancelTimeout -match "^PT"){
-                                        $body.request_cancel_timeout=$PrimaryFpolicyEngineRequestCancelTimeout
+                                        $bodyfpolicy.request_cancel_timeout=$PrimaryFpolicyEngineRequestCancelTimeout
                                     }else{
-                                        $body.request_cancel_timeout=$("PT"+$PrimaryFpolicyEngineRequestCancelTimeout+"S")
+                                        $bodyfpolicy.request_cancel_timeout=$("PT"+$PrimaryFpolicyEngineRequestCancelTimeout+"S")
                                     }
                                     if($PrimaryFpolicyEngineRequestAbortTimeout -match "^PT"){
-                                        $body.request_cancel_timeout=$PrimaryFpolicyEngineRequestAbortTimeout
+                                        $bodyfpolicy.request_cancel_timeout=$PrimaryFpolicyEngineRequestAbortTimeout
                                     }else{
-                                        $body.request_cancel_timeout=$("PT"+$PrimaryFpolicyEngineRequestAbortTimeout+"S")
+                                        $bodyfpolicy.request_cancel_timeout=$("PT"+$PrimaryFpolicyEngineRequestAbortTimeout+"S")
                                     }
                                     if($PrimaryFpolicyEngineServerProgressTimeout -match "^PT"){
-                                        $body.request_cancel_timeout=$PrimaryFpolicyEngineServerProgressTimeout
+                                        $bodyfpolicy.request_cancel_timeout=$PrimaryFpolicyEngineServerProgressTimeout
                                     }else{
-                                        $body.request_cancel_timeout=$("PT"+$PrimaryFpolicyEngineServerProgressTimeout+"S")
+                                        $bodyfpolicy.request_cancel_timeout=$("PT"+$PrimaryFpolicyEngineServerProgressTimeout+"S")
                                     }
                                     if($PrimaryFpolicyEngineStatusRequestInterval -match "^PT"){
-                                        $body.request_cancel_timeout=$PrimaryFpolicyEngineStatusRequestInterval
+                                        $bodyfpolicy.request_cancel_timeout=$PrimaryFpolicyEngineStatusRequestInterval
                                     }else{
-                                        $body.request_cancel_timeout=$("PT"+$PrimaryFpolicyEngineStatusRequestInterval+"S")
+                                        $bodyfpolicy.request_cancel_timeout=$("PT"+$PrimaryFpolicyEngineStatusRequestInterval+"S")
                                     }
                                 }
-                                $body=$body | ConvertTo-Json
+                                $bodyfpolicy=$bodyfpolicy | ConvertTo-Json
                                 $url=$("https://"+$mySecondaryController.Name+"/api/protocols/fpolicy/"+$($myVserver.Uuid)+"/engines")
-                                Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
-                                $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyfpolicy -SkipCertificateCheck"
+                                $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyfpolicy -SkipCertificateCheck -ErrorVariable ErrorVar
                                 if($? -ne $True){
                                     Write-LogError "ERROR: Unable to create Fpolicy engine. Reason [$ErrorVar]"
                                     Write-LogDebug "[$workOn]: end"
@@ -4467,12 +4467,12 @@ Function create_update_qospolicy_dr(
                                     $out=Update-NcVol -Query $query -Attributes $attributes -controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
                                     if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Update-NcVol failed [$ErrorVar]" }
                                 }else{
-                                    $body=@{
+                                    $bodyqos=@{
                                         qos=@{policy=@{name=$QosPolicyGroupName}}
                                     } | ConvertTo-Json
                                     $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$SecondaryVolUuid)
-                                    Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
-                                    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                    Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck"
+                                    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck -ErrorVariable ErrorVar
                                     if($? -ne $True){
                                         Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
                                     }
@@ -4549,12 +4549,12 @@ Function create_update_qospolicy_dr(
                                         $out=Update-NcVol -Query $query -Attributes $attributes -controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
                                         if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Update-NcVol failed [$ErrorVar]" }
                                     }else{
-                                        $body=@{
+                                        $bodyqos=@{
                                             qos=@{policy=@{name=$($PrimaryQOSPolicy+"_"+$mySecondaryVserver)}}
                                         } | ConvertTo-Json
                                         $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$SecondaryVolUuid)
-                                        Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
-                                        $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                        Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck"
+                                        $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck -ErrorVariable ErrorVar
                                         if($? -ne $True){
                                             Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
                                         }
@@ -4641,12 +4641,12 @@ Function create_update_qospolicy_dr(
                                         $out=Update-NcVol -Query $query -Attributes $attributes -controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
                                         if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Update-NcVol failed [$ErrorVar]" }
                                     }else{
-                                        $body=@{
+                                        $bodyqos=@{
                                             qos=@{policy=@{name=$QosPolicyGroupName}}
                                         } | ConvertTo-Json
                                         $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$SecondaryVolUuid)
-                                        Write-Logdebug "Invoke-RestMethod -Method patch -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
-                                        $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                        Write-Logdebug "Invoke-RestMethod -Method patch -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck"
+                                        $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck -ErrorVariable ErrorVar
                                         if($? -ne $True){
                                             Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
                                         }
@@ -4876,26 +4876,26 @@ Try {
                                     $SecondaryScheduleUuid=$SecondarySchedule.Uuid
                                     $url=$("https://"+$mySecondaryController.Name+"/api/cluster/schedules/"+$SecondaryScheduleUuid)
                                     $CredSecondary=get_local_cDotcred($mySecondaryController)
-                                    $body=@{"cron"=@{}}
+                                    $bodycron=@{"cron"=@{}}
                                     if($null -ne $cron.JobScheduleCronMonth -ne ""){
-                                        $body.cron.months=$cron.JobScheduleCronMonth
+                                        $bodycron.cron.months=$cron.JobScheduleCronMonth
                                     }
                                     if($null -ne $cron.JobScheduleCronDayOfWeek -ne ""){
-                                        $body.cron.weekdays=$cron.JobScheduleCronDayOfWeek
+                                        $bodycron.cron.weekdays=$cron.JobScheduleCronDayOfWeek
                                     }
                                     if($null -ne $cron.JobScheduleCronDay -ne ""){
-                                        $body.cron.days=$cron.JobScheduleCronDay
+                                        $bodycron.cron.days=$cron.JobScheduleCronDay
                                     }
                                     if($null -ne $cron.JobScheduleCronHour -ne ""){
-                                        $body.cron.hours=$cron.JobScheduleCronHour
+                                        $bodycron.cron.hours=$cron.JobScheduleCronHour
                                     }
                                     if($null -ne $cron.JobScheduleCronMinute -ne ""){
-                                        $body.cron.minutes=$cron.JobScheduleCronMinute
+                                        $bodycron.cron.minutes=$cron.JobScheduleCronMinute
                                     }
                                     #$body.scope=$PrimaryJobScheduleScope
-                                    $body=$body | ConvertTo-Json
-                                    Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
-                                    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                    $bodycron=$bodycron | ConvertTo-Json
+                                    Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $CredSecondary -Body $bodycron -SkipCertificateCheck"
+                                    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodycron -SkipCertificateCheck -ErrorVariable ErrorVar
                                     if($? -ne $True){
                                         Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
                                     }
@@ -5117,27 +5117,27 @@ Try {
                                         $SecondaryScheduleUuid=$SecondarySchedule.Uuid
                                         $url=$("https://"+$mySecondaryController.Name+"/api/cluster/schedules/"+$SecondaryScheduleUuid)
                                         $CredSecondary=get_local_cDotcred($mySecondaryController)
-                                        $body=@{"cron"=@{}}
+                                        $bodycron=@{"cron"=@{}}
                                         if($null -ne $cron.JobScheduleCronMonth -ne ""){
-                                            $body.cron.months=$cron.JobScheduleCronMonth
+                                            $bodycron.cron.months=$cron.JobScheduleCronMonth
                                         }
                                         if($null -ne $cron.JobScheduleCronDayOfWeek -ne ""){
-                                            $body.cron.weekdays=$cron.JobScheduleCronDayOfWeek
+                                            $bodycron.cron.weekdays=$cron.JobScheduleCronDayOfWeek
                                         }
                                         if($null -ne $cron.JobScheduleCronDay -ne ""){
-                                            $body.cron.days=$cron.JobScheduleCronDay
+                                            $bodycron.cron.days=$cron.JobScheduleCronDay
                                         }
                                         if($null -ne $cron.JobScheduleCronHour -ne ""){
-                                            $body.cron.hours=$cron.JobScheduleCronHour
+                                            $bodycron.cron.hours=$cron.JobScheduleCronHour
                                         }
                                         if($null -ne $cron.JobScheduleCronMinute -ne ""){
-                                            $body.cron.minutes=$cron.JobScheduleCronMinute
+                                            $bodycron.cron.minutes=$cron.JobScheduleCronMinute
                                         }
-                                        $body.svm=@{"name"=$mySecondaryVserver}
-                                        #$body.scope=$PrimaryJobScheduleScope
-                                        $body=$body | ConvertTo-Json
-                                        Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
-                                        $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                        $bodycron.svm=@{"name"=$mySecondaryVserver}
+                                        #$bodycron.scope=$PrimaryJobScheduleScope
+                                        $bodycron=$bodycron | ConvertTo-Json
+                                        Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $CredSecondary -Body $bodycron -SkipCertificateCheck"
+                                        $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodycron -SkipCertificateCheck -ErrorVariable ErrorVar
                                         if($? -ne $True){
                                             Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
                                         }
@@ -5178,28 +5178,28 @@ Try {
                                 }else{
                                     $url=$("https://"+$mySecondaryController.Name+"/api/cluster/schedules/")
                                     $CredSecondary=get_local_cDotcred($mySecondaryController)
-                                    $body=@{"cron"=@{}}
+                                    $bodycron=@{"cron"=@{}}
                                     if($null -ne $cron.JobScheduleCronMonth -ne ""){
-                                        $body.cron.months=$cron.JobScheduleCronMonth
+                                        $bodycron.cron.months=$cron.JobScheduleCronMonth
                                     }
                                     if($null -ne $cron.JobScheduleCronDayOfWeek -ne ""){
-                                        $body.cron.weekdays=$cron.JobScheduleCronDayOfWeek
+                                        $bodycron.cron.weekdays=$cron.JobScheduleCronDayOfWeek
                                     }
                                     if($null -ne $cron.JobScheduleCronDay -ne ""){
-                                        $body.cron.days=$cron.JobScheduleCronDay
+                                        $bodycron.cron.days=$cron.JobScheduleCronDay
                                     }
                                     if($null -ne $cron.JobScheduleCronHour -ne ""){
-                                        $body.cron.hours=$cron.JobScheduleCronHour
+                                        $bodycron.cron.hours=$cron.JobScheduleCronHour
                                     }
                                     if($null -ne $cron.JobScheduleCronMinute -ne ""){
-                                        $body.cron.minutes=$cron.JobScheduleCronMinute
+                                        $bodycron.cron.minutes=$cron.JobScheduleCronMinute
                                     }
-                                    #$body.scope=$PrimaryJobScheduleScope
-                                    $body.name=$PrimaryJobScheduleName
-                                    $body.svm=@{"name"=$mySecondaryVserver}
-                                    $body=$body | ConvertTo-Json
-                                    Write-LogDebug "Invoke-RestMethod -Method post -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
-                                    $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                    #$bodycron.scope=$PrimaryJobScheduleScope
+                                    $bodycron.name=$PrimaryJobScheduleName
+                                    $bodycron.svm=@{"name"=$mySecondaryVserver}
+                                    $bodycron=$bodycron | ConvertTo-Json
+                                    Write-LogDebug "Invoke-RestMethod -Method post -Uri $url -Credential $CredSecondary -Body $bodycron -SkipCertificateCheck"
+                                    $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodycron -SkipCertificateCheck -ErrorVariable ErrorVar
                                     if($? -ne $True){
                                         Write-LogError "ERROR: post request [$url] reason [$ErrorVar]"
                                     }
@@ -5509,7 +5509,7 @@ Try {
                         }else{
                             $NewSecondarySnapshotPolicy=Get-NcSnapshotPolicy -Controller $mySecondaryController -Query @{VserverName=$mySecondaryVserver;Policy=$PolicyName} | Where-Object {$_.VserverName -notmatch "-mc"}
                             $NewSecondarySnapshotPolicyUuid=$NewSecondarySnapshotPolicy.Uuid
-                            $body=@{
+                            $bodysnappolicy=@{
                                 count=$Count
                                 prefix=$Prefix
                                 schedule=@{name=$Schedule}
@@ -5517,8 +5517,8 @@ Try {
                             } | ConvertTo-Json
                             $url=$("https://"+$mySecondaryController.Name+"/api/storage/snapshot-policies/"+$NewSecondarySnapshotPolicyUuid+"/schedules")
                             $CredSecondary=get_local_cDotcred($mySecondaryController)
-                            Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
-                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                            Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $CredSecondary -Body $bodysnappolicy -SkipCertificateCheck"
+                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodysnappolicy -SkipCertificateCheck -ErrorVariable ErrorVar
                             if($? -ne $True){
                                 Write-LogError "ERROR: Post request [$url] reason [$ErrorVar]"
                             }
@@ -5630,7 +5630,7 @@ Try {
                                     # Write-LogDebug "Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController"
                                     # $out=Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel $SnapmirrorLabel -Controller $mySecondaryController  -ErrorVariable ErrorVar
                                     # if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Add-NcSnapshotPolicySchedule failed [$ErrorVar]" }
-                                    $body=@{
+                                    $bodysnapshotpol=@{
                                         count=$Count
                                         prefix=$Prefix
                                         schedule=@{name=$Schedule}
@@ -5640,7 +5640,7 @@ Try {
                                     # Write-LogDebug "Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel \`n -Controller $mySecondaryController"
                                     # $out=Add-NcSnapshotPolicySchedule -Name $PolicyName -Schedule $Schedule -Count $Count -Prefix $Prefix -SnapmirrorLabel `n -Controller $mySecondaryController  -ErrorVariable ErrorVar
                                     # if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Add-NcSnapshotPolicySchedule failed [$ErrorVar]" }
-                                    $body=@{
+                                    $bodysnapshotpol=@{
                                         count=$Count
                                         prefix=$Prefix
                                         schedule=@{name=$Schedule}
@@ -5649,8 +5649,8 @@ Try {
                                 }
                                 $url=$("https://"+$mySecondaryController.Name+"/api/storage/snapshot-policies/"+$NewSecondarySnapshotPolicyUuid+"/schedules")
                                 $CredSecondary=get_local_cDotcred($mySecondaryController)
-                                Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
-                                $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $CredSecondary -Body $bodysnapshotpol -SkipCertificateCheck"
+                                $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodysnapshotpol -SkipCertificateCheck -ErrorVariable ErrorVar
                                 if($? -ne $True){
                                     Write-LogError "ERROR: Post request [$url] reason [$ErrorVar]"
                                 }
@@ -6448,7 +6448,7 @@ Function set_serial_lundr (
     }
 	if ( $NeedChangeSerial ) 
     {
-		Write-Log "[$workOn] Resync"
+		#Write-Log "[$workOn] Resync"
 		Write-LogDebug "resync_vserver_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver" 
 		if ( ( resync_vserver_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver ) -ne $True ) 
         {
@@ -6865,17 +6865,17 @@ Function REST_set_lif(
                     Write-LogDebug "ERROR: failed to set lif [$lif_name] into state [$state] reason [$ErrorVar]"
                 }
             }else{
-                $body=@{}
+                $bodylif=@{}
                 if($state -eq "up"){
-                    $body.enabled="true"
+                    $bodylif.enabled="true"
                 }else{
-                    $body.enabled="false"
+                    $bodylif.enabled="false"
                 }
                 # ! this REST function is not necessary for setting only adminstate
                 # ! but once we need to set other thing address, netmask....the cmdlet does not work and this REST fucntion need to be used
                 # ! we juste use it here for test
-                $body=$body | ConvertTo-Json
-                $ret=REST_set_lif -myVserver $mySecondaryVserver -myLIFuuid $lif_uuid -body $body -myController $mySecondaryController
+                $bodylif=$bodylif | ConvertTo-Json
+                $ret=REST_set_lif -myVserver $mySecondaryVserver -myLIFuuid $lif_uuid -body $bodylif -myController $mySecondaryController
                 if($ret -ne $True){
                     Write-LogDebug "ERROR: failed to set lif [$lif_name] into state [$state] reason [$ret]"
                 }
@@ -6892,14 +6892,14 @@ Function REST_set_lif(
                     Write-LogDebug "ERROR: failed to set lif [$lif_name] into state [$state] reason [$ErrorVar]"
                 }
             }else{
-                $body=@{}
+                $bodylif=@{}
                 if($state -eq "up"){
-                    $body.enabled="true"
+                    $bodylif.enabled="true"
                 }else{
-                    $body.enabled="false"
+                    $bodylif.enabled="false"
                 }
-                $body=$body | ConvertTo-Json
-                $ret=REST_set_lif -myVserver $mySecondaryVserver -myLIFuuid $lif_uuid -body $body -myController $mySecondaryController
+                $bodylif=$bodylif | ConvertTo-Json
+                $ret=REST_set_lif -myVserver $mySecondaryVserver -myLIFuuid $lif_uuid -body $bodylif -myController $mySecondaryController
                 if($ret -ne $True){
                     Write-LogDebug "ERROR: failed to set lif [$lif_name] into state [$state] reason [$ret]"
                 }
@@ -7081,12 +7081,12 @@ Try {
                 $out=Update-NcVol -Query $query -Attributes $attributes -Controller $mySecondaryController -ErrorVariable ErrorVar -ONTAPI
                 if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Update-NcVol Failed: Failed to update root volume $PrimaryVolName [$ErrorVar]" }
             }else{
-                $body=@{
+                $bodyvol=@{
                     nas=@{export_policy=@{name=$PrimaryRootVolExportPolicy}}
                 } | ConvertTo-Json
                 $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$SecondaryVolUuid)
-                Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
-                $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck"
+                $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck -ErrorVariable ErrorVar
                 if($? -ne $True){
                     Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
                 }
@@ -7301,12 +7301,12 @@ Try {
                         }else{
                             $SecondaryVolUuid=$SecondaryVol.Uuid
                             $CredSecondary=get_local_cDotcred($mySecondaryController)
-                            $body=@{
+                            $bodyvol=@{
                                 nas=@{export_policy=@{name=$PrimaryVolExportPolicy}}
                             } | ConvertTo-Json
                             $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$SecondaryVolUuid)
-                            Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
-                            $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                            Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck"
+                            $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck -ErrorVariable ErrorVar
                             if($? -ne $True){
                                 Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
                             }
@@ -7383,12 +7383,12 @@ Try {
                     }else{
                         $SecondaryVolUuid=$SecondaryVol.Uuid
                         $CredSecondary=get_local_cDotcred($mySecondaryController)
-                        $body=@{
+                        $bodyvol=@{
                             space=@{snapshot=@{reserve_percent=$PrimaryVolExportPolicy}}
                         } | ConvertTo-Json
                         $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$SecondaryVolUuid)
-                        Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
-                        $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                        Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck"
+                        $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck -ErrorVariable ErrorVar
                         if($? -ne $True){
                             Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
                         }
@@ -8035,9 +8035,9 @@ Try {
                             Write-Log "[$workOn] Create new DR volume [$PrimaryVolName]"
                             $NewNcVolParameters+=@{"type"="dp"}
                             if($ForceRest){
-                                $body=$NewNcVolParameters | ConvertTo-Json
-                                Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
-                                $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                $bodyvol=$NewNcVolParameters | ConvertTo-Json
+                                Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck"
+                                $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck -ErrorVariable ErrorVar
                                 if($? -ne $True){
                                     Write-LogError "ERROR: Unable to create volume [$PrimaryVolName] Reason [$ErrorVar]"
                                     Write-LogDebug "[$workOn]: end"
@@ -8099,9 +8099,9 @@ Try {
                             if($Global:VOLUME_TYPE -eq "rw"){
                                 Write-LogDebug "Create RW volume"
                                 if($ForceRest){
-                                    $body=$NewNcVolParameters | ConvertTo-Json
-                                    Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
-                                    $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                    $bodyvol=$NewNcVolParameters | ConvertTo-Json
+                                    Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck"
+                                    $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck -ErrorVariable ErrorVar
                                     if($? -ne $True){
                                         Write-LogError "ERROR: Unable to create volume [$PrimaryVolName] Reason [$ErrorVar]"
                                         Write-LogDebug "[$workOn]: end"
@@ -8159,9 +8159,9 @@ Try {
                                     }else{
                                         $NewNcVolParameters+=@{"type"="dp"}
                                     }
-                                    $body=$NewNcVolParameters | ConvertTo-Json
-                                    Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
-                                    $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                    $bodyvol=$NewNcVolParameters | ConvertTo-Json
+                                    Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck"
+                                    $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck -ErrorVariable ErrorVar
                                     if($? -ne $True){
                                         Write-LogError "ERROR: Unable to create volume [$PrimaryVolName] Reason [$ErrorVar]"
                                         Write-LogDebug "[$workOn]: end"
@@ -8343,8 +8343,11 @@ Try {
                                 Write-LogWarn "SM-S is not yet compatible with Flexgroup, switch to async MirrorAllSnapshots policy for this volume"
                                 $Policy="MirrorAllSnapshots"
                             }else{$Policy=$Global:XDPPolicy}
-                            if( ( $Global:MirrorSchedule -eq "none" ) -or ( $Global:MirrorSchedule.Length -eq 0 ) ){$Schedule="hourly"}
-                            else{$Schedule=$Global:MirrorSchedule}
+                            if( ( $Global:MirrorSchedule -eq "none" ) -or ( $Global:MirrorSchedule.Length -eq 0 ) ){
+                                $Schedule="hourly"
+                            }else{
+                                $Schedule=$Global:MirrorSchedule
+                            }
                             Write-LogDebug "Schedule [$Schedule]"
                             $ProtectFlexgroupDone=$False
                             $PathList=$($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName)
@@ -8527,20 +8530,20 @@ Try {
     }
     $sizeFlexgroup=$myFlexgroup.size
     $type=$myFlexgroup.type
-    $body=@{}
-    #$body.access_time_enabled=$myFlexgroup.access_time_enabled
-    #$body.activity_tracking=@{"state"=$myFlexgroup.activity_tracking.state}
-    $body.analytics=@{"state"=$myFlexgroup.analytics.state}
-    #$body.anti_ransomware_state=$myFlexgroup.anti_ransomware.state
-    $body.asynchronous_directory_delete=@{"enabled"=$myFlexgroup.asynchronous_directory_delete.enabled}
-    $body.autosize=$myFlexgroup.autosize
-    $body.cloud_retrieval_policy=$myFlexgroup.cloud_retrieval_policy
+    $bodyvol=@{}
+    #$bodyvol.access_time_enabled=$myFlexgroup.access_time_enabled
+    #$bodyvol.activity_tracking=@{"state"=$myFlexgroup.activity_tracking.state}
+    $bodyvol.analytics=@{"state"=$myFlexgroup.analytics.state}
+    #$bodyvol.anti_ransomware_state=$myFlexgroup.anti_ransomware.state
+    $bodyvol.asynchronous_directory_delete=@{"enabled"=$myFlexgroup.asynchronous_directory_delete.enabled}
+    $bodyvol.autosize=$myFlexgroup.autosize
+    $bodyvol.cloud_retrieval_policy=$myFlexgroup.cloud_retrieval_policy
     if($myFlexgroup.comment.length -gt 1){
-        $body.comment=$myFlexgroup.comment
+        $bodyvol.comment=$myFlexgroup.comment
     }
-    $body.constituents_per_aggregate=$numberConstituentPerAggr
-    #$body.convert_unicode=$myFlexgroup.convert_unicode
-    $body.efficiency=@{
+    $bodyvol.constituents_per_aggregate=$numberConstituentPerAggr
+    #$bodyvol.convert_unicode=$myFlexgroup.convert_unicode
+    $bodyvol.efficiency=@{
         "application_io_size"=$myFlexgroup.efficiency.application_io_size
         "compaction"=$myFlexgroup.efficiency.compaction
         "compression"=$myFlexgroup.efficiency.compression
@@ -8551,59 +8554,59 @@ Try {
         #"policy"=@{"name"=$myFlexgroup.efficiency.policy.name}
     }
     if($myFlexgroup.efficiency.schedule -ne "-"){
-        $body.efficiency.schedule=$myFlexgroup.efficiency.schedule
+        $bodyvol.efficiency.schedule=$myFlexgroup.efficiency.schedule
     }
     if($null -ne $myFlexgroup.efficiency.auto_state){
-        $body.efficiency.auto_state=$myFlexgroup.efficiency.auto_state
+        $bodyvol.efficiency.auto_state=$myFlexgroup.efficiency.auto_state
     }
-    $body.encryption=@{
+    $bodyvol.encryption=@{
         "enabled"=$myFlexgroup.encryption.enabled
         #"type"=$myFlexgroup.encryption.type
     }
-    #$body.files=@{"maximum"=$myFlexgroup.files.maximum}
-    $body.guarantee=@{"type"=$myFlexgroup.guarantee.type}
-    $body.language=$myFlexgroup.language
-    $body.max_dir_size=$myFlexgroup.max_dir_size
-    $body.name=$myFlexgroup.name
-    $body.nas=@{
+    #$bodyvol.files=@{"maximum"=$myFlexgroup.files.maximum}
+    $bodyvol.guarantee=@{"type"=$myFlexgroup.guarantee.type}
+    $bodyvol.language=$myFlexgroup.language
+    $bodyvol.max_dir_size=$myFlexgroup.max_dir_size
+    $bodyvol.name=$myFlexgroup.name
+    $bodyvol.nas=@{
         "export_policy"=@{"name"=$myFlexgroup.nas.export_policy.name}
         "security_style"=$myFlexgroup.nas.security_style
         "unix_permissions"=$myFlexgroup.nas.unix_permissions
     }
     if($Global:VOLUME_TYPE -eq "rw"){
-        $body.nas.path=$myFlexgroup.nas.path
+        $bodyvol.nas.path=$myFlexgroup.nas.path
     }
     # ! attention this policy must exist first
     if($null -ne $myFlexgroup.qos.policy.name){
-        $body.qos=@{"name"=$myFlexgroup.qos.policy.name}
+        $bodyvol.qos=@{"name"=$myFlexgroup.qos.policy.name}
     }
-    $body.size=$sizeFlexgroup
-    $body.snaplock=@{"type"=$myFlexgroup.snaplock.type}
+    $bodyvol.size=$sizeFlexgroup
+    $bodyvol.snaplock=@{"type"=$myFlexgroup.snaplock.type}
     if($myFlexgroup.snaplock.type -ne "non_snaplock"){
-        $body.snaplock.retention=@{
+        $bodyvol.snaplock.retention=@{
             "default"=$myFlexgroup.snaplock.retention.default
             "maximum"=$myFlexgroup.snaplock.retention.maximum
             "minimum"=$myFlexgroup.snaplock.retention.minimum
         }
     }
-    $body.snapshot_locking_enabled=$myFlexgroup.snapshot_locking_enabled
-    $body.snapshot_policy=@{"name"=$myFlexgroup.snapshot_policy.name}
-    $body.svm=@{"name"=$myFlexgroup.svm.name}
-    $body.tiering=@{"policy"=$myFlexgroup.tiering.policy}
+    $bodyvol.snapshot_locking_enabled=$myFlexgroup.snapshot_locking_enabled
+    $bodyvol.snapshot_policy=@{"name"=$myFlexgroup.snapshot_policy.name}
+    $bodyvol.svm=@{"name"=$myFlexgroup.svm.name}
+    $bodyvol.tiering=@{"policy"=$myFlexgroup.tiering.policy}
     if($myFlexgroup.tiering.policy -ne "none"){
-        $body.tiering.min_cooling_days=$myFlexgroup.tiering.min_cooling_days
-        $body.tiering.object_tags=$myFlexgroup.tiering.object_tags
+        $bodyvol.tiering.min_cooling_days=$myFlexgroup.tiering.min_cooling_days
+        $bodyvol.tiering.object_tags=$myFlexgroup.tiering.object_tags
     }
-    $body.type=$type
-    $body.aggregates=@()
+    $bodyvol.type=$type
+    $bodyvol.aggregates=@()
     foreach ($aggr in $aggrAvailable){
-        $body.aggregates+=@{"name"=$aggr}
+        $bodyvol.aggregates+=@{"name"=$aggr}
     }
-    $body=$body | ConvertTo-Json
+    $bodyvol=$bodyvol | ConvertTo-Json
     $credential=get_local_cDotcred($myController)
     $url=$("https://"+$myController.Name+"/api/storage/volumes")
-    Write-LogDebug "Invoke-RestMethod -Method post -Uri $url -Credential $credential -body $body -SkipCertificateCheck"
-    $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $credential -body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+    Write-LogDebug "Invoke-RestMethod -Method post -Uri $url -Credential $credential -body $bodyvol -SkipCertificateCheck"
+    $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $credential -body $bodyvol -SkipCertificateCheck -ErrorVariable ErrorVar
     if($? -ne $True){
         Write-LogError "ERROR: Unable to create flexgroup. Reason [$ErrorVar]"
         Write-LogDebug "[$workOn]: end"
@@ -9994,7 +9997,7 @@ Function wait_snapmirror_dr_status{
             $Global:TimeoutTime = ($CurrentTime - $StartTime).TotalSeconds
             if ( $Global:TimeoutTime -gt $Global:STOP_TIMEOUT ) { # STOP_TIMEOUT equal to 5 minutes
                 $isTimeOut = $true
-                Write-LogWarn "Timeout waiting Snapmirror status [$Status] on destination relationship [$($DestinationVserver+":"+$SecondaryVolumeName)]"
+                Write-LogWarn "WARNING: Timeout waiting Snapmirror status [$Status] on destination relationship [$($DestinationVserver+":"+$SecondaryVolumeName)]"
                 $Return = $false
             }	
         }
@@ -10209,7 +10212,7 @@ Try{
     Write-LogDebug "[$workOn]: start"
     $myCredential = get_local_cDotcred($mySecondaryController)
     $url=$("https://"+$mySecondaryController.Name+"/api/snapmirror/relationships")
-    $body=@{
+    $bodysm=@{
         destination=@{
             path=$($mySecondaryVserver+":"+$SecondaryVol)
         }
@@ -10223,32 +10226,32 @@ Try{
         }
     } 
     if($Schedule.length -gt 1){
-        $body.transfer_schedule=@{
+        $bodysm.transfer_schedule=@{
             name=$Schedule
         }
     }
     if($Group_type -eq "flexgroup"){
         if($CreateDest -eq $True){
-            $body.create_destination=@{
+            $bodysm.create_destination=@{
                 enabled=$True
             }
         }else{
-            $body.create_destination=@{
+            $bodysm.create_destination=@{
                 enabled=$False
             }
         }
         if($TieringPolicy.length -gt 0){
-            $body.create_destination.tiering=@{
+            $bodysm.create_destination.tiering=@{
                 policy=$TieringPolicy
             }
         }
         if($CreateDest -eq $True){
-            $body.state="snapmirrored"
+            $bodysm.state="snapmirrored"
         }
     }
-    $body=$body | ConvertTo-Json
-    Write-LogDebug "Invoke-RestMethod -Method post -Uri $url -Credential $myCredential -body $body -SkipCertificateCheck"
-    $SnapmirrorCreate=Invoke-RestMethod -Method 'post' -Uri $url -Credential $myCredential -body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+    $bodysm=$bodysm | ConvertTo-Json
+    Write-LogDebug "Invoke-RestMethod -Method post -Uri $url -Credential $myCredential -body $bodysm -SkipCertificateCheck"
+    $SnapmirrorCreate=Invoke-RestMethod -Method 'post' -Uri $url -Credential $myCredential -body $bodysm -SkipCertificateCheck -ErrorVariable ErrorVar
     if($? -ne $True){
         Write-LogError "ERROR: Unable to create snapmirror relationship. Reason [$ErrorVar]"
         Write-LogDebug "[$workOn]: end"
@@ -10586,6 +10589,38 @@ Try {
                         { 
                             Write-LogError "ERROR: Snapmirror Initialize failed"
                             $Return = $False
+                        }
+                        if($Global:PSTKCall -ne "Rest"){
+                            Write-LogDebug "Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":"+$PrimaryVolName) -SourceLocation $($myPrimaryVserver+":"+$PrimaryVolName) -Controller $mySecondaryController"
+                            $relation=Get-NcSnapmirror -DestinationLocation $($mySecondaryVserver+":"+$PrimaryVolName) -SourceLocation $($myPrimaryVserver+":"+$PrimaryVolName) -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
+                            $RelationPolicy=$relation.Policy
+        
+                        }else{
+                            $Credential=get_local_cDotcred($mySecondaryController)
+                            $url=$("https://"+$mySecondaryController.Name+"/api/snapmirror/relationships?source.path="+$($myPrimaryVserver+":"+$PrimaryVolName)+"&destination.path="+$($mySecondaryVserver+":"+$PrimaryVolName)+"&fields=**")
+                            Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+                            $relation=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                            if($? -ne $True){
+                                Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
+                            }
+                            $relation=$relation.records
+                            $RelationPolicy=$relation.policy.type
+                            if($relation.count -gt 0){
+                                # ! Private CLI REST request necessary to get correct relationship-status
+                                $SecondaryCredential = get_local_cDotcred($mySecondaryController)
+                                $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/snapmirror?source-path="+$($myPrimaryVserver+":"+$PrimaryVolName)+"&destination-path="+$($mySecondaryVserver+":"+$PrimaryVolName)+"&fields=state,status")
+                                Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
+                                $SnapmirrorRelationshipStatus=Invoke-RestMethod -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+                                if($? -ne $True){
+                                    Write-LogError "ERROR: Unable to get snapmirror relationship status. Reason [$ErrorVar]"
+                                    Write-LogDebug "[$workOn]: end"
+                                    return $False
+                                }elseif($SnapmirrorRelationshipStatus.num_records -gt 0){
+                                    $MirrorState=$SnapmirrorRelationshipStatus.records[0].state
+                                    $RelationshipStatus=$SnapmirrorRelationshipStatus.records[0].status
+                                }
+                            }
                         }
                     }elseif($Force -eq $True -and $DDR -eq $False){
                         if($vfrEnable -eq $False){
@@ -10947,7 +10982,11 @@ Try {
                     if( $DDR -eq $False ){
                         # In Force mode
                         if($Global:MirrorSchedule.Length -eq 0){
-                            $Schedule=$PreviousSchedule
+                            if($PreviousSchedule.Length -gt 0){
+                                $Schedule=$PreviousSchedule
+                            }else{
+                                $Schedule="Hourly"
+                            }
                         }else{
                             $Schedule=$Global:MirrorSchedule
                         }
@@ -11012,6 +11051,23 @@ Try {
                                 Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
                             }
                             $relation=$relation.records
+                            $SecondaryCredential = get_local_cDotcred($mySecondaryController)
+                            $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/snapmirror?source-path="+$($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName)+"&destination-path="+$($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName)+"&fields=state,status")
+                            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
+                            $SnapmirrorRelationshipStatus=Invoke-RestMethod -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+                            if($? -ne $True){
+                                Write-LogError "ERROR: Unable to get snapmirror relationship status. Reason [$ErrorVar]"
+                                Write-LogDebug "[$workOn]: end"
+                                return $False
+                            }elseif($SnapmirrorRelationshipStatus.num_records -gt 0){
+                                if($Global:PSTKCall -ne "Rest"){
+                                    $relation.MirrorState=$SnapmirrorRelationshipStatus.records[0].state
+                                    $relation.RelationshipStatus=$SnapmirrorRelationshipStatus.records[0].status
+                                }else{
+                                    $relation | Add-Member -NotePropertyName MirrorState -NotePropertyValue $SnapmirrorRelationshipStatus.records[0].state
+                                    $relation | Add-Member -NotePropertyName RelationshipStatus -NotePropertyValue $SnapmirrorRelationshipStatus.records[0].status
+                                }
+                            }
                         }
                         
                     }elseif($DDR -eq $True){
@@ -11647,14 +11703,14 @@ Try {
                         }
                         if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcNetInterface failed [$ErrorVar]" }
                     }else{
-                        $body=@{}
+                        $bodylif=@{}
                         if($PrimaryIsAutoRevert -eq $True){
-                            $body.location=@{"auto_revert"="true"}
+                            $bodylif.location=@{"auto_revert"="true"}
                         }else{
-                            $body.location=@{"auto_revert"="false"}
+                            $bodylif.location=@{"auto_revert"="false"}
                         }
-                        $body=$body | ConvertTo-Json
-                        $ret=REST_set_lif -myVserver $mySecondaryVserver -myLIFuuid $SecondaryInterfaceUuid -body $body -myController $mySecondaryController
+                        $bodylif=$bodylif | ConvertTo-Json
+                        $ret=REST_set_lif -myVserver $mySecondaryVserver -myLIFuuid $SecondaryInterfaceUuid -body $bodylif -myController $mySecondaryController
                         if($ret -ne $True){
                             Write-LogDebug "ERROR: failed to set lif [$lif_name] into state [$state] reason [$ret]"
                         }
@@ -12518,16 +12574,16 @@ Try {
             $myCred=get_local_cDotcred($mySecondaryController)
             $myVserver=Get-NcVserver -Name $mySecondaryVserver -Controller $mySecondaryController
             $myVserverUUID=$myVserver.Uuid
-            $body=@{
+            $bodycifs=@{
                 security=$PrimaryCIFSsecurity
                 options=$primaryOptions
             } 
-            $body.options.psobject.Properties.Remove("export_policy_enabled")
-            $body.security.psobject.Properties.Remove("kdc_encryption")
-            $body = $body | ConvertTo-Json
+            $bodycifs.options.psobject.Properties.Remove("export_policy_enabled")
+            $bodycifs.security.psobject.Properties.Remove("kdc_encryption")
+            $bodycifs = $bodycifs | ConvertTo-Json
             $url=$("https://"+$mySecondaryController.Name+"/api/protocols/cifs/services/"+$myVserverUUID+"?force=true")
-            Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $myCred -body $body -SkipCertificateCheck"
-            $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $myCred -body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+            Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $myCred -body $bodycifs -SkipCertificateCheck"
+            $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $myCred -body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: Unable to patch CIFS options & security settings. Reason [$ErrorVar]"
                 Write-LogDebug "[$workOn]: end"
@@ -13139,17 +13195,17 @@ Try {
                     $SecondaryCredential = get_local_cDotcred($mySecondaryController)
                     $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/vserver/services/name-service/ldap/client/schema?vserver="+$mySecondaryVserver+"&schema="+$PrimaryLDAPclientSchema)
                     if($PrimarySchemaWindowsToUnixNoDomainPrefix -eq $False){
-                        $body=@{
+                        $bodyldap=@{
                             windows_to_unix_no_domain_prefix="false"
                         }|ConvertTo-Json
                         
                     }else{
-                        $body=@{
+                        $bodyldap=@{
                             windows_to_unix_no_domain_prefix="true"
                         }|ConvertTo-Json   
                     }
-                    Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $SecondaryCredential -Body $body -SkipCertificateCheck"
-                    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $SecondaryCredential -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                    Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $SecondaryCredential -Body $bodyldap -SkipCertificateCheck"
+                    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $SecondaryCredential -Body $bodyldap -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: Unable to set LDAP Schema noDomainPrefix. Reason [$ErrorVar]"
                         Write-LogDebug "[$workOn]: end"
@@ -13354,7 +13410,7 @@ Try {
                 if($Global:PSTKCall -match "Rest|ZapiEnforced"){
                     # ! Try REST request because New-NcLdapClient cmdlet does not support -Name and -Servers parameters
                     $CredSecondary=get_local_cDotcred($mySecondaryController)
-                    $body=@{
+                    $bodyldap=@{
                         schema=$LDAPclientSchema
                         ad_domain=$LDAPclientAdDomain
                         preferred_ad_servers=$LDAPclientADServers
@@ -13382,8 +13438,8 @@ Try {
                         svm=@{name=$mySecondaryVserver}
                     }|ConvertTo-Json
                     $url=$("https://"+$mySecondaryController.Name+"/api/name-services/ldap")
-                    Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
-                    $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                    Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyldap -SkipCertificateCheck"
+                    $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyldap -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: Unable to create LDAP AD client. Reason [$ErrorVar]"
                         Write-LogDebug "[$workOn]: end"
@@ -13472,7 +13528,7 @@ Try {
                 if($Global:PSTKCall -match "Rest|ZappiEnforced"){
                     # ! Try REST request because New-NcLdapClient cmdlet does not support -Name and -Servers parameters
                     $CredSecondary=get_local_cDotcred($mySecondaryController)
-                    $body=@{
+                    $bodyldap=@{
                         schema=$LDAPclientSchema
                         servers=$LDAPclientServers
                         port=$LDAPclientTcpPort
@@ -13499,8 +13555,8 @@ Try {
                         svm=@{name=$mySecondaryVserver}
                     }|ConvertTo-Json
                     $url=$("https://"+$mySecondaryController.Name+"/api/name-services/ldap")
-                    Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
-                    $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                    Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyldap -SkipCertificateCheck"
+                    $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyldap -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: Unable to create LDAP client. Reason [$ErrorVar]"
                         Write-LogDebug "[$workOn]: end"
@@ -13971,7 +14027,7 @@ Try {
                             $CredSecondary=get_local_cDotcred($mySecondaryController)
                             $ADCred = get_local_cred ($SecondaryDomain) -ADcred
                             $url=$("https://"+$mySecondaryController.Name+"/api/protocols/cifs/services?force=true")
-                            $body=@{
+                            $bodycifs=@{
                                 svm=@{name=$mySecondaryVserver}
                                 name=$SecondaryCifsServer
                                 ad_domain=@{
@@ -13982,16 +14038,16 @@ Try {
                                 }
                             }
                             if($CIFSAdminState -eq "Up"){
-                                $body.enabled=$true
+                                $bodycifs.enabled=$true
                             }
                             if($Global.$Global:OntapSecondaryVersion -ge 9.13){
                                 if($SecondaryDefaultSite.length -gt 1){
-                                    $body.ad_domain.default_site=$SecondaryDefaultSite
+                                    $bodycifs.ad_domain.default_site=$SecondaryDefaultSite
                                 }
                             }
-                            $body=$body | ConvertTo-Json
-                            Write-LogDebug "Invoke-RestMethod -Method post -Uri $url -Credential $CredSecondary -SkipCertificateCheck (body is intentionally hidden)"
-                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                            $bodycifs=$bodycifs | ConvertTo-Json
+                            Write-LogDebug "Invoke-RestMethod -Method post -Uri $url -Credential $CredSecondary -SkipCertificateCheck (bodycifs is intentionally hidden)"
+                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
                             if($? -ne $True){
                                 Write-LogError "ERROR: post request [$url] reason [$ErrorVar]"
                             }
@@ -14044,7 +14100,7 @@ Try {
                             $CredSecondary=get_local_cDotcred($mySecondaryController)
                             $ADCred = get_local_cred ($SecondaryDomain) -ADcred
                             $url=$("https://"+$mySecondaryController.Name+"/api/protocols/cifs/services?force=true")
-                            $body=@{
+                            $bodycifs=@{
                                 svm=@{name=$mySecondaryVserver}
                                 name=$SecondaryCifsServer
                                 ad_domain=@{
@@ -14055,17 +14111,17 @@ Try {
                                 }
                             }
                             if($CIFSAdminState -eq "Up"){
-                                $body.enabled=$true
+                                $bodycifs.enabled=$true
                             }
                             if($Global.$Global:OntapSecondaryVersion -ge 9.13){
                                 if($SecondaryDefaultSite.length -gt 1){
-                                    $body.ad_domain.default_site=$SecondaryDefaultSite
+                                    $bodycifs.ad_domain.default_site=$SecondaryDefaultSite
                                 }
                             }
-                            $body.netbios=@{aliases=$SecondaryCifsNetbiosAlias}
-                            $body=$body | ConvertTo-Json
+                            $bodycifs.netbios=@{aliases=$SecondaryCifsNetbiosAlias}
+                            $bodycifs=$bodycifs | ConvertTo-Json
                             Write-LogDebug "Invoke-RestMethod -Method post -Uri $url -Credential $CredSecondary -SkipCertificateCheck (body is intentionally hidden)"
-                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
                             if($? -ne $True){
                                 Write-LogError "ERROR: post request [$url] reason [$ErrorVar]"
                             }
@@ -14986,9 +15042,9 @@ $request=@"
                                 $DestinationShareDetails=$PrimaryShareDetails | Select-Object -ExcludeProperty svm,volume,browsable,show_previous_versions
                                 $DestinationShareDetails | Add-Member -MemberType NoteProperty -name "svm" -value @{"name"=$mySecondaryVserver}
                                 #$DestinationShareDetails=$DestinationShareDetails | Select-Object -Property * -ExcludeProperty browsable,show_previous_version
-                                $body=$DestinationShareDetails | ConvertTo-Json
-                                Write-LogDebug "Invoke-RestMethod -Method post -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
-                                $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                $bodyshare=$DestinationShareDetails | ConvertTo-Json
+                                Write-LogDebug "Invoke-RestMethod -Method post -Uri $url -Credential $CredSecondary -Body $bodyshare -SkipCertificateCheck"
+                                $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyshare -SkipCertificateCheck -ErrorVariable ErrorVar
                                 if($? -eq $True -and $ret.num_records -eq 1){
                                     Write-Log "[$workOn] Share [$PrimaryShareName] created successfully"
                                 }else{
@@ -16336,15 +16392,15 @@ Function set_vserver_protocols_with_rest (
         return $False
     }
     # 2) Path SVM UUID with generated json body for all allowed protocols
-    $body=@{}
-    #$body=$allowedProtocols | ConvertTo-Json
+    $bodyproto=@{}
+    #$bodyproto=$allowedProtocols | ConvertTo-Json
     foreach ( $protocol in $allowedProtocols ){
-        $body[$protocol]=@{allowed=$True}
+        $bodyproto[$protocol]=@{allowed=$True}
     }
-    $body=$body | ConvertTo-Json
+    $bodyproto=$bodyproto | ConvertTo-Json
     $url=$("https://"+$myController.Name+"/api/svm/svms/"+$svmUUID)
     Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $myCred -SkipCertificateCheck"
-    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $myCred -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $myCred -Body $bodyproto -SkipCertificateCheck -ErrorVariable ErrorVar
     if($? -ne $True){
         Write-LogError "ERROR: Unable to get svm protocols [$myVserver] from [$myController]" 
         return $False
@@ -16828,7 +16884,7 @@ Try {
 	if ( ( $ret=create_snapmirror_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn -DDR $DDR -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all snapmirror relations " ; $Return = $False }
     if ( ( $ret=create_update_snap_policy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) {Write-LogError "ERROR: create_update_snap_policy_dr"}
     if ( ( $ret=map_lundr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to map all LUNs " ; $Return = $False }
-    if ( ( $ret=set_serial_lundr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-Log "ERROR: Failed to change LUN serial Numbers" ; $Return = $False} 
+    
     <# if($Backup -eq $False -and $Restore -eq $False){
         $ASK_WAIT=Read-HostOptions -question "[$mySecondaryVserver] Do you want to wait the end of snapmirror transfers and mount all volumes and map LUNs on [$mySecondaryVserver] now ?" -options "y/n" -default "y"
     }else{
@@ -16845,6 +16901,7 @@ Try {
         }else{
             if ( ( $ret=mount_voldr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver  -workOn $workOn -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to mount all volumes " ; $Return = $False }
         }
+        if ( ( $ret=set_serial_lundr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-Log "ERROR: Failed to change LUN serial Numbers" ; $Return = $False} 
         if($Global:NFSonly -eq $False){
             if($Backup -eq $False){
                 if ( -not $Global:SecondaryCifsLifCreated ){
@@ -17241,15 +17298,16 @@ Try {
         }else{
             $Cred=get_local_cDotcred($myPrimaryController)
             $ADCred = get_local_cred -myCredential $myCifsServer.Domain -Adcred
-            $body=@{
+            $bodycifs=@{
                 ad_domain=@{
                     password=[Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($ADcred.Password))
                     user=$ADcred.UserName}
             } | ConvertTo-Json
             $VserverUUID=$myVserver.Uuid
             $url=$("https://"+$myPrimaryController.Name+"/api/protocols/cifs/services/"+$VserverUUID+"?force=true")
-            Write-LogDebug "Invoke-RestMethod -Method delete -Uri $url -Credential $Cred -SkipCertificateCheck   (body is intentionally hidden)"
-            $ret=Invoke-RestMethod -Method 'delete' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+            #Write-LogDebug "Invoke-RestMethod -Method delete -Uri $url -Credential $Cred -SkipCertificateCheck   (body is intentionally hidden)"
+            Write-LogDebug "Invoke-RestMethod -Method delete -Uri $url -Credential $Cred -SkipCertificateCheck -body $bodycifs"
+            $ret=Invoke-RestMethod -Method 'delete' -Uri $url -Credential $Cred -Body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: delete request [$url] reason [$ErrorVar]"
             }
@@ -17463,7 +17521,7 @@ Try {
         }else{
             $CredSecondary=get_local_cDotcred($mySecondaryController)
             $ADCred = get_local_cred -myCredential $myCifsServer.Domain -Adcred
-            $body=@{
+            $bodycifs=@{
                 ad_domain=@{
                     password=[Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($ADcred.Password))
                     user=$ADcred.UserName}
@@ -17471,7 +17529,7 @@ Try {
             $VserverUUID=$Vserver.Uuid
             $url=$("https://"+$mySecondaryController.Name+"/api/protocols/cifs/services/"+$VserverUUID+"?force=true")
             Write-LogDebug "Invoke-RestMethod -Method delete -Uri $url -Credential $CredSecondary -SkipCertificateCheck   (body is intentionally hidden)"
-            $ret=Invoke-RestMethod -Method 'delete' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+            $ret=Invoke-RestMethod -Method 'delete' -Uri $url -Credential $CredSecondary -Body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: delete request [$url] reason [$ErrorVar]"
             }
@@ -18041,15 +18099,15 @@ try{
                         Write-LogError "ERROR: Get-NcNetInterface failed [$ErrorVar]"     
                         clean_and_exit 1
                     }
-                    $body=@{}
-                    $body.ip=@{
+                    $bodylif=@{}
+                    $bodylif.ip=@{
                         "address"=$LIFaddress
                         "netmask"=$LIFnetmaskLength
                     }
-                    if($DnsDomainName.length -gt 1){$body.dns_zone=$DnsDomainName}
-                    $body.enabled="true"
-                    $body=$body | ConvertTo-Json
-                    $ret=REST_set_lif -myVserver $mySecondaryVserver -myLIFuuid $LIFuuid -body $body -myController $mySecondaryController
+                    if($DnsDomainName.length -gt 1){$bodylif.dns_zone=$DnsDomainName}
+                    $bodylif.enabled="true"
+                    $bodylif=$bodylif | ConvertTo-Json
+                    $ret=REST_set_lif -myVserver $mySecondaryVserver -myLIFuuid $LIFuuid -body $bodylif -myController $mySecondaryController
                     if($ret -ne $True){
                         Write-LogDebug "ERROR: failed to set lif [$LIFname] reason [$ret]"
                     }
@@ -18556,7 +18614,7 @@ try{
 
     }else{
     ###############################################################################
-    ###### Migration between two different cluster outside any Metrocluster
+    ###### Migration between two different cluster 
 
         ###### 1 backup LIF, cifsserver, shares & symlinks from Source SVM
         
@@ -18668,6 +18726,14 @@ try{
         $out = Get-NcCifsSymlink -VserverContext $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar | Set-NcCifsSymlink -CifsServer $Temporary_CIFS_server_identity -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $True ; Write-LogError "ERROR: Set-NcCifsSymlink failed [$ErrorVar]" }
 
+        Write-Log "[$myPrimaryVserver] Stop CIFS server"
+        Write-LogDebug "stop-NcCifsServer -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Confirm:$False"
+        $out = Stop-NcCifsServer -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar -Confirm:$False
+        if ( $? -ne $True ) {
+            Write-LogError "ERROR: Failed to disable CIFS on Vserver [$myPrimaryVserver]" 
+            $Return = $False
+        }
+
         ###### 4 Disable LIF on source Vserver
 
         Write-Log "[$myPrimaryVserver] Disable LIF on source SVM"
@@ -18737,7 +18803,7 @@ try{
                     enabled=$True
                 }
             }
-            $ret=REST_patch_CIFS_server -bodycifs $bodycifs -ADCred $ADCred -controller $myPrimaryController -myVserver $myPrimaryVserver
+            $ret=REST_patch_CIFS_server -bodycifs $bodycifs -ADCred $ADCred -controller $mySecondaryController -myVserver $mySecondaryVserver
             if($ret -ne $True){
                 clean_Throw "ERROR: Fail to modify CIFS server"
             }
@@ -19936,18 +20002,18 @@ Function activate_vserver_dr (
                 $ActiveVserverUuid=$ActiveVserver.Uuid
                 $cred=get_local_cDotcred($NcCurrentActiveCtrl)
                 $url=$("https://"+$NcCurrentActiveCtrl.Name+"/api/protocols/cifs/services/"+$ActiveVserverUuid+"?force=true")
-                $body=@{}
-                $body.ad_domain=@{
+                $bodycifs=@{}
+                $bodycifs.ad_domain=@{
                     fqdn=$newCIFSDomain
                     organizational_unit=$newCIFSOU
                     password=[Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($ADcred.Password))
                     user=$ADcred.UserName
                 }
-                $body.enabled=$False
-                $body.name=$newCIFSName
-                $body=$body | ConvertTo-Json
+                $bodycifs.enabled=$False
+                $bodycifs.name=$newCIFSName
+                $bodycifs=$bodycifs | ConvertTo-Json
                 Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $Cred -SkipCertificateCheck (body is intentionally hidden)"
-                $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $Cred -Body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
                 if($? -ne $True){
                     Write-LogError "ERROR: patch request [$url] reason [$ErrorVar]"
                 }
@@ -19962,17 +20028,17 @@ Function activate_vserver_dr (
                         break
                     }else{
                         $JobStatus=$JobDetail.JobState
-                        Write-LogDebug "[$workOn] Patch CIFS server status [$JobStatus]"
+                        Write-LogDebug "[$currentActiveVserver] Patch CIFS server status [$JobStatus]"
                         if($JobStatus -eq "failure"){
                             $JobCompletion=$JobDetail.JobCompletion
-                            Write-LogError "[$workOn] Patch CIFS server failed  [$JobCompletion]"
+                            Write-LogError "[$currentActiveVserver] Patch CIFS server failed  [$JobCompletion]"
                             break
                         }
                     }
                     $CurrentTime=Get-date
                     $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
                     if($TimeSpend -gt $Global:STOP_TIMEOUT){
-                        Write-LogWarn "[$workOn] Patch CIFS server take too much time. Check in Ontap its status"
+                        Write-LogWarn "[$currentActiveVserver] Patch CIFS server take too much time. Check in Ontap its status"
                         $Timeout=$True
                     }
                     Start-Sleep 5
@@ -20756,8 +20822,11 @@ Function resync_vserver_dr (
                 $DestinationVserver=$relation.DestinationVserver
                 $RelationHealth=$relation.IsHealthy
                 $RelationshipStatus=$relation.RelationshipStatus
+                $SMPolicy=$relation.Policy
+                $SMSchedule=$relation.Schedule
             }else{
-                
+                $SMPolicy=$relation.policy.name
+                $SMSchedule=$relation.transfer_schedule.name
                 $SourceLocation=$relation.source.path
                 $DestinationLocation=$relation.destination.path
                 $SourceVolume=$SourceLocation.split(":")[-1]
@@ -20776,6 +20845,28 @@ Function resync_vserver_dr (
                 }elseif($SnapmirrorRelationshipStatus.num_records -gt 0){
                     $RelationshipStatus=$SnapmirrorRelationshipStatus.records[0].status
                     $MirrorState=$SnapmirrorRelationshipStatus.records[0].state
+                }
+            }
+            if($Global:XDPPolicy.length -gt 0){
+                if($Global:XDPPolicy -ne $SMPolicy){
+                    Write-Log "[$mySecondaryVserver] Modify Snapmirror Policy to [$Global:XDPPolicy] for relationship [$SourceLocation] --> [$DestinationLocation] "
+                    Write-LogDebug "Set-NcSnapmirror -DestinationVserver $DestinationVserver -DestinationVolume $DestinationVolume -Policy $Global:XDPPolicy -Controller $mySecondaryController"
+                    $ret=Set-NcSnapmirror -DestinationVserver $DestinationVserver -DestinationVolume $DestinationVolume -Policy $Global:XDPPolicy -Controller $mySecondaryController -ErrorVariable ErrorVar -Confirm:$False
+                    if ( $? -ne $True ) 
+                    {
+                        Write-LogError "ERROR: Snapmirror modify failed reason [$ErrorVar]" 
+                        #$Return = $False
+                    }
+                }
+                if($Global:MirrorSchedule -ne $SMSchedule){
+                    Write-Log "[$mySecondaryVserver] Modify Snapmirror Schedule to [$Global:MirrorSchedule] for relationship [$SourceLocation] --> [$DestinationLocation] "
+                    Write-LogDebug "Set-NcSnapmirror -DestinationVserver $DestinationVserver -DestinationVolume $DestinationVolume -Policy $Global:MirrorSchedule -Controller $mySecondaryController"
+                    $ret=Set-NcSnapmirror -DestinationVserver $DestinationVserver -DestinationVolume $DestinationVolume -Schedule $Global:MirrorSchedule -Controller $mySecondaryController -ErrorVariable ErrorVar -Confirm:$False
+                    if ( $? -ne $True ) 
+                    {
+                        Write-LogError "ERROR: Snapmirror modify failed reason [$ErrorVar]" 
+                        #$Return = $False
+                    }
                 }
             }
             if ( ( $MirrorState -match 'broken_off|broken-off|snapmirrored' ) -and ($RelationshipStatus -eq 'idle' ) ) 
@@ -21164,7 +21255,7 @@ Function mount_volume (
                     Write-LogDebug "Invoke-NcSnapmirrorQuiesce -DestinationVserver $myVserver -DestinationVolume $Parent -Controller $mySecondaryController"
                     $ret=Invoke-NcSnapmirrorQuiesce -DestinationVserver $myVserver -DestinationVolume $Parent -Controller $mySecondaryController -ErrorVariable ErrorVar -Confirm:$False
                     if($? -ne $True){$Return=$False; Clean_Throw "ERROR : Failed to quiesce destination relationship [${mySecondaryController}:${mySecondaryVserver}:${PrimaryVol}] reason [$ErrorVar]"}
-                    $ret=wait_snapmirror_dr_status -DestinationVserver $myVserver -PrimaryVolumeName $Parent -Status "quiesced" -MirrorState "snapmirrored" -mySecondaryController $mySecondaryController
+                    $ret=wait_snapmirror_dr_status -DestinationVserver $myVserver -PrimaryVolumeName $Parent -Status "quiesced" -MirrorState "snapmirrored|broken-off|broken_off" -mySecondaryController $mySecondaryController
                     if($ret -eq $false){
                         $Return=$False
                         Clean_Throw "ERROR : Failed to quiesce a snapmirror relationship. Increase timeout?"
@@ -22655,31 +22746,31 @@ Function Set_CIFS_from_JSON (
                     $myVserverUuid=$myVserver.Uuid
                     $cred=get_local_cDotcred($ToNcController)
                     $url=$("https://"+$ToNcController.Name+"/api/protocols/cifs/services/"+$myVserverUuid+"?force=true")
-                    $body=@{}
-                    $body.ad_domain=@{
+                    $bodycifs=@{}
+                    $bodycifs.ad_domain=@{
                         fqdn=$newCIFSDomain
                         organizational_unit=$newCIFSOU
                         password=[Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($ADcred.Password))
                         user=$ADcred.UserName
                     }
-                    $body.enabled=$True
-                    $body.name=$newCIFSName
+                    $bodycifs.enabled=$True
+                    $bodycifs.name=$newCIFSName
                     if($newCIFSNetbiosAliases.count -ge 1){
-                        $body.netbios=@{}
-                        $body.netbios.aliases=@()
+                        $bodycifs.netbios=@{}
+                        $bodycifs.netbios.aliases=@()
                     }
                     foreach ($netbiosalias in $newCIFSNetbiosAliases){
-                        $body.netbios.aliases+=$netbiosalias
+                        $bodycifs.netbios.aliases+=$netbiosalias
                     }
-                    $cleanbody=$body
-                    $body=$body | ConvertTo-Json
-                    #Write-LogDebug "$body"
-                    $cleanbody.ad_domain.password="xxxxxxxxxxxxxx"
-                    $cleanbody=$cleanbody | ConvertTo-Json
+                    $cleanbodycifs=$bodycifs
+                    $bodycifs=$bodycifs | ConvertTo-Json
+                    #Write-LogDebug "$bodycifs"
+                    $cleanbodycifs.ad_domain.password="xxxxxxxxxxxxxx"
+                    $cleanbodycifs=$cleanbodycifs | ConvertTo-Json
                     #Write-logdebug "$cleanbody"
-                    Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $Cred -SkipCertificateCheck -bbody $cleanbody"
+                    Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $Cred -SkipCertificateCheck -body $cleanbodycifs"
                     #Write-LogDebug "$body"
-                    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $Cred -Body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: patch request [$url] reason [$ErrorVar]"
                     }
@@ -22694,10 +22785,10 @@ Function Set_CIFS_from_JSON (
                             break
                         }else{
                             $JobStatus=$JobDetail.JobState
-                            Write-LogDebug "[$workOn] Patch CIFS server status [$JobStatus]"
+                            Write-LogDebug "[$ToVserver] Patch CIFS server status [$JobStatus]"
                             if($JobStatus -eq "failure"){
                                 $JobCompletion=$JobDetail.JobCompletion
-                                Write-LogError "[$workOn] Patch CIFS server failed  [$JobCompletion]"
+                                Write-LogError "[$ToVserver] Patch CIFS server failed  [$JobCompletion]"
                                 $Return=$False
                                 break
                             }
@@ -22705,7 +22796,7 @@ Function Set_CIFS_from_JSON (
                         $CurrentTime=Get-date
                         $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
                         if($TimeSpend -gt $Global:STOP_TIMEOUT){
-                            Write-LogWarn "[$workOn] Patch CIFS server take too much time. Check in Ontap its status"
+                            Write-LogWarn "[$ToVserver] Patch CIFS server take too much time. Check in Ontap its status"
                             $Timeout=$True
                             $Return=$False
                         }
@@ -23778,9 +23869,9 @@ Function set_vol_options_from_voldb (
                                             $myPrimaryCompressionAlgorithm=$mySISdetails.compression_algorithm
                                             if($myPrimaryStorageEfficiencyMode -ne $VolSisEfficiencyMode -or $myPrimaryCompressionAlgorithm -ne $VolSisCompressionAlgorithm){
                                                 Write-Log "[$CloneDR] volume [$VolName] need to change Storage Efficiency mode with [$VolSisEfficiencyMode] and Compression Algotrithm with [$VolSisCompressionAlgorithm]"
-                                                $body=@{"storage-efficiency-mode"=$VolSisEfficiencyMode}
-                                                Write-LogDebug "Invoke-NcCli -Command vol efficiency modify -query $query -body $body -Controller $myController"
-                                                $ret=Invoke-NcCli -Command "vol efficiency modify" -query $query -body $body -Controller $myController -ErrorVariable ErrorVar
+                                                $bodyeff=@{"storage-efficiency-mode"=$VolSisEfficiencyMode}
+                                                Write-LogDebug "Invoke-NcCli -Command vol efficiency modify -query $query -body $bodyeff -Controller $myController"
+                                                $ret=Invoke-NcCli -Command "vol efficiency modify" -query $query -body $bodyeff -Controller $myController -ErrorVariable ErrorVar
                                                 if($? -ne $True){Write-LogError "Failed to modify storage efficiency mode on volume [$VolName] reason [$ErrorVar]"}
                                             }
                                         }
@@ -24003,9 +24094,9 @@ Function set_vol_options_from_voldb (
                                             $myPrimaryCompressionAlgorithm=$mySISdetails.compression_algorithm
                                             if($myPrimaryStorageEfficiencyMode -ne $VolSisEfficiencyMode){
                                                 Write-Log "[$myVserver] volume [$VolName] need to change Storage Efficiency mode with [$VolSisEfficiencyMode] and Compression Algotrithm with [$VolSisCompressionAlgorithm]"
-                                                $body=@{"storage-efficiency-mode"=$VolSisEfficiencyMode} | ConvertTo-Json
-                                                Write-LogDebug "Invoke-NcCli -Command vol efficiency modify -query $query -body $body -Controller $myController"
-                                                $ret=Invoke-NcCli -Command "vol efficiency modify" -query $query -body $body -Controller $myController -ErrorVariable ErrorVar
+                                                $bodyeff=@{"storage-efficiency-mode"=$VolSisEfficiencyMode} | ConvertTo-Json
+                                                Write-LogDebug "Invoke-NcCli -Command vol efficiency modify -query $query -body $bodyeff -Controller $myController"
+                                                $ret=Invoke-NcCli -Command "vol efficiency modify" -query $query -body $bodyeff -Controller $myController -ErrorVariable ErrorVar
                                                 if($? -ne $True){Write-LogError "Failed to modify storage efficiency mode on volume [$VolName] reason [$ErrorVar]"}
                                             }
                                         }
@@ -24539,20 +24630,20 @@ Function restore_quota (
                             if ( $? -ne $True -and $ErrorVar -ne "duplicate entry" ) { Write-LogDebug "Add-NcQuota failed on a duplicate entry [$ErrorVar]"; $Return = $False }
                             if(-not $VolumeListToRestartQuota.Contains($($Vserver + ':' + $Volume))){$VolumeListToRestartQuota+=$Vserver + ':' + $Volume}
                         }else{
-                            $body=@{}
-                            if ( $DiskLimit -ne '-' -and $null -ne $DiskLimit ){$body.space+=@{"hard_limit"=$DiskLimit}}
-                            if ( $SoftDiskLimit -ne '-' -and $null -ne $SoftDiskLimit ){$body.space+=@{"soft_limit"=$SoftDiskLimit}}
-                            if ( $FileLimit -ne '-' -and $null -ne $FileLimit ){$body.files+=@{"hard_limit"=$FileLimit}}
-                            if ( $SoftFileLimit -ne '-' -and $null -ne $SoftFileLimit ){$body.files+=@{"soft_limit"=$SoftFileLimit}}
-                            if ( $Qtree -eq '-' -or $null -eq $Qtree){$body.qtree=@{"name"=""}}else{$body.qtree=@{"name"=$Qtree}}
-                            $body.type="tree"
-                            $body.volume=@{"name"=$Volume}
-                            $body.svm=@{"name"=$Vserver}
-                            $body=$body | ConvertTo-Json
+                            $bodyquota=@{}
+                            if ( $DiskLimit -ne '-' -and $null -ne $DiskLimit ){$bodyquota.space+=@{"hard_limit"=$DiskLimit}}
+                            if ( $SoftDiskLimit -ne '-' -and $null -ne $SoftDiskLimit ){$bodyquota.space+=@{"soft_limit"=$SoftDiskLimit}}
+                            if ( $FileLimit -ne '-' -and $null -ne $FileLimit ){$bodyquota.files+=@{"hard_limit"=$FileLimit}}
+                            if ( $SoftFileLimit -ne '-' -and $null -ne $SoftFileLimit ){$bodyquota.files+=@{"soft_limit"=$SoftFileLimit}}
+                            if ( $Qtree -eq '-' -or $null -eq $Qtree){$bodyquota.qtree=@{"name"=""}}else{$bodyquota.qtree=@{"name"=$Qtree}}
+                            $bodyquota.type="tree"
+                            $bodyquota.volume=@{"name"=$Volume}
+                            $bodyquota.svm=@{"name"=$Vserver}
+                            $bodyquota=$bodyquota | ConvertTo-Json
                             $Cred=get_local_cDotcred($myController)
                             $url=$("https://"+$myController.Name+"/api/storage/quota/rules")
-                            Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck"
-                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                            Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck"
+                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck -ErrorVariable ErrorVar
                             if($? -ne $True){
                                 Write-LogError "ERROR: Unable to post [$url]. Reason [$ErrorVar]"
                                 Write-LogDebug "[$workOn]: end"
@@ -24630,22 +24721,22 @@ Function restore_quota (
                             if ( $? -ne $True -and $ErrorVar -ne "duplicate entry" ) {Write-LogDebug "Add-NcQuota failed on a duplicate entry [$ErrorVar]"; $Return = $False }
                             if(-not $VolumeListToRestartQuota.Contains($($Vserver + ':' + $Volume))){$VolumeListToRestartQuota+=$Vserver + ':' + $Volume}
                         }else{
-                            $body=@{}
-                            if ( $DiskLimit -ne '-' -and $null -ne $DiskLimit ){$body.space+=@{"hard_limit"=$DiskLimit}}
-                            if ( $SoftDiskLimit -ne '-' -and $null -ne $SoftDiskLimit ){$body.space+=@{"soft_limit"=$SoftDiskLimit}}
-                            if ( $FileLimit -ne '-' -and $null -ne $FileLimit ){$body.files+=@{"hard_limit"=$FileLimit}}
-                            if ( $SoftFileLimit -ne '-' -and $null -ne $SoftFileLimit ){$body.files+=@{"soft_limit"=$SoftFileLimit}}
-                            if ( $Qtree -eq '-' -or $null -eq $Qtree){$body.qtree=@{"name"=""}}else{$body.qtree=@{"name"=$Qtree}}
-                            if ( $PerformUserMapping -eq $True ){$body.user_mapping=$True}else{$body.user_mapping=$False}
-                            $body.type="user"
-                            $body.volume=@{"name"=$Volume}
-                            $body.svm=@{"name"=$Vserver}
-                            if ($QuotaTarget -eq '-' -or $null -eq $QuotaTarget){$body.users=@();$body.users+=@{"name"=""}}else{$body.users=$QuotaTarget}
-                            $body=$body | ConvertTo-Json
+                            $bodyquota=@{}
+                            if ( $DiskLimit -ne '-' -and $null -ne $DiskLimit ){$bodyquota.space+=@{"hard_limit"=$DiskLimit}}
+                            if ( $SoftDiskLimit -ne '-' -and $null -ne $SoftDiskLimit ){$bodyquota.space+=@{"soft_limit"=$SoftDiskLimit}}
+                            if ( $FileLimit -ne '-' -and $null -ne $FileLimit ){$bodyquota.files+=@{"hard_limit"=$FileLimit}}
+                            if ( $SoftFileLimit -ne '-' -and $null -ne $SoftFileLimit ){$bodyquota.files+=@{"soft_limit"=$SoftFileLimit}}
+                            if ( $Qtree -eq '-' -or $null -eq $Qtree){$bodyquota.qtree=@{"name"=""}}else{$bodyquota.qtree=@{"name"=$Qtree}}
+                            if ( $PerformUserMapping -eq $True ){$bodyquota.user_mapping=$True}else{$bodyquota.user_mapping=$False}
+                            $bodyquota.type="user"
+                            $bodyquota.volume=@{"name"=$Volume}
+                            $bodyquota.svm=@{"name"=$Vserver}
+                            if ($QuotaTarget -eq '-' -or $null -eq $QuotaTarget){$bodyquota.users=@();$bodyquota.users+=@{"name"=""}}else{$bodyquota.users=$QuotaTarget}
+                            $bodyquota=$bodyquota | ConvertTo-Json
                             $Cred=get_local_cDotcred($myController)
                             $url=$("https://"+$myController.Name+"/api/storage/quota/rules")
-                            Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck"
-                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                            Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck"
+                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck -ErrorVariable ErrorVar
                             if($? -ne $True){
                                 Write-LogError "ERROR: Unable to post [$url]. Reason [$ErrorVar]"
                                 Write-LogDebug "[$workOn]: end"
@@ -24724,21 +24815,21 @@ Function restore_quota (
                             if ( $? -ne $True -and $ErrorVar -ne "duplicate entry" ) {Write-LogDebug "Add-NcQuota failed on a duplicate entry [$ErrorVar]"; $Return = $False }
                             if(-not $VolumeListToRestartQuota.Contains($($Vserver + ':' + $Volume))){$VolumeListToRestartQuota+=$Vserver + ':' + $Volume}
                         }else{
-                            $body=@{}
-                            if ( $DiskLimit -ne '-' -and $null -ne $DiskLimit ){$body.space+=@{"hard_limit"=$DiskLimit}}
-                            if ( $SoftDiskLimit -ne '-' -and $null -ne $SoftDiskLimit ){$body.space+=@{"soft_limit"=$SoftDiskLimit}}
-                            if ( $FileLimit -ne '-' -and $null -ne $FileLimit ){$body.files+=@{"hard_limit"=$FileLimit}}
-                            if ( $SoftFileLimit -ne '-' -and $null -ne $SoftFileLimit ){$body.files+=@{"soft_limit"=$SoftFileLimit}}
-                            if ( $Qtree -eq '-' -or $null -eq $Qtree){$body.qtree=@{"name"=""}}else{$body.qtree=@{"name"=$Qtree}}
-                            $body.type="group"
-                            $body.volume=@{"name"=$Volume}
-                            $body.svm=@{"name"=$Vserver}
-                            if ($QuotaTarget -eq '-' -or $null -eq $QuotaTarget){$body.group=@{"name"=""}}else{$body.group=@{"name"=$QuotaTarget}}
-                            $body=$body | ConvertTo-Json
+                            $bodyquota=@{}
+                            if ( $DiskLimit -ne '-' -and $null -ne $DiskLimit ){$bodyquota.space+=@{"hard_limit"=$DiskLimit}}
+                            if ( $SoftDiskLimit -ne '-' -and $null -ne $SoftDiskLimit ){$bodyquota.space+=@{"soft_limit"=$SoftDiskLimit}}
+                            if ( $FileLimit -ne '-' -and $null -ne $FileLimit ){$bodyquota.files+=@{"hard_limit"=$FileLimit}}
+                            if ( $SoftFileLimit -ne '-' -and $null -ne $SoftFileLimit ){$bodyquota.files+=@{"soft_limit"=$SoftFileLimit}}
+                            if ( $Qtree -eq '-' -or $null -eq $Qtree){$bodyquota.qtree=@{"name"=""}}else{$bodyquota.qtree=@{"name"=$Qtree}}
+                            $bodyquota.type="group"
+                            $bodyquota.volume=@{"name"=$Volume}
+                            $bodyquota.svm=@{"name"=$Vserver}
+                            if ($QuotaTarget -eq '-' -or $null -eq $QuotaTarget){$bodyquota.group=@{"name"=""}}else{$bodyquota.group=@{"name"=$QuotaTarget}}
+                            $bodyquota=$bodyquota | ConvertTo-Json
                             $Cred=get_local_cDotcred($myController)
                             $url=$("https://"+$myController.Name+"/api/storage/quota/rules")
-                            Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck"
-                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                            Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck"
+                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck -ErrorVariable ErrorVar
                             if($? -ne $True){
                                 Write-LogError "ERROR: Unable to post [$url]. Reason [$ErrorVar]"
                                 Write-LogDebug "[$workOn]: end"
@@ -25357,10 +25448,10 @@ Try {
                         
                     }
                     $url="https://"+$myController.Name+"/api/storage/volumes/"+$VolUuid
-                    $body=@{"quota"=@{"enabled"=$False}}
-                    $body=$body | convertTo-Json
-                    Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $Credential -body $body -SkipCertificateCheck"
-                    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $Credential -SkipCertificateCheck -body $body -ErrorVariable ErrorVar
+                    $bodyquota=@{"quota"=@{"enabled"=$False}}
+                    $bodyquota=$bodyquota | convertTo-Json
+                    Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $Credential -body $bodyquota -SkipCertificateCheck"
+                    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $Credential -SkipCertificateCheck -body $bodyquota -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: Disable to enable quota on volume [$Volume]. Reason [$ErrorVar]" 
                     }else{
@@ -25441,10 +25532,10 @@ Try {
                     
                 }
                 $url="https://"+$myController.Name+"/api/storage/volumes/"+$VolUuid
-                $body=@{"quota"=@{"enabled"=$True}}
-                $body=$body | convertTo-Json
-                Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $Credential -body $body -SkipCertificateCheck"
-                $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $Credential -SkipCertificateCheck -body $body -ErrorVariable ErrorVar
+                $bodyqouta=@{"quota"=@{"enabled"=$True}}
+                $bodyqouta=$bodyqouta | convertTo-Json
+                Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $Credential -body $bodyqouta -SkipCertificateCheck"
+                $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $Credential -SkipCertificateCheck -body $bodyqouta -ErrorVariable ErrorVar
                 if($? -ne $True){
                     Write-LogError "ERROR: Unable to enable quota on volume [$Volume]. Reason [$ErrorVar]" 
                 }else{
@@ -26156,14 +26247,14 @@ Function create_update_servicepolicy_dr(
                                 # Need to modify Allowed Addresses for this service on secondary
                                 Write-LogDebug "Primary [$ServiceAllowedAddresses] different than secondary [$DetailedSecondaryService]"
                                 $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/network/interface/service-policy/modify-service")
-                                $body=@{
+                                $bodypol=@{
                                     vserver=$mySecondaryVserver
                                     policy=$PolicyName
                                     service=$Name
                                     allowed_addresses=$Addresses
                                 } | ConvertTo-Json
-                                Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
-                                $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodypol -SkipCertificateCheck"
+                                $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodypol -SkipCertificateCheck -ErrorVariable ErrorVar
                                 if($? -ne $True){
                                     Write-LogError "ERROR: Unable to modify a service [$Name] for policy [$PolicyName]. Reason [$ErrorVar]"
                                     Write-LogDebug "[$workOn]: end"
@@ -26178,14 +26269,14 @@ Function create_update_servicepolicy_dr(
                             Write-LogDebug "Service [$PolicyName][$Name][$Addresses] does not exist on secondary"
                             Write-LogDebug "Create a new default service [$Name]"
                             $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/network/interface/service-policy/add-service")
-                            $body=@{
+                            $bodypol=@{
                                 vserver=$mySecondaryVserver
                                 policy=$PolicyName
                                 service=$Name
                                 #allowed_addresses=$Addresses
                             } | ConvertTo-Json
-                            Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
-                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                            Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodypol -SkipCertificateCheck"
+                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodypol -SkipCertificateCheck -ErrorVariable ErrorVar
                             if($? -ne $True){
                                 Write-LogError "ERROR: Unable to add a service [$Name] for policy [$PolicyName]. Reason [$ErrorVar]"
                                 Write-LogDebug "[$workOn]: end"
@@ -26194,14 +26285,14 @@ Function create_update_servicepolicy_dr(
                             # and then modify it with the expected allowed_addresses
                             Write-LogDebug "Modify service [$Name] wit allowed_addresse [$Addresses]"
                             $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/network/interface/service-policy/modify-service")
-                            $body=@{
+                            $bodypol=@{
                                 vserver=$mySecondaryVserver
                                 policy=$PolicyName
                                 service=$Name
                                 allowed_addresses=$Addresses
                             } | ConvertTo-Json
-                            Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
-                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                            Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodypol -SkipCertificateCheck"
+                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodypol -SkipCertificateCheck -ErrorVariable ErrorVar
                             if($? -ne $True){
                                 Write-LogError "ERROR: Unable to modify a service [$Name] for policy [$PolicyName]. Reason [$ErrorVar]"
                                 Write-LogDebug "[$workOn]: end"

@@ -29,6 +29,7 @@
 #   1.1.6 : Add DefaultChapCredentials paramater
 #   1.1.7 : Change/Add some synopsis informations
 #   1.1.8 : Add new parameters for UpdateReverse
+#   1.1.9 : Add parametes for resync and resyncreverse to modify snapmirror policy and schedule
 #           
 @{
 
@@ -36,7 +37,7 @@
     RootModule        = '.\svmtool.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.1.8'
+    ModuleVersion     = '1.1.9'
 
     # Supported PSEditions
     # CompatiblePSEditions = @()
