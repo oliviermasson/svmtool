@@ -4055,6 +4055,7 @@ Function create_update_qospolicy_dr(
                 $PrimaryQosGroupMinThroughputIOPS=$PrimaryQosGroup.MinThroughputIOPS
                 $PrimaryQosGroupMinThroughputMbps=$PrimaryQosGroup.MinThroughputMbps
                 $PrimaryQosGroupIsShared=$PrimaryQosGroup.IsShared
+                $PrimaryQosScope=$PrimaryQosGroup.Scope
                 if(($null -eq $PrimaryQosGroupMaxThroughput) -and ($null -eq $PrimaryQosGroupMinThroughput)){  
                     # Process QOS Adaptative Policy Group
                     if($Restore -eq $False){
@@ -4095,33 +4096,148 @@ Function create_update_qospolicy_dr(
                         Write-LogDebug "Working outside MCC so destination policy name is [$QosPolicyGroupName]"
                     }
                     if($Backup -eq $False){
-                        $SecondaryQosAdaptativeGroup=Get-NcQosAdaptivePolicyGroup -PolicyGroup $QosPolicyGroupName -Controller $mySecondaryController -ErrorVariable ErrorVar
+                        if($Global:PSTKCall -ne "Rest"){
+                            $SecondaryQosAdaptativeGroup=Get-NcQosAdaptivePolicyGroup -PolicyGroup $QosPolicyGroupName -Controller $mySecondaryController -ErrorVariable ErrorVar
+                        }else{
+                            if($PrimaryQosScope -ne "svm"){
+                                $SecondaryQosAdaptativeGroup=Get-NcQosAdaptivePolicyGroup -PolicyGroup $QosPolicyGroupName -Controller $mySecondaryController -ErrorVariable ErrorVar
+                            }else{
+                                $cred=get_local_cDotcred($mySecondaryController)
+                                $url=$("https://"+$mySecondaryController.Name+"/api/storage/qos/policies?svm.name="+$mySecondaryVserver+"&fields=**")
+                                Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $cred -SkipCertificateCheck"
+                                $QOSdetail=Invoke-RestMethod -Method 'get' -Uri $url -Credential $cred -SkipCertificateCheck -ErrorVariable ErrorVar
+                                if($? -ne $True){
+                                    Write-LogError "ERROR: Unable to get policy admin owner. Reason [$ErrorVar]" 
+                                    $SecondaryQosAdaptativeGroup=$null
+                                }elseif($ret.num_records -ge 1){
+                                    $SecondaryQosAdaptativeGroup=$QOSdetail.records
+                                }else{
+                                    $SecondaryQosAdaptativeGroup=$null
+                                }
+                            }
+                        }
                         if($null -ne $SecondaryQosAdaptativeGroup)  
                         {
                             # QOS ADaptative Policy group exist, so modify if needed
                             Write-Log "[$workOn] Modify QOS Adaptative Policy Group [$QosPolicyGroupName]"
-                            Write-LogDebug "Set-NcQosAdaptivePolicyGroup -PolicyGroup $QosPolicyGroupName -AbsoluteMinIops $PrimaryQosAdaptativeGroupAbsoluteMinIops `
-                            -ExpectedIops $PrimaryQosAdaptativeGroupExpectedIops -PeakIops $PrimaryQosAdaptativeGroupPeakIops -PeakIopsAllocation `
-                            $PrimaryQosAdaptativeGroupPeakIopsAllocation -ExpectedIopsAllocation $PrimaryQosAdaptativeGroupExpectedIopsAllocation `
-                            -BlockSize $PrimaryQosAdaptativeGroupBlockSize -Controller $mySecondaryController"
-                            $ret=Set-NcQosAdaptivePolicyGroup -PolicyGroup $QosPolicyGroupName -AbsoluteMinIops $PrimaryQosAdaptativeGroup.AbsoluteMinIops `
-                            -ExpectedIops $PrimaryQosAdaptativeGroup.ExpectedIops -PeakIops $PrimaryQosAdaptativeGroup.PeakIops -PeakIopsAllocation `
-                            $PrimaryQosAdaptativeGroup.PeakIopsAllocation -ExpectedIopsAllocation $PrimaryQosAdaptativeGroup.ExpectedIopsAllocation `
-                            -BlockSize $PrimaryQosAdaptativeGroup.BlockSize -Controller $mySecondaryController -ErrorVariable ErrorVar
-                            if ( $? -ne $True ) { Write-Error "ERROR: Set-NcQosAdaptivePolicyGroup failed [$ErrorVar]" }
+                            if($Global:PSTKCall -ne "Rest"){                            
+                                Write-LogDebug "Set-NcQosAdaptivePolicyGroup -PolicyGroup $QosPolicyGroupName -AbsoluteMinIops $PrimaryQosAdaptativeGroupAbsoluteMinIops `
+                                -ExpectedIops $PrimaryQosAdaptativeGroupExpectedIops -PeakIops $PrimaryQosAdaptativeGroupPeakIops -PeakIopsAllocation `
+                                $PrimaryQosAdaptativeGroupPeakIopsAllocation -ExpectedIopsAllocation $PrimaryQosAdaptativeGroupExpectedIopsAllocation `
+                                -BlockSize $PrimaryQosAdaptativeGroupBlockSize -Controller $mySecondaryController"
+                                $ret=Set-NcQosAdaptivePolicyGroup -PolicyGroup $QosPolicyGroupName -AbsoluteMinIops $PrimaryQosAdaptativeGroup.AbsoluteMinIops `
+                                -ExpectedIops $PrimaryQosAdaptativeGroup.ExpectedIops -PeakIops $PrimaryQosAdaptativeGroup.PeakIops -PeakIopsAllocation `
+                                $PrimaryQosAdaptativeGroup.PeakIopsAllocation -ExpectedIopsAllocation $PrimaryQosAdaptativeGroup.ExpectedIopsAllocation `
+                                -BlockSize $PrimaryQosAdaptativeGroup.BlockSize -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { Write-Error "ERROR: Set-NcQosAdaptivePolicyGroup failed [$ErrorVar]" }
+                            }else{
+                                $cred=get_local_cDotcred($mySecondaryController)
+                                $mySecondaryQOSuuid=$SecondaryQosAdaptativeGroup.uuid
+                                $url=$("https://"+$mySecondaryController.Name+"/api/storage/qos/policies/"+$mySecondaryQOSuuid)
+                                $bodyqosadapt=@{
+                                    adaptive=@{
+                                        absolute_min_iops=$PrimaryQosAdaptativeGroupAbsoluteMinIops -replace "IOPS.*$",""
+                                        expected_iops=$PrimaryQosAdaptativeGroupExpectedIops -replace "IOPS.*$",""
+                                        peak_iops=$PrimaryQosAdaptativeGroupPeakIops -replace "IOPS.*$",""
+                                        peak_iops_allocation=$PrimaryQosAdaptativeGroupPeakIopsAllocation
+                                        expected_iops_allocation=$PrimaryQosAdaptativeGroupExpectedIopsAllocation
+                                        block_size=$PrimaryQosAdaptativeGroupBlockSize
+                                    }
+                                }
+                                if($PrimaryQosScope -eq "svm"){
+                                    $bodyqosadapt+=@{svm=@{name=$mySecondaryVserver}}
+                                }
+                                if($ForClone.IsPresent -eq $True){
+                                    $bodyqosadapt+=@{
+                                        name=$PrimaryQosGroupName+"___"+($mySecondaryVserver -replace "\.","_")
+                                        }
+                                }else{
+                                    $bodyqosadapt+=@{
+                                        name=$QosPolicyGroupName
+                                        }
+                                }
+                                $bodyqosadapt=$bodyqosadapt | ConvertTo-Json
+                                Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $cred -Body $bodyqosadapt -SkipCertificateCheck"
+                                $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $cred -Body $bodyqosadapt -SkipCertificateCheck -ErrorVariable ErrorVar
+                                if($? -ne $True){
+                                    Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
+                                }
+                                $JobUuid=$ret.job.uuid
+                                $StartTime=Get-date
+                                $Timeout=$False
+                                $JobDone=$False
+                                While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+                                    $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
+                                    if($JobDetail.JobCompletion -eq "success"){
+                                        $JobDone=$True
+                                        break
+                                    }else{
+                                        $JobStatus=$JobDetail.JobState
+                                        Write-LogDebug "[$workOn] Patch QOS job status [$JobStatus]"
+                                        if($JobStatus -eq "failure"){
+                                            $JobCompletion=$JobDetail.JobCompletion
+                                            Write-LogError "[$workOn] Patch QOS failed [$JobCompletion]"
+                                            break
+                                        }
+                                    }
+                                    $CurrentTime=Get-date
+                                    $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+                                    if($TimeSpend -gt $Global:STOP_TIMEOUT){
+                                        Write-LogWarn "[$workOn] Patch QOS job take too much time. Check in Ontap its status"
+                                        $Timeout=$True
+                                    }
+                                    Start-Sleep 5
+                                }
+                            }
 
                         }else{  
                             # QOS ADaptative Policy group does not exist, create it
-                            Write-Log "[$workOn] Create QOS Adaptative Policy Group [$QosPolicyGroupName]"
-                            Write-LogDebug "New-NcQosAdaptivePolicyGroup -Vserver $mySecondaryVserver -PolicyGroup $QosPolicyGroupName -AbsoluteMinIops $PrimaryQosAdaptativeGroupAbsoluteMinIops `
-                            -ExpectedIops $PrimaryQosAdaptativeGroupExpectedIops -PeakIops $PrimaryQosAdaptativeGroupPeakIops -PeakIopsAllocation `
-                            $PrimaryQosAdaptativeGroupPeakIopsAllocation -ExpectedIopsAllocation $PrimaryQosAdaptativeGroupExpectedIopsAllocation `
-                            -BlockSize $PrimaryQosAdaptativeGroupBlockSize -Controller $mySecondaryController"
-                            $ret=New-NcQosAdaptivePolicyGroup -Vserver $mySecondaryVserver -PolicyGroup $QosPolicyGroupName -AbsoluteMinIops $PrimaryQosAdaptativeGroup.AbsoluteMinIops `
-                            -ExpectedIops $PrimaryQosAdaptativeGroup.ExpectedIops -PeakIops $PrimaryQosAdaptativeGroup.PeakIops -PeakIopsAllocation `
-                            $PrimaryQosAdaptativeGroup.PeakIopsAllocation -ExpectedIopsAllocation $PrimaryQosAdaptativeGroup.ExpectedIopsAllocation `
-                            -BlockSize $PrimaryQosAdaptativeGroup.BlockSize -Controller $mySecondaryController -ErrorVariable ErrorVar
-                            if ( $? -ne $True ) { Write-Error "ERROR: New-NcQosAdaptivePolicyGroup failed [$ErrorVar]" }
+                            
+                            if($PrimaryQosScope -ne "svm"){
+                                if($ForClone.IsPresent -eq $True){
+                                    $QosPolicyGroupName=$PrimaryQosGroupName+"___"+($mySecondaryVserver -replace "\.","_")
+                                }
+                                Write-Log "[$workOn] Create QOS Adaptative Policy Group [$QosPolicyGroupName]"
+                                Write-LogDebug "New-NcQosAdaptivePolicyGroup -Vserver $mySecondaryVserver -PolicyGroup $QosPolicyGroupName -AbsoluteMinIops $PrimaryQosAdaptativeGroupAbsoluteMinIops `
+                                -ExpectedIops $PrimaryQosAdaptativeGroupExpectedIops -PeakIops $PrimaryQosAdaptativeGroupPeakIops -PeakIopsAllocation `
+                                $PrimaryQosAdaptativeGroupPeakIopsAllocation -ExpectedIopsAllocation $PrimaryQosAdaptativeGroupExpectedIopsAllocation `
+                                -BlockSize $PrimaryQosAdaptativeGroupBlockSize -Controller $mySecondaryController"
+                                $ret=New-NcQosAdaptivePolicyGroup -Vserver $mySecondaryVserver -PolicyGroup $QosPolicyGroupName -AbsoluteMinIops $PrimaryQosAdaptativeGroup.AbsoluteMinIops `
+                                -ExpectedIops $PrimaryQosAdaptativeGroup.ExpectedIops -PeakIops $PrimaryQosAdaptativeGroup.PeakIops -PeakIopsAllocation `
+                                $PrimaryQosAdaptativeGroup.PeakIopsAllocation -ExpectedIopsAllocation $PrimaryQosAdaptativeGroup.ExpectedIopsAllocation `
+                                -BlockSize $PrimaryQosAdaptativeGroup.BlockSize -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { Write-Error "ERROR: New-NcQosAdaptivePolicyGroup failed [$ErrorVar]" }
+                            }else{
+                                $cred=get_local_cDotcred($mySecondaryController)
+                                $url=$("https://"+$mySecondaryController.Name+"/api/storage/qos/policies/")
+                                $bodyqosadapt=@{
+                                    adaptive=@{
+                                        absolute_min_iops=$PrimaryQosAdaptativeGroupAbsoluteMinIops -replace "IOPS.*$",""
+                                        expected_iops=$PrimaryQosAdaptativeGroupExpectedIops -replace "IOPS.*$",""
+                                        peak_iops=$PrimaryQosAdaptativeGroupPeakIops -replace "IOPS.*$",""
+                                        peak_iops_allocation=$PrimaryQosAdaptativeGroupPeakIopsAllocation
+                                        expected_iops_allocation=$PrimaryQosAdaptativeGroupExpectedIopsAllocation
+                                        block_size=$PrimaryQosAdaptativeGroupBlockSize
+                                    }
+                                    svm=@{name=$mySecondaryVserver}
+                                }
+                                if($ForClone.IsPresent -eq $True){
+                                    $bodyqosadapt+=@{
+                                        name=$PrimaryQosGroupName+"___"+($mySecondaryVserver -replace "\.","_")
+                                        }
+                                }else{
+                                    $bodyqosadapt+=@{
+                                        name=$QosPolicyGroupName
+                                        }
+                                }
+                                $bodyqosadapt=$bodyqosadapt | ConvertTo-Json
+                                Write-Log "[$workOn] Create QOS Adaptative Policy Group [$(bodyqosadapt.name)]"
+                                Write-LogDebug "Invoke-RestMethod -Method 'Post' -Uri $url -Credential $cred -Body $bodyqosadapt -SkipCertificateCheck"
+                                $ret=Invoke-RestMethod -Method 'Post' -Uri $url -Credential $cred -Body $bodyqosadapt -SkipCertificateCheck -ErrorVariable ErrorVar
+                                if($? -ne $True){
+                                    Write-LogError "ERROR: Post request [$url] reason [$ErrorVar]"
+                                }
+                            }
                         }
                     }
                 }else{ 
@@ -4474,7 +4590,10 @@ Function create_update_qospolicy_dr(
                                         qos=@{policy=@{name=$QosPolicyGroupName}}
                                     } | ConvertTo-Json
                                     $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$SecondaryVolUuid)
-                                    Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck"
+                                    if($PrimaryVolName -eq "test1"){
+                                        Write-Log "debug test1"
+                                    }
+                                    :DoLoop Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck"
                                     $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck -ErrorVariable ErrorVar
                                     if($? -ne $True){
                                         Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
@@ -4493,8 +4612,15 @@ Function create_update_qospolicy_dr(
                                             Write-LogDebug "[$workOn] Update Vol job status [$JobStatus]"
                                             if($JobStatus -eq "failure"){
                                                 $JobCompletion=$JobDetail.JobCompletion
-                                                Write-LogError "[$workOn] Vol creation failed [$JobCompletion]"
-                                                break
+                                                if($JobCompletion -match "to set its QoS policy group to `"none`" or do not assign a policy group to"){
+                                                    Write-LogDebug "Set-NcVserver -Name $mySecondaryVserver -QosPolicyGroup "none" -controller $mySecondaryController"
+                                                    $ret=Set-NcVserver -Name $mySecondaryVserver -QosPolicyGroup "none" -controller $mySecondaryController -ErrorVariable ErrorVar
+                                                    if($? -ne $True){$Return = $False ; Clean_Throw "ERROR: Fail to modify QOS policy group to none on [$mySecondaryVserver] reason [$ErrorVar]"}
+                                                    break DoLoop
+                                                }else{
+                                                    Write-LogError "[$workOn] Update Vol failed [$JobCompletion]"
+                                                    break
+                                                }
                                             }
                                         }
                                         $CurrentTime=Get-date
@@ -6691,6 +6817,81 @@ Try {
             if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcNameService failed [$ErrorVar]" }
         }
     }
+
+    # Check QOS policy group or adaptative policy group
+    Write-LogDebug "Check QOS"
+    if($Global:PSTKCall -eq "Rest"){
+        $Credential = get_local_cDotcred($myPrimaryController)
+        $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/vserver?vserver="+$myPrimaryVserver+"&fields=qos-policy-group")
+        Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+        $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+        if($? -ne $True){
+            Write-LogError "ERROR: Unable to get svm qos policy. Reason [$ErrorVar]" 
+        }else{
+            $PrimaryQOSPolicy=$ret.records.qos_policy_group
+        }
+        $Credential = get_local_cDotcred($mySecondaryController)
+        $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/vserver?vserver="+$mySecondaryVserver+"&fields=qos-policy-group")
+        Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+        $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+        if($? -ne $True){
+            Write-LogError "ERROR: Unable to get svm qos policy. Reason [$ErrorVar]" 
+        }else{
+            $SecondaryQOSPolicy=$ret.records.qos_policy_group
+        }
+        if($PrimaryQOSPolicy -ne $SecondaryQOSPolicy){
+            if($null -eq $PrimaryQOSPolicy){
+                $PrimaryQOSPolicy="none"
+            }
+            Write-LogDebug "[$mySecondaryVserver] modify QOS policy group form [$SecondaryQOSPolicy] to [$PrimaryQOSPolicy]"
+            Write-LogDebug "Get-NcVserver -Name $mySecondaryVserver -Controller $mySecondaryController"
+            $VserverDetails=Get-NcVserver -Name $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+            if($? -ne $True){Write-LogError "ERROR: Failed to get Vserver detail reason [$ErrorVar]"}
+            $VserverDetailsUUID=$VserverDetails.UUid
+            $url=$("https://"+$mySecondaryController.Name+"/api/svm/svms/"+$VserverDetailsUUID)
+            $bodysvm=@{
+                qos_policy=@{
+                    name=$PrimaryQOSPolicy
+                }
+            } | ConvertTo-Json
+            Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $cred -Body $bodysvm -SkipCertificateCheck"
+            $cred=get_local_cDotcred($mySecondaryController)
+            $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $cred -Body $bodysvm -SkipCertificateCheck -ErrorVariable ErrorVar
+            if($? -ne $True){
+                Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
+                $Return=$ret
+            }
+            $JobUuid=$ret.job.uuid
+            $StartTime=Get-date
+            $Timeout=$False
+            $JobDone=$False
+            While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+                $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
+                if($JobDetail.JobCompletion -eq "success"){
+                    $JobDone=$True
+                    break
+                }else{
+                    $JobStatus=$JobDetail.JobState
+                    Write-LogDebug "[$mySecondaryVserver] Patch SVM status [$JobStatus]"
+                    if($JobStatus -eq "failure"){
+                        $JobCompletion=$JobDetail.JobCompletion
+                        Write-LogError "[$mySecondaryVserver] Patch SVM failed  [$JobCompletion]"
+                        $Return=$False
+                        break
+                    }
+                }
+                $CurrentTime=Get-date
+                $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+                if($TimeSpend -gt $Global:STOP_TIMEOUT){
+                    Write-LogWarn "[$mySecondaryVserver] Patch SVM take too much time. Check in Ontap its status"
+                    $Timeout=$True
+                    return $False
+                }
+                Start-Sleep 5
+            }
+        }
+    }
+
     Write-LogDebug "[$myPrimaryVserver]: end"
 	return $Return 
 }
@@ -6753,6 +6954,65 @@ try{
         $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
         if($TimeSpend -gt $Global:STOP_TIMEOUT){
             Write-LogWarn "[$myVserver] Patch CIFS server take too much time. Check in Ontap its status"
+            $Timeout=$True
+            return $False
+        }
+        Start-Sleep 5
+    }
+    Write-LogDebug "[$myVserver]: end"
+    return $Return
+}catch{
+    Error_Handling $_ $myPrimaryVserver
+    return $False
+}   
+}
+
+Function REST_patch_Volume(
+    [System.Collections.Hashtable] $bodyvol,
+    [NetApp.Ontapi.Filer.C.NcController] $controller,
+    [string] $myVserver,
+    [string] $myVolume
+){
+try{
+    $Return=$True
+    Write-LogDebug "[$myVserver]: start"
+
+    $cred=get_local_cDotcred($controller)
+    Write-LogDebug "Get-NcVol -Name $myVolume -Vserver $myVserver -Controller $controller"
+    $VolDetails=Get-NcVol -Name $myVolume -Vserver $myVserver -Controller $controller -ErrorVariable ErrorVar
+    if($? -ne $True){Write-LogError "ERROR: Failed to get Vserver detail reason [$ErrorVar]"}
+    $VolDetailsUUID=$VolDetails.UUid
+    $url=$("https://"+$controller.Name+"/api/storage/volumes/"+$VolDetailsUUID)
+    [string]$bodyvol=$bodyvol | ConvertTo-Json
+    Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $cred -Body $bodyvol -SkipCertificateCheck"
+    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $cred -Body $bodyvol -SkipCertificateCheck -ErrorVariable ErrorVar
+    if($? -ne $True){
+        Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
+        $Return=$ret
+    }
+    $JobUuid=$ret.job.uuid
+    $StartTime=Get-date
+    $Timeout=$False
+    $JobDone=$False
+    While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+        $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $controller
+        if($JobDetail.JobCompletion -eq "success"){
+            $JobDone=$True
+            break
+        }else{
+            $JobStatus=$JobDetail.JobState
+            Write-LogDebug "[$myVserver] Patch Volume status [$JobStatus]"
+            if($JobStatus -eq "failure"){
+                $JobCompletion=$JobDetail.JobCompletion
+                Write-LogError "[$myVserver] Patch Volume failed  [$JobCompletion]"
+                $Return=$False
+                break
+            }
+        }
+        $CurrentTime=Get-date
+        $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+        if($TimeSpend -gt $Global:STOP_TIMEOUT){
+            Write-LogWarn "[$myVserver] Patch Volume take too much time. Check in Ontap its status"
             $Timeout=$True
             return $False
         }
@@ -7493,6 +7753,7 @@ Try {
             $DestVolJunctionPath=$DestVol.nas.path
             $DestVolComment=$DestVol.comment
         }
+        $DestVolUUID=$DestVol.uuid
         if( $Global:SelectVolume -eq $True )
         {
             $volsizeGB=[math]::round($DestVolSize/1024/1024,2)
@@ -7506,13 +7767,27 @@ Try {
                 #Save_Volume_To_Selectvolumedb $myPrimaryController $mySecondaryController $myPrimaryVserver $mySecondaryVserver $PrimaryVolName  
             } 
         }
+        # * find the latest snapshot that is not owned by snapmirror
         Write-Log "[$workOn] Create Flexclone [$DestVolName] from SVM [$DestinationVserverDR] into SVM [$mySecondaryVserver]"
-								  
-        Write-LogDebug "Get-NcSnapshot -Controller $mySecondaryController -Query @{Vserver=$DestinationVserverDR;Volume=$DestVolName;Dependency=`"`!snapmirror`"}"
-        $SnapshotList=Get-NcSnapshot -Controller $mySecondaryController -Query @{Vserver=$DestinationVserverDR;Volume=$DestVolName} -ErrorVariable ErrorVar
-        if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcSnapshot failed [$ErrorVar]" }
-        $ParentSnapshot=$SnapshotList[-1]
-        $ParentSnapshotName=$ParentSnapshot.Name
+		if($Global:PSTKCall -ne "Rest"){						  
+            Write-LogDebug "Get-NcSnapshot -Controller $mySecondaryController -Query @{Vserver=$DestinationVserverDR;Volume=$DestVolName;Dependency=`"`!snapmirror`"}"
+            $SnapshotList=Get-NcSnapshot -Controller $mySecondaryController -Query @{Vserver=$DestinationVserverDR;Volume=$DestVolName} -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcSnapshot failed [$ErrorVar]" }
+            $ParentSnapshot=$SnapshotList[-1]
+            $ParentSnapshotName=$ParentSnapshot.Name
+        }else{
+            $Credential = get_local_cDotcred($mySecondaryController)
+            $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$DestVolUUID+"/snapshots?owners=!snapmirror&name=!snapmirror*&fields=!reclaimable_space")
+            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+            $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+            if($? -ne $True){
+                Clean_Throw "ERROR: Unable to get volume list. Reason [$ErrorVar]" 
+            }else{
+                $SnapshotList=$ret.records[-1]
+            }
+            $ParentSnapshotName=$SnapshotList.name
+        }
+        
         $JunctionPath=$("/"+$DestVolName)
         if($DestVolComment.Length -ge 1){
             $CloneVolComment=$($DestVolComment+" flexclone svmtool")
@@ -8694,12 +8969,28 @@ Try {
 		    $SecondaryVolIsVserverRoot=$SecondaryVol.VolumeStateAttributes.IsVserverRoot
             $SecondaryVolState=$SecondaryVol.State 
             $VolumeName=$SecondaryVol.Name
+            $SecondaryVolUUID=$SecondaryVol.uuid
             Write-Log "[$mySecondaryVserver] Remove volume [$VolumeName]"
+
+            Write-LogDebug "Dismount-NcVol -Name $VolumeName -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -Force"
+            $out=Dismount-NcVol -Name $VolumeName -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -Force
+            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcVol failed [$ErrorVar]" }
+
             if ( $SecondaryVolState -ne 'offline' ) {
-                Write-LogDebug "Set-NcVol -Name  $VolumeName -Offline -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False"
-                $out = Set-NcVol -Name  $VolumeName -Offline -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar  -Confirm:$False
-                if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcVol failed [$ErrorVar]" }
+                if($Global:PSTKCall -ne "Rest"){
+                    Write-LogDebug "Set-NcVol -Name  $VolumeName -Offline -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False"
+                    $out = Set-NcVol -Name  $VolumeName -Offline -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar  -Confirm:$False
+                    if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcVol failed [$ErrorVar]" }
+                }else{
+                    #$bodyvol=@{state="offline"}
+                    $ret=REST_patch_Volume -bodyvol @{state="offline"} -controller $mySecondaryController -myVserver $mySecondaryVserver -myVolume $VolumeName
+                    if($ret -eq $False){
+                        Write-LogError "ERROR : Failed to Patch volume [$VolumeName]"
+                        clean_and_exit 1
+                    }
+                }
             }
+            
             Write-LogDebug "Remove-NcVol -Name $VolumeName -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False"
             $out = Remove-NcVol -Name $VolumeName -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar  -Confirm:$False
             if ( $? -ne $True ) {
@@ -8745,8 +9036,14 @@ Try {
             $PrimaryVolIsVserverRoot=$PrimaryVol.VolumeStateAttributes.IsVserverRoot
             $PrimaryVolState=$PrimaryVol.State
             $VolumeName=$PrimaryVol.Name
+            $PrimaryVolUUID=$PrimaryVol.uuid
             
             Write-Log "[$myPrimaryVserver] Remove volume [$VolumeName]"
+
+            Write-LogDebug "Dismount-NcVol -Name $VolumeName -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Confirm:$False -Force"
+            $out=Dismount-NcVol -Name $VolumeName -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Confirm:$False -Force
+            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcVol failed [$ErrorVar]" }
+
             if ( $PrimaryVolState -ne 'offline' ) {
                 Write-LogDebug "Set-NcVol -Name  $VolumeName -Offline -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Confirm:$False"
                 $out = Set-NcVol -Name  $VolumeName -Offline -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar  -Confirm:$False
@@ -8771,9 +9068,18 @@ Try {
             if ( $PrimaryVolIsVserverRoot -eq $True ) {
                 Write-Log "[$myPrimaryVserver] Remove root volume [$PrimaryVol]"
                 if ( $PrimaryVolState -ne 'offline' ) {
-                    Write-LogDebug "Set-NcVol -Name  $PrimaryVol -Offline -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Confirm:$False"
-                    $out = Set-NcVol -Name  $PrimaryVol -Offline -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar -Confirm:$False
-                    if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcVol failed [$ErrorVar]" }
+                    if($Global:PSTKCall -ne "Rest"){
+                        Write-LogDebug "Set-NcVol -Name  $PrimaryVol -Offline -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Confirm:$False"
+                        $out = Set-NcVol -Name  $PrimaryVol -Offline -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar -Confirm:$False
+                        if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcVol failed [$ErrorVar]" }
+                    }else{
+                        #$bodyvol=@{state="offline"}
+                        $ret=REST_patch_Volume -bodyvol @{state="offline"} -controller $myPrimaryVserver -myVserver $myPrimaryController -myVolume $PrimaryVol
+                        if($ret -eq $False){
+                            Write-LogError "ERROR : Failed to Patch volume [$PrimaryVol]"
+                            clean_and_exit 1
+                        }
+                    }
                 }
                 $out = Remove-NcVol -Name $PrimaryVol -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar -Confirm:$False
                 if ( $? -ne $True ) {
@@ -12056,6 +12362,7 @@ Try {
             $Return=$False
         }
     }else{
+        Write-LogDebug "Get-NcCifsServer -VserverContext $mySecondaryVserver -controller $mySecondaryController"
         $SecondaryCifs=Get-NcCifsServer -VserverContext $mySecondaryVserver -controller $mySecondaryController  -ErrorVariable ErrorVar
         if($? -ne $True){$Return=$False;Clean_Throw "ERROR: Failed to Cifs server on [$mySecondaryVserver] reason [$ErrorVar]"}
         $SecondaryCifs = $SecondaryCifs.CifsServer
@@ -12072,11 +12379,12 @@ Try {
             if($PrimaryCifsServerName -eq $PrimaryCifsServer){
                 $PrimaryCifsServer = $SecondaryCifs
             }
-            if($Global:Run_Mode -eq "RestoreObject"){
-                Write-Log "[$workOn] Running in RestoreObject mode for restoring CIFS Symlink on an existing CIFS server"
+            if($Global:Run_Mode -match "RestoreObject|CloneDR"){
+                Write-LogDebug "Get-NcCifsServer -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
                 $DestCifsServer=Get-NcCifsServer -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
                 if($? -ne $True){$Return=$False;Clean_Throw "ERROR: Failed to get Cifs Server Information for SVM  [$mySecondaryVserver] on [$mySecondaryController] reason [$ErrorVar]"}
                 $PrimaryCifsServer = $DestCifsServer.CifsServer
+                Write-Log "[$workOn] Restoring CIFS Symlink on with CIFS server name [$PrimaryCifsServer]"
             }
 
             Write-LogDebug "Get-NcCifsSymlink -VserverContext $mySecondaryVserver -Controller $mySecondaryController -UnixPath $PrimaryUnixPath"
@@ -17501,11 +17809,14 @@ Try {
                 ad_domain=@{
                     password=[Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($ADcred.Password))
                     user=$ADcred.UserName}
-            } | ConvertTo-Json
+            } 
+            $cleanbodycifs=$bodycifs
+            $bodycifs=$bodycifs | ConvertTo-Json
+            $cleanbodycifs.ad_domain.password="xxxxxxxxxxxxxx"
+            $cleanbodycifs=$cleanbodycifs | ConvertTo-Json
             $VserverUUID=$VserverDetail.Uuid
             $url=$("https://"+$mySecondaryController.Name+"/api/protocols/cifs/services/"+$VserverUUID+"?force=true")
-            #Write-LogDebug "Invoke-RestMethod -Method delete -Uri $url -Credential $Cred -SkipCertificateCheck   (body is intentionally hidden)"
-            Write-LogDebug "Invoke-RestMethod -Method delete -Uri $url -Credential $Cred -SkipCertificateCheck -body $bodycifs"
+            Write-LogDebug "Invoke-RestMethod -Method delete -Uri $url -Credential $Cred -SkipCertificateCheck -body $cleanbodycifs"
             $ret=Invoke-RestMethod -Method 'delete' -Uri $url -Credential $Cred -Body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: delete request [$url] reason [$ErrorVar]"
