@@ -227,7 +227,7 @@ Function Error_Handling([object]$object,[string]$vserver,[switch]$donotcleanlog4
 	Write-LogDebug  "Trap PipelineIterationInfo: [$PipelineIterationInfo]"
 	Write-LogDebug  "Trap ScriptStackTrace: [$ScriptStackTrace]"
 	Write-LogDebug  "Trap TargetObject: [$TargetObject]"
-    if($donotcleanlog4net.IsPresent){
+    if($donotcleanlog4net.IsPresent -eq $false){
         exit_log4net
     }
 }
@@ -1538,8 +1538,8 @@ Function select_data_aggr_from_cli ([NetApp.Ontapi.Filer.C.NcController]$myContr
 	while ( $ans -ne 'y') {	
 
 		$AggrSelectedList = @()
-        Write-LogDebug "Get-NcAggr -Controller $myController"
- 		$AggrList=Get-NcAggr -Controller $myController  -ErrorVariable ErrorVar
+        Write-LogDebug "Get-NcAggr -Controller $myController -ONTAPI"
+ 		$AggrList=Get-NcAggr -Controller $myController  -ErrorVariable ErrorVar -ONTAPI
 		if ( $? -ne $True ) {Clean_Throw "ERROR: Get-NcAggr failed [$ErrorVar]" }
 		if ( $null -eq $AggrList ) {
             Write-LogError "ERROR: Unable list aggregates for Cluster $myController" 
@@ -4109,7 +4109,7 @@ Function create_update_qospolicy_dr(
                                 if($? -ne $True){
                                     Write-LogError "ERROR: Unable to get policy admin owner. Reason [$ErrorVar]" 
                                     $SecondaryQosAdaptativeGroup=$null
-                                }elseif($ret.num_records -ge 1){
+                                }elseif($QOSdetail.num_records -ge 1){
                                     $SecondaryQosAdaptativeGroup=$QOSdetail.records
                                 }else{
                                     $SecondaryQosAdaptativeGroup=$null
@@ -4132,7 +4132,7 @@ Function create_update_qospolicy_dr(
                                 if ( $? -ne $True ) { Write-Error "ERROR: Set-NcQosAdaptivePolicyGroup failed [$ErrorVar]" }
                             }else{
                                 $cred=get_local_cDotcred($mySecondaryController)
-                                $mySecondaryQOSuuid=$SecondaryQosAdaptativeGroup.uuid
+                                $mySecondaryQOSuuid=($SecondaryQosAdaptativeGroup | Where-Object {$_.name -eq "adapt"}).uuid
                                 $url=$("https://"+$mySecondaryController.Name+"/api/storage/qos/policies/"+$mySecondaryQOSuuid)
                                 $bodyqosadapt=@{
                                     adaptive=@{
@@ -4144,49 +4144,20 @@ Function create_update_qospolicy_dr(
                                         block_size=$PrimaryQosAdaptativeGroupBlockSize
                                     }
                                 }
-                                if($PrimaryQosScope -eq "svm"){
-                                    $bodyqosadapt+=@{svm=@{name=$mySecondaryVserver}}
-                                }
-                                if($ForClone.IsPresent -eq $True){
-                                    $bodyqosadapt+=@{
-                                        name=$PrimaryQosGroupName+"___"+($mySecondaryVserver -replace "\.","_")
-                                        }
-                                }else{
-                                    $bodyqosadapt+=@{
-                                        name=$QosPolicyGroupName
-                                        }
-                                }
+                                # if($ForClone.IsPresent -eq $True){
+                                #     $bodyqosadapt+=@{
+                                #         name=$PrimaryQosGroupName+"___"+($mySecondaryVserver -replace "\.","_")
+                                #         }
+                                # }else{
+                                #     $bodyqosadapt+=@{
+                                #         name=$QosPolicyGroupName
+                                #         }
+                                # }
                                 $bodyqosadapt=$bodyqosadapt | ConvertTo-Json
                                 Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $cred -Body $bodyqosadapt -SkipCertificateCheck"
                                 $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $cred -Body $bodyqosadapt -SkipCertificateCheck -ErrorVariable ErrorVar
                                 if($? -ne $True){
                                     Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
-                                }
-                                $JobUuid=$ret.job.uuid
-                                $StartTime=Get-date
-                                $Timeout=$False
-                                $JobDone=$False
-                                While(($JobDone -eq $False) -and ($Timeout -eq $False)){
-                                    $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
-                                    if($JobDetail.JobCompletion -eq "success"){
-                                        $JobDone=$True
-                                        break
-                                    }else{
-                                        $JobStatus=$JobDetail.JobState
-                                        Write-LogDebug "[$workOn] Patch QOS job status [$JobStatus]"
-                                        if($JobStatus -eq "failure"){
-                                            $JobCompletion=$JobDetail.JobCompletion
-                                            Write-LogError "[$workOn] Patch QOS failed [$JobCompletion]"
-                                            break
-                                        }
-                                    }
-                                    $CurrentTime=Get-date
-                                    $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
-                                    if($TimeSpend -gt $Global:STOP_TIMEOUT){
-                                        Write-LogWarn "[$workOn] Patch QOS job take too much time. Check in Ontap its status"
-                                        $Timeout=$True
-                                    }
-                                    Start-Sleep 5
                                 }
                             }
 
@@ -4230,8 +4201,8 @@ Function create_update_qospolicy_dr(
                                         name=$QosPolicyGroupName
                                         }
                                 }
+                                Write-Log "[$workOn] Create QOS Adaptative Policy Group [$($bodyqosadapt.name)]"
                                 $bodyqosadapt=$bodyqosadapt | ConvertTo-Json
-                                Write-Log "[$workOn] Create QOS Adaptative Policy Group [$(bodyqosadapt.name)]"
                                 Write-LogDebug "Invoke-RestMethod -Method 'Post' -Uri $url -Credential $cred -Body $bodyqosadapt -SkipCertificateCheck"
                                 $ret=Invoke-RestMethod -Method 'Post' -Uri $url -Credential $cred -Body $bodyqosadapt -SkipCertificateCheck -ErrorVariable ErrorVar
                                 if($? -ne $True){
@@ -4586,6 +4557,7 @@ Function create_update_qospolicy_dr(
                                     $out=Update-NcVol -Query $query -Attributes $attributes -controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
                                     if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Update-NcVol failed [$ErrorVar]" }
                                 }else{
+                                    $CredSecondary=get_local_cDotcred($mySecondaryController)
                                     $bodyqos=@{
                                         qos=@{policy=@{name=$QosPolicyGroupName}}
                                     } | ConvertTo-Json
@@ -4593,7 +4565,7 @@ Function create_update_qospolicy_dr(
                                     if($PrimaryVolName -eq "test1"){
                                         Write-Log "debug test1"
                                     }
-                                    :DoLoop Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck"
+                                    Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck"
                                     $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck -ErrorVariable ErrorVar
                                     if($? -ne $True){
                                         Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
@@ -4613,10 +4585,48 @@ Function create_update_qospolicy_dr(
                                             if($JobStatus -eq "failure"){
                                                 $JobCompletion=$JobDetail.JobCompletion
                                                 if($JobCompletion -match "to set its QoS policy group to `"none`" or do not assign a policy group to"){
+                                                    Write-LogDebug "Try to force a none QOS policy on SVM before restart setting QOS on volume"
                                                     Write-LogDebug "Set-NcVserver -Name $mySecondaryVserver -QosPolicyGroup "none" -controller $mySecondaryController"
                                                     $ret=Set-NcVserver -Name $mySecondaryVserver -QosPolicyGroup "none" -controller $mySecondaryController -ErrorVariable ErrorVar
                                                     if($? -ne $True){$Return = $False ; Clean_Throw "ERROR: Fail to modify QOS policy group to none on [$mySecondaryVserver] reason [$ErrorVar]"}
-                                                    break DoLoop
+                                                    $CredSecondary=get_local_cDotcred($mySecondaryController)
+                                                    
+                                                    # * need to retry to set QOS on volume after having forced a none qos policy at SVM level
+                                                    
+                                                    Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck"
+                                                    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck -ErrorVariable ErrorVar
+                                                    if($? -ne $True){
+                                                        Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
+                                                    }
+                                                    $JobUuid=$ret.job.uuid
+                                                    $StartTime=Get-date
+                                                    $Timeout=$False
+                                                    $JobDone=$False
+                                                    While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+                                                        $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
+                                                        if($JobDetail.JobCompletion -eq "success"){
+                                                            $JobDone=$True
+                                                            break
+                                                        }else{
+                                                            $JobStatus=$JobDetail.JobState
+                                                            Write-LogDebug "[$workOn] Update Vol job status [$JobStatus]"
+                                                            if($JobStatus -eq "failure"){
+                                                                $JobCompletion=$JobDetail.JobCompletion
+                                                                Write-LogError "[$workOn] Update Vol failed [$JobCompletion]"
+                                                                break
+                                                            }
+                                                        }
+                                                        $CurrentTime=Get-date
+                                                        $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+                                                        if($TimeSpend -gt $Global:STOP_TIMEOUT){
+                                                            Write-LogWarn "[$workOn] Update Vol job take too much time. Check in Ontap its status"
+                                                            $Timeout=$True
+                                                        }
+                                                        Start-Sleep 5
+                                                    }
+
+                                                    # * End retry
+
                                                 }else{
                                                     Write-LogError "[$workOn] Update Vol failed [$JobCompletion]"
                                                     break
@@ -4678,6 +4688,7 @@ Function create_update_qospolicy_dr(
                                         $out=Update-NcVol -Query $query -Attributes $attributes -controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
                                         if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Update-NcVol failed [$ErrorVar]" }
                                     }else{
+                                        $CredSecondary=get_local_cDotcred($mySecondaryController)
                                         $bodyqos=@{
                                             qos=@{policy=@{name=$($PrimaryQOSPolicy+"_"+$mySecondaryVserver)}}
                                         } | ConvertTo-Json
@@ -4701,8 +4712,53 @@ Function create_update_qospolicy_dr(
                                                 break
                                                 if($JobStatus -eq "failure"){
                                                     $JobCompletion=$JobDetail.JobCompletion
-                                                    Write-LogError "[$workOn] Vol creation failed [$JobCompletion]"
-                                                    break
+                                                    if($JobCompletion -match "to set its QoS policy group to `"none`" or do not assign a policy group to"){
+                                                        Write-LogDebug "Try to force a none QOS policy on SVM before restart setting QOS on volume"
+                                                        Write-LogDebug "Set-NcVserver -Name $mySecondaryVserver -QosPolicyGroup "none" -controller $mySecondaryController"
+                                                        $ret=Set-NcVserver -Name $mySecondaryVserver -QosPolicyGroup "none" -controller $mySecondaryController -ErrorVariable ErrorVar
+                                                        if($? -ne $True){$Return = $False ; Clean_Throw "ERROR: Fail to modify QOS policy group to none on [$mySecondaryVserver] reason [$ErrorVar]"}
+                                                        $CredSecondary=get_local_cDotcred($mySecondaryController)
+                                                        
+                                                        # * need to retry to set QOS on volume after having forced a none qos policy at SVM level
+                                                        
+                                                        Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck"
+                                                        $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck -ErrorVariable ErrorVar
+                                                        if($? -ne $True){
+                                                            Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
+                                                        }
+                                                        $JobUuid=$ret.job.uuid
+                                                        $StartTime=Get-date
+                                                        $Timeout=$False
+                                                        $JobDone=$False
+                                                        While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+                                                            $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
+                                                            if($JobDetail.JobCompletion -eq "success"){
+                                                                $JobDone=$True
+                                                                break
+                                                            }else{
+                                                                $JobStatus=$JobDetail.JobState
+                                                                Write-LogDebug "[$workOn] Update Vol job status [$JobStatus]"
+                                                                if($JobStatus -eq "failure"){
+                                                                    $JobCompletion=$JobDetail.JobCompletion
+                                                                    Write-LogError "[$workOn] Update Vol failed [$JobCompletion]"
+                                                                    break
+                                                                }
+                                                            }
+                                                            $CurrentTime=Get-date
+                                                            $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+                                                            if($TimeSpend -gt $Global:STOP_TIMEOUT){
+                                                                Write-LogWarn "[$workOn] Update Vol job take too much time. Check in Ontap its status"
+                                                                $Timeout=$True
+                                                            }
+                                                            Start-Sleep 5
+                                                        }
+    
+                                                        # * End retry
+    
+                                                    }else{
+                                                        Write-LogError "[$workOn] Update Vol failed [$JobCompletion]"
+                                                        break
+                                                    }
                                                 }
                                             }
                                             $CurrentTime=Get-date
@@ -4793,8 +4849,53 @@ Function create_update_qospolicy_dr(
                                                 Write-LogDebug "[$workOn] update vol job status [$JobStatus]"
                                                 if($JobStatus -eq "failure"){
                                                     $JobCompletion=$JobDetail.JobCompletion
-                                                    Write-LogError "[$workOn] Vol update failed [$JobCompletion]"
-                                                    break
+                                                    if($JobCompletion -match "to set its QoS policy group to `"none`" or do not assign a policy group to"){
+                                                        Write-LogDebug "Try to force a none QOS policy on SVM before restart setting QOS on volume"
+                                                        Write-LogDebug "Set-NcVserver -Name $mySecondaryVserver -QosPolicyGroup "none" -controller $mySecondaryController"
+                                                        $ret=Set-NcVserver -Name $mySecondaryVserver -QosPolicyGroup "none" -controller $mySecondaryController -ErrorVariable ErrorVar
+                                                        if($? -ne $True){$Return = $False ; Clean_Throw "ERROR: Fail to modify QOS policy group to none on [$mySecondaryVserver] reason [$ErrorVar]"}
+                                                        $CredSecondary=get_local_cDotcred($mySecondaryController)
+                                                        
+                                                        # * need to retry to set QOS on volume after having forced a none qos policy at SVM level
+                                                        
+                                                        Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck"
+                                                        $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck -ErrorVariable ErrorVar
+                                                        if($? -ne $True){
+                                                            Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
+                                                        }
+                                                        $JobUuid=$ret.job.uuid
+                                                        $StartTime=Get-date
+                                                        $Timeout=$False
+                                                        $JobDone=$False
+                                                        While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+                                                            $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
+                                                            if($JobDetail.JobCompletion -eq "success"){
+                                                                $JobDone=$True
+                                                                break
+                                                            }else{
+                                                                $JobStatus=$JobDetail.JobState
+                                                                Write-LogDebug "[$workOn] Update Vol job status [$JobStatus]"
+                                                                if($JobStatus -eq "failure"){
+                                                                    $JobCompletion=$JobDetail.JobCompletion
+                                                                    Write-LogError "[$workOn] Update Vol failed [$JobCompletion]"
+                                                                    break
+                                                                }
+                                                            }
+                                                            $CurrentTime=Get-date
+                                                            $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+                                                            if($TimeSpend -gt $Global:STOP_TIMEOUT){
+                                                                Write-LogWarn "[$workOn] Update Vol job take too much time. Check in Ontap its status"
+                                                                $Timeout=$True
+                                                            }
+                                                            Start-Sleep 5
+                                                        }
+    
+                                                        # * End retry
+    
+                                                    }else{
+                                                        Write-LogError "[$workOn] Update Vol failed [$JobCompletion]"
+                                                        break
+                                                    }
                                                 }
                                             }
                                             $CurrentTime=Get-date
@@ -4819,7 +4920,7 @@ Function create_update_qospolicy_dr(
     }
     catch
     {
-        Error_Handling $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
         return $Return        
     }
 }
@@ -4888,8 +4989,8 @@ Try {
                 # Write-LogDebug "Schedule [$PrimaryJobScheduleName] is type [$PrimaryJobScheduleType]"
                 if($PrimaryJobScheduleType -eq "cron"){
                     if($Restore -eq $False){
-                        Write-LogDebug "Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $myPrimaryController -JobScheduleCluster $SecondaryName"
-                        $cron=Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $myPrimaryController -JobScheduleCluster $SecondaryName -ErrorVariable ErrorVar
+                        Write-LogDebug "Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $myPrimaryController -JobScheduleCluster $PrimaryName"
+                        $cron=Get-NcJobCronSchedule -Name $PrimaryJobScheduleName -Controller $myPrimaryController -JobScheduleCluster $PrimaryName -ErrorVariable ErrorVar
                         if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcJobCronSchedule failed [$ErrorVar]" }
                     }else{
                         if(Test-Path $($Global:JsonPath+"Get-NcJobCronSchedule_cluster_"+$PrimaryJobScheduleName+".json")){
@@ -4912,10 +5013,10 @@ Try {
                     }
                     $PrimaryJobScheduleDescription = if($null -eq $cron.JobScheduleDescription){""}else{$cron.JobScheduleDescription}
                     $PrimaryJobScheduleCronMonth = if($null -eq $cron.JobScheduleCronMonth){"";$PrimaryJobScheduleCronMonth_string=""}else{$cron.JobScheduleCronMonth;$PrimaryJobScheduleCronMonth_string=$cron.JobScheduleCronMonth | out-string}
-                    $PrimaryJobScheduleCronDayOfWeek = if($null -eq $cron.JobScheduleCronDayOfWeek){"";$PrimaryJobScheduleCronDayOfWeek_string=""}else{$cron.JobScheduleCronDayOfWeek;$PrimaryJobScheduleCronDayOfWeek_string=$cron.JobScheduleCronMonth | out-string}
-                    $PrimaryJobScheduleCronDay = if($null -eq $cron.JobScheduleCronDay){"";$PrimaryJobScheduleCronDay_string=""}else{$cron.JobScheduleCronDay;$PrimaryJobScheduleCronDay_string=$cron.JobScheduleCronMonth | out-string}
-                    $PrimaryJobScheduleCronHour = if($null -eq $cron.JobScheduleCronHour){"";$PrimaryJobScheduleCronHour_string=""}else{$cron.JobScheduleCronHour;$PrimaryJobScheduleCronHour_string=$cron.JobScheduleCronMonth | out-string}
-                    $PrimaryJobScheduleCronMinute = if($null -eq $cron.JobScheduleCronMinute){"";$PrimaryJobScheduleCronMinute_string=""}else{$cron.JobScheduleCronMinute;$PrimaryJobScheduleCronMinute_string=$cron.JobScheduleCronMonth | out-string}
+                    $PrimaryJobScheduleCronDayOfWeek = if($null -eq $cron.JobScheduleCronDayOfWeek){"";$PrimaryJobScheduleCronDayOfWeek_string=""}else{$cron.JobScheduleCronDayOfWeek;$PrimaryJobScheduleCronDayOfWeek_string=$cron.JobScheduleCronDayOfWeek | out-string}
+                    $PrimaryJobScheduleCronDay = if($null -eq $cron.JobScheduleCronDay){"";$PrimaryJobScheduleCronDay_string=""}else{$cron.JobScheduleCronDay;$PrimaryJobScheduleCronDay_string=$cron.JobScheduleCronDay | out-string}
+                    $PrimaryJobScheduleCronHour = if($null -eq $cron.JobScheduleCronHour){"";$PrimaryJobScheduleCronHour_string=""}else{$cron.JobScheduleCronHour;$PrimaryJobScheduleCronHour_string=$cron.JobScheduleCronHour | out-string}
+                    $PrimaryJobScheduleCronMinute = if($null -eq $cron.JobScheduleCronMinute){"";$PrimaryJobScheduleCronMinute_string=""}else{$cron.JobScheduleCronMinute;$PrimaryJobScheduleCronMinute_string=$cron.JobScheduleCronMinute | out-string}
                 }else{
                     if($Restore -eq $False){
                         Write-LogDebug "Get-NcJobIntervalSchedule -Name $PrimaryJobScheduleName -Controller $myPrimaryController -JobScheduleCluster $PrimaryName"
@@ -4942,9 +5043,9 @@ Try {
                     }
                     $PrimaryJobScheduleDescription = if($null -eq $interval.JobScheduleDescription){""}else{$interval.JobScheduleDescription}
                     $PrimaryJobScheduleIntervalSeconds = if($null -eq $interval.JobScheduleIntervalSeconds){"";$PrimaryJobScheduleIntervalSeconds_string=""}else{$interval.JobScheduleIntervalSeconds;$PrimaryJobScheduleIntervalSeconds_string=$interval.JobScheduleIntervalSeconds |out-string}
-                    $PrimaryJobScheduleIntervalDays = if($null -eq $interval.JobScheduleIntervalDays){"";$PrimaryJobScheduleIntervalDays_string=""}else{$interval.JobScheduleIntervalDays;$PrimaryJobScheduleIntervalDays_string=$interval.JobScheduleIntervalSeconds |out-string}
-                    $PrimaryJobScheduleIntervalHours = if($null -eq $interval.JobScheduleIntervalHours){"";$PrimaryJobScheduleIntervalHours_string=""}else{$interval.JobScheduleIntervalHours;$PrimaryJobScheduleIntervalHours_string=$interval.JobScheduleIntervalSeconds |out-string}
-                    $PrimaryJobScheduleIntervalMinutes = if($null -eq $interval.JobScheduleIntervalMinutes){"";$PrimaryJobScheduleIntervalMinutes_string=""}else{$interval.JobScheduleIntervalMinutes;$PrimaryJobScheduleIntervalMinutes_string=$interval.JobScheduleIntervalSeconds |out-string}
+                    $PrimaryJobScheduleIntervalDays = if($null -eq $interval.JobScheduleIntervalDays){"";$PrimaryJobScheduleIntervalDays_string=""}else{$interval.JobScheduleIntervalDays;$PrimaryJobScheduleIntervalDays_string=$interval.JobScheduleIntervalDays |out-string}
+                    $PrimaryJobScheduleIntervalHours = if($null -eq $interval.JobScheduleIntervalHours){"";$PrimaryJobScheduleIntervalHours_string=""}else{$interval.JobScheduleIntervalHours;$PrimaryJobScheduleIntervalHours_string=$interval.JobScheduleIntervalHours |out-string}
+                    $PrimaryJobScheduleIntervalMinutes = if($null -eq $interval.JobScheduleIntervalMinutes){"";$PrimaryJobScheduleIntervalMinutes_string=""}else{$interval.JobScheduleIntervalMinutes;$PrimaryJobScheduleIntervalMinutes_string=$interval.JobScheduleIntervalMinutes |out-string}
                     if($Global:PSTKCall -eq "Rest"){
                         $PrimaryJobScheduleInterval = $interval.Interval
                     }
@@ -4958,10 +5059,10 @@ Try {
                         if($null -ne $SecondarySchedule){
                             $SecondaryJobScheduleDescription = if($null -eq $SecondarySchedule.JobScheduleDescription){""}else{$SecondarySchedule.JobScheduleDescription}
                             $SecondaryJobScheduleCronMonth = if($null -eq $SecondarySchedule.JobScheduleCronMonth){"";$SecondaryJobScheduleCronMonth_string=""}else{$SecondarySchedule.JobScheduleCronMonth;$SecondaryJobScheduleCronMonth_string=$SecondarySchedule.JobScheduleCronMonth | out-string}
-                            $SecondaryJobScheduleCronDayOfWeek = if($null -eq $SecondarySchedule.JobScheduleCronDayOfWeek){"";$SecondaryJobScheduleCronDayOfWeek_string=""}else{$SecondarySchedule.JobScheduleCronDayOfWeek;$SecondaryJobScheduleCronDayOfWeek_string=$SecondarySchedule.JobScheduleCronMonth | out-string}
-                            $SecondaryJobScheduleCronDay = if($null -eq $SecondarySchedule.JobScheduleCronDay){"";$SecondaryJobScheduleCronDay_string=""}else{$SecondarySchedule.JobScheduleCronDay;$SecondaryJobScheduleCronDay_string=$SecondarySchedule.JobScheduleCronMonth | out-string}
-                            $SecondaryJobScheduleCronHour = if($null -eq $SecondarySchedule.JobScheduleCronHour){"";$SecondaryJobScheduleCronHour_string=""}else{$SecondarySchedule.JobScheduleCronHour;$SecondaryJobScheduleCronHour_string=$SecondarySchedule.JobScheduleCronMonth | out-string}
-                            $SecondaryJobScheduleCronMinute = if($null -eq $SecondarySchedule.JobScheduleCronMinute){"";$SecondaryJobScheduleCronMinute_string=""}else{$SecondarySchedule.JobScheduleCronMinute;$SecondaryJobScheduleCronMinute_string=$SecondarySchedule.JobScheduleCronMonth | out-string}
+                            $SecondaryJobScheduleCronDayOfWeek = if($null -eq $SecondarySchedule.JobScheduleCronDayOfWeek){"";$SecondaryJobScheduleCronDayOfWeek_string=""}else{$SecondarySchedule.JobScheduleCronDayOfWeek;$SecondaryJobScheduleCronDayOfWeek_string=$SecondarySchedule.JobScheduleCronDayOfWeek | out-string}
+                            $SecondaryJobScheduleCronDay = if($null -eq $SecondarySchedule.JobScheduleCronDay){"";$SecondaryJobScheduleCronDay_string=""}else{$SecondarySchedule.JobScheduleCronDay;$SecondaryJobScheduleCronDay_string=$SecondarySchedule.JobScheduleCronDay | out-string}
+                            $SecondaryJobScheduleCronHour = if($null -eq $SecondarySchedule.JobScheduleCronHour){"";$SecondaryJobScheduleCronHour_string=""}else{$SecondarySchedule.JobScheduleCronHour;$SecondaryJobScheduleCronHour_string=$SecondarySchedule.JobScheduleCronHour | out-string}
+                            $SecondaryJobScheduleCronMinute = if($null -eq $SecondarySchedule.JobScheduleCronMinute){"";$SecondaryJobScheduleCronMinute_string=""}else{$SecondarySchedule.JobScheduleCronMinute;$SecondaryJobScheduleCronMinute_string=$SecondarySchedule.JobScheduleCronMinute | out-string}
                         }
                     }else{
                         Write-LogDebug "Get-NcJobIntervalSchedule -Name $PrimaryJobScheduleName -Controller $mySecondaryController"
@@ -5140,10 +5241,10 @@ Try {
                         }
                         $PrimaryJobScheduleDescription = if($null -eq $cron.JobScheduleDescription){""}else{$cron.JobScheduleDescription}
                         $PrimaryJobScheduleCronMonth = if($null -eq $cron.JobScheduleCronMonth){"";$PrimaryJobScheduleCronMonth_string=""}else{$cron.JobScheduleCronMonth;$PrimaryJobScheduleCronMonth_string=$cron.JobScheduleCronMonth | out-string}
-                        $PrimaryJobScheduleCronDayOfWeek = if($null -eq $cron.JobScheduleCronDayOfWeek){"";$PrimaryJobScheduleCronDayOfWeek_string=""}else{$cron.JobScheduleCronDayOfWeek;$PrimaryJobScheduleCronDayOfWeek_string=$cron.JobScheduleCronMonth | out-string}
-                        $PrimaryJobScheduleCronDay = if($null -eq $cron.JobScheduleCronDay){"";$PrimaryJobScheduleCronDay_string=""}else{$cron.JobScheduleCronDay;$PrimaryJobScheduleCronDay_string=$cron.JobScheduleCronMonth | out-string}
-                        $PrimaryJobScheduleCronHour = if($null -eq $cron.JobScheduleCronHour){"";$PrimaryJobScheduleCronHour_string=""}else{$cron.JobScheduleCronHour;$PrimaryJobScheduleCronHour_string=$cron.JobScheduleCronMonth | out-string}
-                        $PrimaryJobScheduleCronMinute = if($null -eq $cron.JobScheduleCronMinute){"";$PrimaryJobScheduleCronMinute_string=""}else{$cron.JobScheduleCronMinute;$PrimaryJobScheduleCronMinute_string=$cron.JobScheduleCronMonth | out-string}
+                        $PrimaryJobScheduleCronDayOfWeek = if($null -eq $cron.JobScheduleCronDayOfWeek){"";$PrimaryJobScheduleCronDayOfWeek_string=""}else{$cron.JobScheduleCronDayOfWeek;$PrimaryJobScheduleCronDayOfWeek_string=$cron.JobScheduleCronDayOfWeek | out-string}
+                        $PrimaryJobScheduleCronDay = if($null -eq $cron.JobScheduleCronDay){"";$PrimaryJobScheduleCronDay_string=""}else{$cron.JobScheduleCronDay;$PrimaryJobScheduleCronDay_string=$cron.JobScheduleCronDay | out-string}
+                        $PrimaryJobScheduleCronHour = if($null -eq $cron.JobScheduleCronHour){"";$PrimaryJobScheduleCronHour_string=""}else{$cron.JobScheduleCronHour;$PrimaryJobScheduleCronHour_string=$cron.JobScheduleCronHour | out-string}
+                        $PrimaryJobScheduleCronMinute = if($null -eq $cron.JobScheduleCronMinute){"";$PrimaryJobScheduleCronMinute_string=""}else{$cron.JobScheduleCronMinute;$PrimaryJobScheduleCronMinute_string=$cron.JobScheduleCronMinute | out-string}
 
                     }else{
                         if($Restore -eq $False){
@@ -5170,9 +5271,9 @@ Try {
                         }
                         $PrimaryJobScheduleDescription = if($null -eq $interval.JobScheduleDescription){""}else{$interval.JobScheduleDescription}
                         $PrimaryJobScheduleIntervalSeconds = if($null -eq $interval.JobScheduleIntervalSeconds){"";$PrimaryJobScheduleIntervalSeconds_string=""}else{$interval.JobScheduleIntervalSeconds;$PrimaryJobScheduleIntervalSeconds_string=$interval.JobScheduleIntervalSeconds |out-string}
-                        $PrimaryJobScheduleIntervalDays = if($null -eq $interval.JobScheduleIntervalDays){"";$PrimaryJobScheduleIntervalDays_string=""}else{$interval.JobScheduleIntervalDays;$PrimaryJobScheduleIntervalDays_string=$interval.JobScheduleIntervalSeconds |out-string}
-                        $PrimaryJobScheduleIntervalHours = if($null -eq $interval.JobScheduleIntervalHours){"";$PrimaryJobScheduleIntervalHours_string=""}else{$interval.JobScheduleIntervalHours;$PrimaryJobScheduleIntervalHours_string=$interval.JobScheduleIntervalSeconds |out-string}
-                        $PrimaryJobScheduleIntervalMinutes = if($null -eq $interval.JobScheduleIntervalMinutes){"";$PrimaryJobScheduleIntervalMinutes_string=""}else{$interval.JobScheduleIntervalMinutes;$PrimaryJobScheduleIntervalMinutes_string=$interval.JobScheduleIntervalSeconds |out-string}
+                        $PrimaryJobScheduleIntervalDays = if($null -eq $interval.JobScheduleIntervalDays){"";$PrimaryJobScheduleIntervalDays_string=""}else{$interval.JobScheduleIntervalDays;$PrimaryJobScheduleIntervalDays_string=$interval.JobScheduleIntervalDays |out-string}
+                        $PrimaryJobScheduleIntervalHours = if($null -eq $interval.JobScheduleIntervalHours){"";$PrimaryJobScheduleIntervalHours_string=""}else{$interval.JobScheduleIntervalHours;$PrimaryJobScheduleIntervalHours_string=$interval.JobScheduleIntervalHours |out-string}
+                        $PrimaryJobScheduleIntervalMinutes = if($null -eq $interval.JobScheduleIntervalMinutes){"";$PrimaryJobScheduleIntervalMinutes_string=""}else{$interval.JobScheduleIntervalMinutes;$PrimaryJobScheduleIntervalMinutes_string=$interval.JobScheduleIntervalMinutes |out-string}
 
                         if($Global:PSTKCall -eq "Rest"){
                             $PrimaryJobScheduleInterval = $interval.Interval
@@ -5187,10 +5288,10 @@ Try {
                             if($null -ne $SecondarySchedule){
                                 $SecondaryJobScheduleDescription = if($null -eq $SecondarySchedule.JobScheduleDescription){""}else{$SecondarySchedule.JobScheduleDescription}
                                 $SecondaryJobScheduleCronMonth = if($null -eq $SecondarySchedule.JobScheduleCronMonth){"";$SecondaryJobScheduleCronMonth_string=""}else{$SecondarySchedule.JobScheduleCronMonth;$SecondaryJobScheduleCronMonth_string=$SecondarySchedule.JobScheduleCronMonth | out-string}
-                                $SecondaryJobScheduleCronDayOfWeek = if($null -eq $SecondarySchedule.JobScheduleCronDayOfWeek){"";$SecondaryJobScheduleCronDayOfWeek_string=""}else{$SecondarySchedule.JobScheduleCronDayOfWeek;$SecondaryJobScheduleCronDayOfWeek_string=$SecondarySchedule.JobScheduleCronMonth | out-string}
-                                $SecondaryJobScheduleCronDay = if($null -eq $SecondarySchedule.JobScheduleCronDay){"";$SecondaryJobScheduleCronDay_string=""}else{$SecondarySchedule.JobScheduleCronDay;$SecondaryJobScheduleCronDay_string=$SecondarySchedule.JobScheduleCronMonth | out-string}
-                                $SecondaryJobScheduleCronHour = if($null -eq $SecondarySchedule.JobScheduleCronHour){"";$SecondaryJobScheduleCronHour_string=""}else{$SecondarySchedule.JobScheduleCronHour;$SecondaryJobScheduleCronHour_string=$SecondarySchedule.JobScheduleCronMonth | out-string}
-                                $SecondaryJobScheduleCronMinute = if($null -eq $SecondarySchedule.JobScheduleCronMinute){"";$SecondaryJobScheduleCronMinute_string=""}else{$SecondarySchedule.JobScheduleCronMinute;$SecondaryJobScheduleCronMinute_string=$SecondarySchedule.JobScheduleCronMonth | out-string}
+                                $SecondaryJobScheduleCronDayOfWeek = if($null -eq $SecondarySchedule.JobScheduleCronDayOfWeek){"";$SecondaryJobScheduleCronDayOfWeek_string=""}else{$SecondarySchedule.JobScheduleCronDayOfWeek;$SecondaryJobScheduleCronDayOfWeek_string=$SecondarySchedule.JobScheduleCronDayOfWeek | out-string}
+                                $SecondaryJobScheduleCronDay = if($null -eq $SecondarySchedule.JobScheduleCronDay){"";$SecondaryJobScheduleCronDay_string=""}else{$SecondarySchedule.JobScheduleCronDay;$SecondaryJobScheduleCronDay_string=$SecondarySchedule.JobScheduleCronDay | out-string}
+                                $SecondaryJobScheduleCronHour = if($null -eq $SecondarySchedule.JobScheduleCronHour){"";$SecondaryJobScheduleCronHour_string=""}else{$SecondarySchedule.JobScheduleCronHour;$SecondaryJobScheduleCronHour_string=$SecondarySchedule.JobScheduleCronHour | out-string}
+                                $SecondaryJobScheduleCronMinute = if($null -eq $SecondarySchedule.JobScheduleCronMinute){"";$SecondaryJobScheduleCronMinute_string=""}else{$SecondarySchedule.JobScheduleCronMinute;$SecondaryJobScheduleCronMinute_string=$SecondarySchedule.JobScheduleCronMinute | out-string}
 
                             }
                         }else{
@@ -6511,6 +6612,7 @@ Function set_serial_lundr (
                 Write-Log "[$workOn] Wait for all relations before change LUN Serials Number"
                 if ( ( $ret=wait_snapmirror_dr -NoInteractive -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver ) -ne $True ) 
                 { 
+                    Write-LogDebug "$ret"
                     $Return = $False
                     Clean_Throw "ERROR: wait_snapmirror_dr failed"  
                 }
@@ -6830,64 +6932,66 @@ Try {
         }else{
             $PrimaryQOSPolicy=$ret.records.qos_policy_group
         }
-        $Credential = get_local_cDotcred($mySecondaryController)
-        $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/vserver?vserver="+$mySecondaryVserver+"&fields=qos-policy-group")
-        Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-        $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
-        if($? -ne $True){
-            Write-LogError "ERROR: Unable to get svm qos policy. Reason [$ErrorVar]" 
-        }else{
-            $SecondaryQOSPolicy=$ret.records.qos_policy_group
-        }
-        if($PrimaryQOSPolicy -ne $SecondaryQOSPolicy){
-            if($null -eq $PrimaryQOSPolicy){
-                $PrimaryQOSPolicy="none"
-            }
-            Write-LogDebug "[$mySecondaryVserver] modify QOS policy group form [$SecondaryQOSPolicy] to [$PrimaryQOSPolicy]"
-            Write-LogDebug "Get-NcVserver -Name $mySecondaryVserver -Controller $mySecondaryController"
-            $VserverDetails=Get-NcVserver -Name $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
-            if($? -ne $True){Write-LogError "ERROR: Failed to get Vserver detail reason [$ErrorVar]"}
-            $VserverDetailsUUID=$VserverDetails.UUid
-            $url=$("https://"+$mySecondaryController.Name+"/api/svm/svms/"+$VserverDetailsUUID)
-            $bodysvm=@{
-                qos_policy=@{
-                    name=$PrimaryQOSPolicy
-                }
-            } | ConvertTo-Json
-            Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $cred -Body $bodysvm -SkipCertificateCheck"
-            $cred=get_local_cDotcred($mySecondaryController)
-            $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $cred -Body $bodysvm -SkipCertificateCheck -ErrorVariable ErrorVar
+        if($Backup -eq $False){
+            $Credential = get_local_cDotcred($mySecondaryController)
+            $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/vserver?vserver="+$mySecondaryVserver+"&fields=qos-policy-group")
+            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+            $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
-                Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
-                $Return=$ret
+                Write-LogError "ERROR: Unable to get svm qos policy. Reason [$ErrorVar]" 
+            }else{
+                $SecondaryQOSPolicy=$ret.records.qos_policy_group
             }
-            $JobUuid=$ret.job.uuid
-            $StartTime=Get-date
-            $Timeout=$False
-            $JobDone=$False
-            While(($JobDone -eq $False) -and ($Timeout -eq $False)){
-                $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
-                if($JobDetail.JobCompletion -eq "success"){
-                    $JobDone=$True
-                    break
-                }else{
-                    $JobStatus=$JobDetail.JobState
-                    Write-LogDebug "[$mySecondaryVserver] Patch SVM status [$JobStatus]"
-                    if($JobStatus -eq "failure"){
-                        $JobCompletion=$JobDetail.JobCompletion
-                        Write-LogError "[$mySecondaryVserver] Patch SVM failed  [$JobCompletion]"
-                        $Return=$False
-                        break
+            if($PrimaryQOSPolicy -ne $SecondaryQOSPolicy){
+                if($null -eq $PrimaryQOSPolicy){
+                    $PrimaryQOSPolicy="none"
+                }
+                Write-LogDebug "[$mySecondaryVserver] modify QOS policy group form [$SecondaryQOSPolicy] to [$PrimaryQOSPolicy]"
+                Write-LogDebug "Get-NcVserver -Name $mySecondaryVserver -Controller $mySecondaryController"
+                $VserverDetails=Get-NcVserver -Name $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                if($? -ne $True){Write-LogError "ERROR: Failed to get Vserver detail reason [$ErrorVar]"}
+                $VserverDetailsUUID=$VserverDetails.UUid
+                $url=$("https://"+$mySecondaryController.Name+"/api/svm/svms/"+$VserverDetailsUUID)
+                $bodysvm=@{
+                    qos_policy=@{
+                        name=$PrimaryQOSPolicy
                     }
+                } | ConvertTo-Json
+                Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $cred -Body $bodysvm -SkipCertificateCheck"
+                $cred=get_local_cDotcred($mySecondaryController)
+                $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $cred -Body $bodysvm -SkipCertificateCheck -ErrorVariable ErrorVar
+                if($? -ne $True){
+                    Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
+                    $Return=$ret
                 }
-                $CurrentTime=Get-date
-                $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
-                if($TimeSpend -gt $Global:STOP_TIMEOUT){
-                    Write-LogWarn "[$mySecondaryVserver] Patch SVM take too much time. Check in Ontap its status"
-                    $Timeout=$True
-                    return $False
+                $JobUuid=$ret.job.uuid
+                $StartTime=Get-date
+                $Timeout=$False
+                $JobDone=$False
+                While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+                    $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
+                    if($JobDetail.JobCompletion -eq "success"){
+                        $JobDone=$True
+                        break
+                    }else{
+                        $JobStatus=$JobDetail.JobState
+                        Write-LogDebug "[$mySecondaryVserver] Patch SVM status [$JobStatus]"
+                        if($JobStatus -eq "failure"){
+                            $JobCompletion=$JobDetail.JobCompletion
+                            Write-LogError "[$mySecondaryVserver] Patch SVM failed  [$JobCompletion]"
+                            $Return=$False
+                            break
+                        }
+                    }
+                    $CurrentTime=Get-date
+                    $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+                    if($TimeSpend -gt $Global:STOP_TIMEOUT){
+                        Write-LogWarn "[$mySecondaryVserver] Patch SVM take too much time. Check in Ontap its status"
+                        $Timeout=$True
+                        return $False
+                    }
+                    Start-Sleep 5
                 }
-                Start-Sleep 5
             }
         }
     }
@@ -8524,9 +8628,10 @@ Try {
                         }else{
                             $SecondaryVolType=$SecondaryVol.records.type
                         }
-                        if ( $SecondaryVolType -ne "dp" -and $Restore -eq $False -and $Backup -eq $False) {
+                        Write-LogDebug "SecondaryVolType=$SecondaryVolType"
+                        <# if ( $SecondaryVolType -ne "dp" -and $Restore -eq $False -and $Backup -eq $False) {
                             Write-LogError "ERROR: volume $SecondaryVol is not a DP Volume"
-                        }
+                        } #>
                         # If possible, convert destination volumes into encrypted volumes
                         if($Global:AllowEncryption -eq "True"){
                             if($ConversionSupported -eq $True){
@@ -10793,6 +10898,7 @@ Try {
         if($Global:XDPPolicy -ne ""){
             Write-LogDebug "[$workOn] Snapmirror Policy set to [$($Global:XDPPolicy)]"
             $SnapmirrorPolicy=$Global:XDPPolicy
+            $PreviousRelationPolicy=$Global:XDPPolicy
         }else{
             Write-LogDebug "[$workOn] Snapmirror Policy set to default [MirrorAllSnapshots]"
             $SnapmirrorPolicy="MirrorAllSnapshots"    
@@ -13232,17 +13338,38 @@ Try {
                 Write-LogDebug "New-NcQtree -Volume /vol/$Volume/$QName -Mode $Mode -SecurityStyle $SecStyle -Oplocks $Oplocks -ExportPolicy $ExportPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
                 $ret=New-NcQtree -Volume $("/vol/"+$Volume+"/"+$QName) -Mode $Mode -SecurityStyle $SecStyle -Oplocks $Oplocks -ExportPolicy $ExportPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar 
                 if($? -ne $True){$Return=$False;Clean_Throw "ERROR: Failed to create Qtree [$QName] on [$mySecondaryVserver] reason [$ErrorVar]"}
-            }
-            else{
-                Write-Log "[$workOn] Modify Qtree [$QName] on Volume [$Volume]"
-                if($Oplocks -eq "enabled"){
-                    Write-LogDebug "Set-NcQtree -Volume /vol/$Volume/$QName -Mode $Mode -SecurityStyle $SecStyle -EnableOplocks -ExportPolicy $ExportPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                    $out=Set-NcQtree -Volume $("/vol/"+$Volume+"/"+$QName) -Mode $Mode -SecurityStyle $SecStyle -EnableOplocks -ExportPolicy $ExportPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
-                    if($? -ne $True){$Return=$False;Clean_Throw "ERROR: Failed to Set Qtree [$QName] on [$mySecondaryVserver] reason [$ErrorVar]"}
+            }else{
+                Write-Log "[$workOn] Modify Qtree [$QName] Oplocks on Volume [$Volume]"
+                if($Global:PSTKCall -ne "Rest"){
+                    if($Oplocks -eq "enabled"){
+                        Write-LogDebug "Set-NcQtree -Volume /vol/$Volume/$QName -Mode $Mode -SecurityStyle $SecStyle -EnableOplocks -ExportPolicy $ExportPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                        $out=Set-NcQtree -Volume $("/vol/"+$Volume+"/"+$QName) -Mode $Mode -SecurityStyle $SecStyle -EnableOplocks -ExportPolicy $ExportPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                        if($? -ne $True){$Return=$False;Clean_Throw "ERROR: Failed to Set Qtree [$QName] on [$mySecondaryVserver] reason [$ErrorVar]"}
+                    }else{
+                        Write-LogDebug "Set-NcQtree -Volume /vol/$Volume/$QName -Mode $Mode -SecurityStyle $SecStyle -DisableOplocks -ExportPolicy $ExportPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                        $out=Set-NcQtree -Volume $("/vol/"+$Volume+"/"+$QName) -Mode $Mode -SecurityStyle $SecStyle -DisableOplocks -ExportPolicy $ExportPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                        if($? -ne $True){$Return=$False;Clean_Throw "ERROR: Failed to Set Qtree [$QName] on [$mySecondaryVserver] reason [$ErrorVar]"}    
+                    }
                 }else{
-                    Write-LogDebug "Set-NcQtree -Volume /vol/$Volume/$QName -Mode $Mode -SecurityStyle $SecStyle -DisableOplocks -ExportPolicy $ExportPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                    $out=Set-NcQtree -Volume $("/vol/"+$Volume+"/"+$QName) -Mode $Mode -SecurityStyle $SecStyle -DisableOplocks -ExportPolicy $ExportPolicy -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
-                    if($? -ne $True){$Return=$False;Clean_Throw "ERROR: Failed to Set Qtree [$QName] on [$mySecondaryVserver] reason [$ErrorVar]"}    
+                    $SecondaryCredential = get_local_cDotcred($mySecondaryController)
+                    $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/volume/qtree?vserver="+$mySecondaryVserver+"&volume="+$Volume+"&qtree=$QName")
+                    if($Oplocks -eq "enabled"){
+                        $bodyqtree=@{
+                            oplock_mode="enable"
+                        }|ConvertTo-Json
+                        
+                    }else{
+                        $bodyqtree=@{
+                            oplock_mode="disable"
+                        }|ConvertTo-Json   
+                    }
+                    Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $SecondaryCredential -Body $bodyqtree -SkipCertificateCheck"
+                    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $SecondaryCredential -Body $bodyqtree -SkipCertificateCheck -ErrorVariable ErrorVar
+                    if($? -ne $True){
+                        Write-LogError "ERROR: Unable to set Qtree oplocks mode. Reason [$ErrorVar]"
+                        Write-LogDebug "[$workOn]: end"
+                        return $False
+                    }
                 }
             }
         }   
@@ -14108,15 +14235,76 @@ Try {
     }
     if($Backup -eq $False){
         if ( $null -eq $PrimaryCifsServerInfos ) {
-            Write-Log "[$workOn] No CIFS Server in Vserver [$myPrimaryVserver]:[$myPrimaryController]"
+            Write-Log "[$myPrimaryVserver] No CIFS Server on [$myPrimaryController]"
             Write-LogDebug "end"
             $Global:NEED_CIFS_SERVER=$False
             return $True
         }
+        
         $Global:NEED_CIFS_SERVER=$True
         $SecondaryCifsServerInfos = Get-NcCifsServer -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcCifsServer failed [$ErrorVar]" }
         $SecondaryCifsLifCreated=$false
+        if($null -ne $SecondaryCifsServerInfos){
+            if($Global:Run_Mode -match "RestoreObject|Restore"){
+                Write-LogDebug "First remove existing CIFS server before restoring it"
+                if($Global:PSTKCall -ne "Rest"){
+                    Write-LogDebug "Stop-NcCifsServer -VserverContext  $mySecondaryVserver -Controller $mySecondaryController"
+                    $out=Stop-NcCifsServer -VserverContext  $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar -Confirm:$False
+                    Write-LogDebug "Remove-NcCifsServer -VserverContext  $mySecondaryVserver -Controller $mySecondaryController"
+                    $out=Remove-NcCifsServer -VserverContext  $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar -ForceAccountDelete -Confirm:$False
+                    if ( $? -ne $True ) {
+                        Write-LogError "ERROR: Unable to Remove Service CIFS" 
+                        #return $false
+                    }
+                }else{
+                    $Cred=get_local_cDotcred($mySecondaryController)
+                    $ADCred = get_local_cred -myCredential $SecondaryCifsServerInfos.Domain -Adcred
+                    $myVserver = Get-NcVserver  -Name $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
+                    $bodycifs=@{
+                        ad_domain=@{
+                            password=[Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($ADcred.Password))
+                            user=$ADcred.UserName}
+                    } | ConvertTo-Json
+                    $VserverUUID=$myVserver.Uuid
+                    $url=$("https://"+$mySecondaryController.Name+"/api/protocols/cifs/services/"+$VserverUUID+"?force=true")
+                    #Write-LogDebug "Invoke-RestMethod -Method delete -Uri $url -Credential $Cred -SkipCertificateCheck   (body is intentionally hidden)"
+                    Write-LogDebug "Invoke-RestMethod -Method delete -Uri $url -Credential $Cred -SkipCertificateCheck -body $bodycifs"
+                    $ret=Invoke-RestMethod -Method 'delete' -Uri $url -Credential $Cred -Body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
+                    if($? -ne $True){
+                        Write-LogError "ERROR: delete request [$url] reason [$ErrorVar]"
+                    }
+                    $JobUuid=$ret.job.uuid
+                    $StartTime=Get-date
+                    $Timeout=$False
+                    $JobDone=$False
+                    While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+                        $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
+                        if($JobDetail.JobCompletion -eq "success"){
+                            $JobDone=$True
+                            break
+                        }else{
+                            $JobStatus=$JobDetail.JobState
+                            Write-LogDebug "[$mySecondaryVserver] Remove CIFS server status [$JobStatus]"
+                            if($JobStatus -eq "failure"){
+                                $JobCompletion=$JobDetail.JobCompletion
+                                Write-LogError "[$mySecondaryVserver] Remove CIFS server failed [$JobCompletion]"
+                                break
+                            }
+                        }
+                        $CurrentTime=Get-date
+                        $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+                        if($TimeSpend -gt $Global:STOP_TIMEOUT){
+                            Write-LogWarn "[$mySecondaryVserver] Remove CIFS server take too much time. Check in Ontap its status"
+                            $Timeout=$True
+                        }
+                        Start-Sleep 5
+                    }
+                }
+                $SecondaryCifsServerInfos=$null
+            }
+            
+        }
         if ( $null -eq $SecondaryCifsServerInfos ) 
         {
             Write-Log "[$workOn] Add CIFS Server in DR Vserver [$mySecondaryVserver]@[$mySecondaryController]"
@@ -14395,7 +14583,6 @@ Try {
                             [string]$bodycifs=$bodycifs | ConvertTo-Json
                             $cleanbody.ad_domain.password="xxxxxxxxxxxxxx"
                             [string]$cleanbody=$cleanbody | ConvertTo-Json
-                            $bodycifs=$bodycifs | ConvertTo-Json
                             Write-LogDebug "Invoke-RestMethod -Method post -Uri $url -Credential $CredSecondary -SkipCertificateCheck -Body $cleanbody"
                             $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
                             if($? -ne $True){
@@ -14547,6 +14734,8 @@ Try {
                  
                 return $False    
             }
+        }else{
+
         }
     }
     $Global:SecondaryCifsLifCreated=$SecondaryCifsLifCreated
@@ -17258,7 +17447,10 @@ Try {
 	if ( ( $ret=create_snapmirror_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn -DDR $DDR -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all snapmirror relations " ; $Return = $False }
     if ( ( $ret=create_update_snap_policy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) {Write-LogError "ERROR: create_update_snap_policy_dr"}
     if ( ( $ret=map_lundr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to map all LUNs " ; $Return = $False }
-    
+    if ( ( $ret = resync_vserver_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver ) -ne $True ) {
+        Write-LogError "ERROR: Resync error"
+        clean_and_exit 1
+    }
     <# if($Backup -eq $False -and $Restore -eq $False){
         $ASK_WAIT=Read-HostOptions -question "[$mySecondaryVserver] Do you want to wait the end of snapmirror transfers and mount all volumes and map LUNs on [$mySecondaryVserver] now ?" -options "y/n" -default "y"
     }else{
@@ -17267,7 +17459,10 @@ Try {
     if ( $ASK_WAIT -eq 'y' ) { #>
         if($Backup -eq $False -and $Restore -eq $False){
             # All Snapmirror relationship must be Snapmirrored/Idle or Insync before continue
-            if ( ( $ret=wait_snapmirror_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver) -ne $True ) { Write-LogError "ERROR: Failed snapmirror relations bad status " ; $Return = $False }
+            if ( ( $ret=wait_snapmirror_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver) -ne $True ) { 
+                Write-LogDebug "$ret"
+                Write-LogError "ERROR: Failed snapmirror relations bad status " ; $Return = $False 
+            }
         }
         if($Restore -eq $True -and $Global:VOLUME_TYPE -eq "dp"){
             Write-Log "Junction-Path of Volume cannot be modified if restored as DP volume. You will have to mount them once data restored through snapmirror"
@@ -17743,6 +17938,7 @@ Try {
             $out = Get-NcVserver  -Name $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar 
             if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcVserver failed [$ErrorVar]" }
             if ( $null -ne $out ) {
+                Write-Log "[$myPrimaryVserver] Remove SVM"
                 Remove-NcVserver -Name $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar  -confirm:$False
                 if ( $? -ne $True ) {
                     Write-LogError "ERROR: Unable to Remove vserver [$myPrimaryVserver]" 
@@ -18012,13 +18208,13 @@ Try {
 	$out = Get-NcVserver  -Name $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar 
 	if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcVserver failed [$ErrorVar]" }
 	if ( $null -ne $out ) {
+        Write-Log "[$mySecondaryVserver] Remove SVM"
 		$out=Remove-NcVserver -Name $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar  -confirm:$False
 		if ( $? -ne $True ) {
 			Write-LogError "ERROR: Unable to Remove vserver [$mySecondaryVserver] reason [$ErrorVar]" 
 			return $False
 		}
     }
-    Write-log "[$mySecondaryVserver] Vserver Removed"
     Write-LogDebug "end"
 	return $true 
 }
@@ -24294,7 +24490,7 @@ Function set_vol_options_from_voldb (
                                             $myPrimaryCompressionAlgorithm=$mySISdetails.compression_algorithm
                                             if($myPrimaryStorageEfficiencyMode -ne $VolSisEfficiencyMode -or $myPrimaryCompressionAlgorithm -ne $VolSisCompressionAlgorithm){
                                                 Write-Log "[$CloneDR] volume [$VolName] need to change Storage Efficiency mode with [$VolSisEfficiencyMode] and Compression Algotrithm with [$VolSisCompressionAlgorithm]"
-                                                $bodyeff=@{"storage-efficiency-mode"=$VolSisEfficiencyMode}
+                                                $bodyeff=@{"storage-efficiency-mode"=$VolSisEfficiencyMode} | ConvertTo-Json    
                                                 Write-LogDebug "Invoke-NcCli -Command vol efficiency modify -query $query -body $bodyeff -Controller $myController"
                                                 $ret=Invoke-NcCli -Command "vol efficiency modify" -query $query -body $bodyeff -Controller $myController -ErrorVariable ErrorVar
                                                 if($? -ne $True){Write-LogError "Failed to modify storage efficiency mode on volume [$VolName] reason [$ErrorVar]"}
@@ -26565,17 +26761,29 @@ Function create_update_servicepolicy_dr(
                 $PolicyScope=$Policy.Scope
                 $PolicyIpSpace=$Policy.Ipspace
                 $PolicyServices=$Policy.Services
+                $PolicyIsBuiltin=$Policy.IsBuiltIn
+                if($PolicyName -eq "testom"){
+                    Write-LogDebug "debug"
+                }
                 # ! there is no REST call for this yet
                 # ! perform a REST CLI passthrough call to get detailed information about service-policy allowed-addresses
                 if($Backup -eq $False){
-                    Write-LogDebug "Get-NcNetServicePolicy -Controller $mySecondaryController -Vserver $mySecondaryVserver -Name $PolicyName"
+                    <# Write-LogDebug "Get-NcNetServicePolicy -Controller $mySecondaryController -Vserver $mySecondaryVserver -Name $PolicyName"
                     $SecondaryPolicy=Get-NcNetServicePolicy -Controller $mySecondaryController -Vserver $mySecondaryVserver -Name $PolicyName  -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Clean_Throw "ERROR: Fail to read service-policy [$PolicyName] on secondary"
+                    } #>
+                    $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/network/interface/service-policy?vserver="+$mySecondaryVserver+"&policy="+$PolicyName+"&fields=service_allowed_addresses")
+                    Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $CredSecondary -SkipCertificateCheck"
+                    $DetailedSecondaryService=Invoke-RestMethod -Method 'get' -Uri $url -Credential $CredSecondary -SkipCertificateCheck -ErrorVariable ErrorVar
+                    if($? -ne $True){
+                        Write-LogError "ERROR: Unable to get service-allowed-addresses. Reason [$ErrorVar]"
+                        Write-LogDebug "[$workOn]: end"
+                        return $False
                     }
-                    if($null -eq $SecondaryPolicy){
-                        Write-Log "Policy [$PolicyName] does not exist on secondary"
-                        Write-LogDebug "New-NcNetServicePolicy -Name $PolicyName -Scope $PolicyScope -IpSpaceName $PolicyIpSpace.Name -Services $PolicyServices -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+                    if($DetailedSecondaryService.num_records -eq 0){
+                        Write-Log "[$mySecondaryVserver] Policy [$PolicyName] does not exist"
+                        Write-LogDebug "New-NcNetServicePolicy -Name $PolicyName -Scope $PolicyScope -IpSpaceName $($PolicyIpSpace.Name) -Services $PolicyServices -Vserver $mySecondaryVserver -Controller $mySecondaryController"
                         $ret=New-NcNetServicePolicy -Name $PolicyName -Scope $PolicyScope -IpSpaceName $PolicyIpSpace.Name -Services $PolicyServices -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
                         if($? -ne $True){
                             Clean_Throw "ERROR: Fail to create service-policy [$PolicyName] on secondary"
