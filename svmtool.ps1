@@ -3334,6 +3334,13 @@ if ($Migrate) {
     # Write-LogError "ERROR: analyse_junction_path" 
     # clean_and_exit 1
     # }
+
+    Check_Running_Inside_Same_MCC -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl
+    if(($Global:InsideMCC -eq $True) -and (-not ($DeleteSource.IsPresent))){
+        Write-LogError("ERROR: When migrating from the same MCC, you must add option -DeleteSource to your migrate command")
+        clean_and_exit 1
+    }
+
     Write-LogWarn "SVMTOOL script does not manage FCP configuration"
     Write-LogWarn "You will have to backup and recreate all these configurations manually after the Migrate step"
     Write-LogWarn "Files Locks are not migrated during the Migration process"
@@ -3361,6 +3368,19 @@ if ($Migrate) {
             #clean_and_exit 1
 
         }
+        if($Global:NFSonly -eq $False){
+        Write-LogDebug "Get-NcNetInterface -Vserver $VserverDR -Controller $NcSecondaryCtrl | Where-Object {$_.InterfaceName -match `"^tmp_lif_to_join_in_ad_`"}"
+        $TempCifsLif=Get-NcNetInterface -Vserver $VserverDR -Controller $NcSecondaryCtrl | Where-Object {$_.InterfaceName -match "^tmp_lif_to_join_in_ad_"}
+        if($null -ne $TempCifsLif){
+            Write-Log "[$VserverDR] Removing Temporary LIF"
+            Write-LogDebug "Set-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $VserverDR -AdministrativeStatus down -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar"
+            $out = Set-NcNetInterface -Name $TempCifsLif.InterfaceName -Vserver $VserverDR -AdministrativeStatus down -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcNetInterface failed [$ErrorVar]" ; }
+            Write-LogDebug "Remove-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $VserverDR -Confirm:$false -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar"
+            $out = Remove-NcNetInterface -Name $TempCifsLif.InterfaceName -Vserver $VserverDR -Confirm:$false -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Remove-NcNetInterface failed [$ErrorVar]" ; }
+        }
+    }
         if ( ( $ret = wait_snapmirror_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR ) -ne $True ) { 
             Write-LogError  "ERROR: wait_snapmirror_dr failed"  
         }
@@ -3387,11 +3407,7 @@ if ($Migrate) {
         # 	clean_and_exit 1
         # }
 
-        Check_Running_Inside_Same_MCC -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl
-        if(($Global:InsideMCC -eq $True) -and (-not ($DeleteSource.IsPresent))){
-            Write-LogError("ERROR: When migrating from the same MCC, you must delete source SVM")
-            clean_and_exit 1
-        }
+        
 
         $ASK_MIGRATE = Read-HostOptions -question "[$Vserver] IP and Services will switch now. Ready to go ?" -options "y/n" -default "y"
 
@@ -3621,7 +3637,7 @@ if ( $UpdateDR ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$SECONDARY_CLUSTER]" 
         clean_and_exit 1
     }
-
+    Check_Running_Inside_Same_MCC -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl
     if ( $XDPPolicy -ne "" -and $XDPPolicy -ne "MirrorAllSnapshots" ) {
         $ret = Get-NcSnapmirrorPolicy -Name $XDPPolicy -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar
         if ( $? -ne $True -or $ret.count -eq 0 ) {
@@ -3673,8 +3689,21 @@ if ( $UpdateDR ) {
         clean_and_exit 1
 
     }
-    if ( ( $ret = update_CIFS_server_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR ) -ne $True ) {
+    if ( ( $ret = update_CIFS_server_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR -TemporarySecondaryCifsIp $TemporarySecondaryCifsIp -SecondaryCifsLifMaster $SecondaryCifsLifMaster -SecondaryCifsLifCustomVlan $SecondarCifsLifCustomVlan -ActiveDirectoryCustomOU $ActiveDirectoryCustomOU) -ne $True ) {
         Write-LogWarn "Some CIFS options has not been set on [$VserverDR]"
+    }
+    if($Global:NFSonly -eq $False){
+        Write-LogDebug "Get-NcNetInterface -Vserver $VserverDR -Controller $NcSecondaryCtrl | Where-Object {$_.InterfaceName -match `"^tmp_lif_to_join_in_ad_`"}"
+        $TempCifsLif=Get-NcNetInterface -Vserver $VserverDR -Controller $NcSecondaryCtrl | Where-Object {$_.InterfaceName -match "^tmp_lif_to_join_in_ad_"}
+        if($null -ne $TempCifsLif){
+            Write-Log "[$VserverDR] Removing Temporary LIF"
+            Write-LogDebug "Set-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $VserverDR -AdministrativeStatus down -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar"
+            $out = Set-NcNetInterface -Name $TempCifsLif.InterfaceName -Vserver $VserverDR -AdministrativeStatus down -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcNetInterface failed [$ErrorVar]" ; }
+            Write-LogDebug "Remove-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $VserverDR -Confirm:$false -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar"
+            $out = Remove-NcNetInterface -Name $TempCifsLif.InterfaceName -Vserver $VserverDR -Confirm:$false -Controller $NcSecondaryCtrl -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Remove-NcNetInterface failed [$ErrorVar]" ; }
+        }
     }
     if ( ( $ret = svmdr_db_switch_datafiles -myController $NcPrimaryCtrl -myVserver $Vserver -secondaryVserver $VserverDR) -eq $false ) {
         Write-LogError "ERROR: Failed to switch SVMTOOL_DB datafiles" 
@@ -3967,7 +3996,7 @@ if ( $ReActivate ) {
     # then recreate snapmirror relationship in original direction
     Write-Log "[$Vserver] Restore original SnapMirror relationship to [$VserverDR]"
     $Global:ForceRecreate=$True
-    if ( ( $ret = resync_vserver_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR ) -ne $True ) { 
+    if ( ( $ret = resync_vserver_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR -Backup $False -Restore $False ) -ne $True ) { 
         Write-LogError "ERROR: Resync failed reason [$ret]" 
         clean_and_exit 1
     }
@@ -3990,8 +4019,21 @@ if ( $ReActivate ) {
 
     }
 	
-    if ( ( $ret = update_CIFS_server_dr -myPrimaryController $NcSecondaryCtrl -mySecondaryController $NcPrimaryCtrl -myPrimaryVserver $VserverDR -mySecondaryVserver $Vserver ) -ne $True ) {
+    if ( ( $ret = update_CIFS_server_dr -myPrimaryController $NcSecondaryCtrl -mySecondaryController $NcPrimaryCtrl -myPrimaryVserver $VserverDR -mySecondaryVserver $Vserver -TemporarySecondaryCifsIp $TemporarySecondaryCifsIp -SecondaryCifsLifMaster $SecondaryCifsLifMaster -SecondaryCifsLifCustomVlan $SecondarCifsLifCustomVlan -ActiveDirectoryCustomOU $ActiveDirectoryCustomOU) -ne $True ) {
         Write-LogWarn "Some CIFS options has not been set on [$Vserver]"
+    }
+    if($Global:NFSonly -eq $False){
+        Write-LogDebug "Get-NcNetInterface -Vserver $Vserver -Controller $NcPrimaryCtrl | Where-Object {$_.InterfaceName -match `"^tmp_lif_to_join_in_ad_`"}"
+        $TempCifsLif=Get-NcNetInterface -Vserver $Vserver -Controller $NcPrimaryCtrl | Where-Object {$_.InterfaceName -match "^tmp_lif_to_join_in_ad_"}
+        if($null -ne $TempCifsLif){
+            Write-Log "[$Vserver] Removing Temporary LIF"
+            Write-LogDebug "Set-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $Vserver -AdministrativeStatus down -Controller $NcPrimaryCtrl -ErrorVariable ErrorVar"
+            $out = Set-NcNetInterface -Name $TempCifsLif.InterfaceName -Vserver $Vserver -AdministrativeStatus down -Controller $NcPrimaryCtrl -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcNetInterface failed [$ErrorVar]" ; }
+            Write-LogDebug "Remove-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $Vserver -Confirm:$false -Controller $NcPrimaryCtrl -ErrorVariable ErrorVar"
+            $out = Remove-NcNetInterface -Name $TempCifsLif.InterfaceName -Vserver $Vserver -Confirm:$false -Controller $NcPrimaryCtrl -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Remove-NcNetInterface failed [$ErrorVar]" ; }
+        }
     }
     if ( $AllowQuotaDR -eq "True" ) {
         if ( ( $ret = create_quota_rules_from_quotadb -myController $NcPrimaryCtrl -myVserver $Vserver  ) -ne $True ) {
@@ -4073,7 +4115,7 @@ if ( $Resync ) {
     }
     $numDestVolRW= (Get-NcVol -Controller $NcSecondaryCtrl -VserverContext $VserverDR -Query @{VolumeStateAttributes=@{IsVserverRoot=$false};VolumeIdAttributes=@{Type="rw";StyleExtended="flexvol|flexgroup"}}).count
     if ( ( $numDestVolRW -eq 0 ) -or ( $ForceResync -eq $True -and $numDestVolRW -ge 1 ) -or ( $ForceResync -eq $True )){
-        if ( ( $ret = resync_vserver_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR ) -ne $True ) {
+        if ( ( $ret = resync_vserver_dr -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $VserverDR -Backup $False -Restore $False ) -ne $True ) {
             Write-LogError "ERROR: Resync error"
             clean_and_exit 1
         }
@@ -4170,8 +4212,21 @@ if ( $UpdateReverse ) {
 
     }
 
-    if ( ( $ret = update_CIFS_server_dr -myPrimaryController $NcSecondaryCtrl -mySecondaryController $NcPrimaryCtrl -myPrimaryVserver $VserverDR -mySecondaryVserver $Vserver ) -ne $True ) {
+    if ( ( $ret = update_CIFS_server_dr -myPrimaryController $NcSecondaryCtrl -mySecondaryController $NcPrimaryCtrl -myPrimaryVserver $VserverDR -mySecondaryVserver $Vserver -TemporarySecondaryCifsIp $TemporarySecondaryCifsIp -SecondaryCifsLifMaster $SecondaryCifsLifMaster -SecondaryCifsLifCustomVlan $SecondarCifsLifCustomVlan -ActiveDirectoryCustomOU $ActiveDirectoryCustomOU) -ne $True ) {
         Write-LogWarn "Some CIFS options has not been set on [$Vserver]"
+    }
+    if($Global:NFSonly -eq $False){
+        Write-LogDebug "Get-NcNetInterface -Vserver $Vserver -Controller $NcPrimaryCtrl | Where-Object {$_.InterfaceName -match `"^tmp_lif_to_join_in_ad_`"}"
+        $TempCifsLif=Get-NcNetInterface -Vserver $Vserver -Controller $NcPrimaryCtrl | Where-Object {$_.InterfaceName -match "^tmp_lif_to_join_in_ad_"}
+        if($null -ne $TempCifsLif){
+            Write-Log "[$Vserver] Removing Temporary LIF"
+            Write-LogDebug "Set-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $Vserver -AdministrativeStatus down -Controller $NcPrimaryCtrl -ErrorVariable ErrorVar"
+            $out = Set-NcNetInterface -Name $TempCifsLif.InterfaceName -Vserver $Vserver -AdministrativeStatus down -Controller $NcPrimaryCtrl -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcNetInterface failed [$ErrorVar]" ; }
+            Write-LogDebug "Remove-NcNetInterface $($TempCifsLif.InterfaceName) -Vserver $Vserver -Confirm:$false -Controller $NcPrimaryCtrl -ErrorVariable ErrorVar"
+            $out = Remove-NcNetInterface -Name $TempCifsLif.InterfaceName -Vserver $Vserver -Confirm:$false -Controller $NcPrimaryCtrl -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Remove-NcNetInterface failed [$ErrorVar]" ; }
+        }
     }
     #if ( ( update_cifs_usergroup -myPrimaryController $NcSecondaryCtrl -mySecondaryController $NcPrimaryCtrl -myPrimaryVserver $VserverDR -mySecondaryVserver $Vserver ) -ne $True ) {
     #    Write-LogError "ERROR: update_cifs_usergroup failed"
