@@ -17,12 +17,12 @@ To execute SVMTOOL under Linux or MacOS you must install the last PSTK v9.9.1 wh
 Compatible with REST API with at least PSTK 9.13.1.2306 and ONTAP 9.10.1 or upper
 
 Due to BURT 1525926 and with Metrocluster in the loop you must run the following ONTAP version or upper:
-9.10.1P14, 9.11.1P11, 9.12.1P5, 9.13.1P2, 9.9.1P17
+9.10.1P14, 9.11.1P11, 9.12.1P5, 9.13.1P2
 
 
 
 Mains objectives of this script are:
-- Create/Maintain/Manage SVM Disaster Relationship between NetApp MetroCluster for old version of **ONTAP** 8.3 to 9.X
+- Create/Maintain/Manage SVM Disaster Relationship between NetApp MetroCluster
 - Migrate SVM between Cluster or MetroCluster
 - Backup and Restore all configuration (volumes, lif, cron, junction-path, etc...) to original or alternate cluster
 - Clone DR SVM which allows to test your DR SVM through a cloned version of it, without interrupting SnapMirror relationships during the test timeframe
