@@ -15,6 +15,7 @@ So SVMTOOL is now compatible under Windows, Linux and MacOS.
 To execute SVMTOOL under Linux or MacOS you must install the last PSTK v9.9.1 which compatible with Powershell Core.
 
 Compatible with REST API with at least PSTK 9.13.1.2306 and ONTAP 9.10.1 or upper
+
 Due to BURT 1525926 and with Metrocluster in the loop you must run the following ONTAP version or upper:
 9.10.1P14, 9.11.1P11, 9.12.1P5, 9.13.1P2, 9.9.1P17
 
