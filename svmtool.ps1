@@ -568,6 +568,7 @@
         - 0.5.3     Detect when service-policy should be used instead of firewall-policy if ONTAP 9.6 or greater
         - 0.6.0     Complete rewrite of migrate, activateDR and ReActivate
         - 0.7.0     Rest Transition
+        - 0.7.1     ForceZapi modified
 
 #>
 [CmdletBinding(HelpURI = "https://github.com/oliviermasson/svmtool", DefaultParameterSetName = "ListInstance")]
@@ -1178,8 +1179,8 @@ $Global:MIN_MINOR = 5
 $Global:MIN_BUILD = 0
 $Global:MIN_REVISION = 0
 #############################################################################################
-$Global:RELEASE = "0.7.0"
-$Global:SCRIPT_RELEASE = "0.1.30"
+$Global:RELEASE = "0.7.1"
+$Global:SCRIPT_RELEASE = "0.1.31"
 if($PSVersionTable.PSVersion.Major -lt 7){
     $Global:BASEDIR = 'C:\Scripts\SVMTOOL'      
 }
