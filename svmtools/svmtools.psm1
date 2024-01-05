@@ -17524,8 +17524,8 @@ Try {
             }
             # we find a regex match first, but fall back to default.  If default is provided, we also assume autoselect (it's just for the rootvol)
             $RootAggr = select_data_aggr_from_cli -myController $mySecondaryController -myQuestion $Question -regExMatch $dataAggrMatchRegex -default $RootAggr -autoSelect ($Global:NonInteractive -or ($RootAggr -ne ""))
-            Write-LogDebug "Get-NcAggr -Controller $mySecondaryController -Name $RootAggr"
-            $out = Get-NcAggr -Controller $mySecondaryController -Name $RootAggr  -ErrorVariable ErrorVar
+            Write-LogDebug "Get-NcAggr -Controller $mySecondaryController -Name $RootAggr -ONTAPI"
+            $out = Get-NcAggr -Controller $mySecondaryController -Name $RootAggr -ONTAPI  -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcAggr failed [$ErrorVar]" ; }
 
             if ( $null -eq $out ) {

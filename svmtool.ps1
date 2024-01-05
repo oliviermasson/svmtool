@@ -1480,7 +1480,7 @@ if($ForceZapi.IsPresent){
     if(($module.Version.Major -ge 9) -and ($module.Version.Minor -ge 11))
     {
         Write-Host -f red "ZAPI call enforced"
-        $Global:PSTKCall="ZapiEnforced"
+        $Global:PSTKCall="Zapi"
     }else{
         $Global:PSTKCall="Zapi"
     }
@@ -2209,8 +2209,8 @@ if ( $Restore ) {
         clean_and_exit 1
     }
 
-    $Global:OntapSecondaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $DestinationController)[0].VersionTuple.Generation)+','+[string]((Get-NcSystemVersionInfo -Controller $DestinationController)[0].VersionTuple.Major)))
-    $SecondaryVersion=(Get-NcSystemVersionInfo -Controller $DestinationController)[0].VersionTuple | Join-String
+    $Global:OntapSecondaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $DestinationController -ONTAPI)[0].VersionTuple.Generation)+','+[string]((Get-NcSystemVersionInfo -Controller $DestinationController -ONTAPI)[0].VersionTuple.Major)))
+    $SecondaryVersion=(Get-NcSystemVersionInfo -Controller $DestinationController -ONTAPI)[0].VersionTuple | Join-String
     Write-LogDebug "ONTAP Version       [$SecondaryVersion]"
 
     if ($RESTOREALLSVM -eq $True) {
