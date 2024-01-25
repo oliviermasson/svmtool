@@ -1722,8 +1722,8 @@ if ( $Backup ) {
     }else{
         $Credential = get_local_cDotcred($myPrimaryController)
         $url="https://"+$myPrimaryController.Name+"/api/storage/quota/rules?svm.name="+$Vserver+"&fields=**"
-        Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-        $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+        $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
         if($? -ne $True){
             Write-LogError "ERROR: Unable to get quota policy rules. Reason [$ErrorVar]" 
         }else{
@@ -2027,8 +2027,8 @@ if ( $BackupMultiSVM ) {
                 }else{
                     $Credential = get_local_cDotcred($myPrimaryController)
                     $url="https://"+$myPrimaryController.Name+"/api/storage/quota/rules?svm.name="+$myPrimaryVserver+"&fields=**"
-                    Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-                    $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+                    $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: Unable to get quota policy rules. Reason [$ErrorVar]" 
                     }else{
