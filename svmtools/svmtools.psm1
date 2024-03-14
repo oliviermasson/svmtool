@@ -1823,8 +1823,8 @@ Function create_update_vscan_dr (
                         if($Global:PSTKCall -eq "Rest"){
                             $Credential = get_local_cDotcred($myPrimaryController)
                             $url="https://"+$myPrimaryController.Name+"/api/private/cli/vserver/vscan/on-access-policy?vserver="+$myPrimaryVserver+"&policy_name="+$PrimaryOnAccessPolicyName+"&fields=owner"
-                            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-                            $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+                            $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                             if($? -ne $True){
                                 Write-LogError "ERROR: Unable to get policy admin owner. Reason [$ErrorVar]" 
                             }else{
@@ -1857,8 +1857,8 @@ Function create_update_vscan_dr (
                             if($Global:PSTKCall -eq "Rest"){
                                 $Credential = get_local_cDotcred($mySecondaryController)
                                 $url="https://"+$mySecondaryController.Name+"/api/private/cli/vserver/vscan/on-access-policy?vserver="+$mySecondaryVserver+"&policy_name="+$PrimaryOnAccessPolicyName+"&fields=owner"
-                                Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-                                $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+                                $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                                 if($? -ne $True){
                                     Write-LogError "ERROR: Unable to get policy admin owner. Reason [$ErrorVar]" 
                                 }else{
@@ -3151,8 +3151,8 @@ Function create_update_fpolicy_dr(
                                         }
                                         $bodyfpolicy=$bodyfpolicy | ConvertTo-Json
                                         $url=$("https://"+$mySecondaryController.Name+"/api/protocols/fpolicy/"+$SVMUuid+"/engines/"+$PrimaryFpolicyEngineName)
-                                        Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyfpolicy -SkipCertificateCheck"
-                                        $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyfpolicy -SkipCertificateCheck -ErrorVariable ErrorVar
+                                        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyfpolicy -SkipCertificateCheck"
+                                        $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyfpolicy -SkipCertificateCheck -ErrorVariable ErrorVar
                                         if($? -ne $True){
                                             Write-LogError "ERROR: Unable to patch fpolicy external engine [$PrimaryFpolicyEngineName] Reason [$ErrorVar]"
                                             Write-LogDebug "[$workOn]: end"
@@ -3230,8 +3230,8 @@ Function create_update_fpolicy_dr(
                                         }
                                         $bodyfpolicy=$bodyfpolicy | ConvertTo-Json
                                         $url=$("https://"+$mySecondaryController.Name+"/api/protocols/fpolicy/"+$SVMUuid+"/engines/"+$PrimaryFpolicyEngineName)
-                                        Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyfpolicy -SkipCertificateCheck"
-                                        $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyfpolicy -SkipCertificateCheck -ErrorVariable ErrorVar
+                                        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyfpolicy -SkipCertificateCheck"
+                                        $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyfpolicy -SkipCertificateCheck -ErrorVariable ErrorVar
                                         if($? -ne $True){
                                             Write-LogError "ERROR: Unable to patch fpolicy external engine [$PrimaryFpolicyEngineName] Reason [$ErrorVar]"
                                             Write-LogDebug "[$workOn]: end"
@@ -3408,8 +3408,8 @@ Function create_update_fpolicy_dr(
                                 }
                                 $bodyfpolicy=$bodyfpolicy | ConvertTo-Json
                                 $url=$("https://"+$mySecondaryController.Name+"/api/protocols/fpolicy/"+$($myVserver.Uuid)+"/engines")
-                                Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyfpolicy -SkipCertificateCheck"
-                                $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyfpolicy -SkipCertificateCheck -ErrorVariable ErrorVar
+                                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyfpolicy -SkipCertificateCheck"
+                                $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyfpolicy -SkipCertificateCheck -ErrorVariable ErrorVar
                                 if($? -ne $True){
                                     Write-LogError "ERROR: Unable to create Fpolicy engine. Reason [$ErrorVar]"
                                     Write-LogDebug "[$workOn]: end"
@@ -4106,8 +4106,8 @@ Function create_update_qospolicy_dr(
                             }else{
                                 $cred=get_local_cDotcred($mySecondaryController)
                                 $url=$("https://"+$mySecondaryController.Name+"/api/storage/qos/policies?svm.name="+$mySecondaryVserver+"&adaptive.absolute_min_iops=>0&return_records=true&fields=adaptive&adaptive.peak_iops=>0")
-                                Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $cred -SkipCertificateCheck"
-                                $QOSdetail=Invoke-RestMethod -Method 'get' -Uri $url -Credential $cred -SkipCertificateCheck -ErrorVariable ErrorVar
+                                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $cred -SkipCertificateCheck"
+                                $QOSdetail=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $cred -SkipCertificateCheck -ErrorVariable ErrorVar
                                 if($? -ne $True){
                                     Write-LogError "ERROR: Unable to get policy admin owner. Reason [$ErrorVar]" 
                                     $SecondaryQosAdaptativeGroup=$null
@@ -4157,8 +4157,8 @@ Function create_update_qospolicy_dr(
                                 #         }
                                 # }
                                 $bodyqosadapt=$bodyqosadapt | ConvertTo-Json
-                                Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $cred -Body $bodyqosadapt -SkipCertificateCheck"
-                                $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $cred -Body $bodyqosadapt -SkipCertificateCheck -ErrorVariable ErrorVar
+                                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $cred -Body $bodyqosadapt -SkipCertificateCheck"
+                                $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $cred -Body $bodyqosadapt -SkipCertificateCheck -ErrorVariable ErrorVar
                                 if($? -ne $True){
                                     Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
                                 }
@@ -4206,8 +4206,8 @@ Function create_update_qospolicy_dr(
                                 }
                                 Write-Log "[$workOn] Create QOS Adaptative Policy Group [$($bodyqosadapt.name)]"
                                 $bodyqosadapt=$bodyqosadapt | ConvertTo-Json
-                                Write-LogDebug "Invoke-RestMethod -Method 'Post' -Uri $url -Credential $cred -Body $bodyqosadapt -SkipCertificateCheck"
-                                $ret=Invoke-RestMethod -Method 'Post' -Uri $url -Credential $cred -Body $bodyqosadapt -SkipCertificateCheck -ErrorVariable ErrorVar
+                                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'Post' -Uri $url -Credential $cred -Body $bodyqosadapt -SkipCertificateCheck"
+                                $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'Post' -Uri $url -Credential $cred -Body $bodyqosadapt -SkipCertificateCheck -ErrorVariable ErrorVar
                                 if($? -ne $True){
                                     Write-LogError "ERROR: Post request [$url] reason [$ErrorVar]"
                                 }
@@ -4457,8 +4457,8 @@ Function create_update_qospolicy_dr(
                             $VolListRest="*"
                         }
                         $url=$("https://"+$myPrimaryController.Name+"/api/storage/volumes?svm.name="+$myPrimaryVserver+"&name="+$VolListRest+"&qos.policy.name=!-&fields=qos.policy.*")
-                        Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck"
-                        $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+                        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck"
+                        $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
                         if($? -ne $True){
                             Write-LogError "ERROR: Unable to get policy admin owner. Reason [$ErrorVar]" 
                             $PrimaryVolWithQosList=$null
@@ -4568,8 +4568,8 @@ Function create_update_qospolicy_dr(
                                     if($PrimaryVolName -eq "test1"){
                                         Write-Log "debug test1"
                                     }
-                                    Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck"
-                                    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck -ErrorVariable ErrorVar
+                                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck"
+                                    $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck -ErrorVariable ErrorVar
                                     if($? -ne $True){
                                         Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
                                     }
@@ -4596,8 +4596,8 @@ Function create_update_qospolicy_dr(
                                                     
                                                     # * need to retry to set QOS on volume after having forced a none qos policy at SVM level
                                                     
-                                                    Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck"
-                                                    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck -ErrorVariable ErrorVar
+                                                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck"
+                                                    $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck -ErrorVariable ErrorVar
                                                     if($? -ne $True){
                                                         Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
                                                     }
@@ -4696,8 +4696,8 @@ Function create_update_qospolicy_dr(
                                             qos=@{policy=@{name=$($PrimaryQOSPolicy+"_"+$mySecondaryVserver)}}
                                         } | ConvertTo-Json
                                         $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$SecondaryVolUuid)
-                                        Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck"
-                                        $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck -ErrorVariable ErrorVar
+                                        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck"
+                                        $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck -ErrorVariable ErrorVar
                                         if($? -ne $True){
                                             Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
                                         }
@@ -4724,8 +4724,8 @@ Function create_update_qospolicy_dr(
                                                         
                                                         # * need to retry to set QOS on volume after having forced a none qos policy at SVM level
                                                         
-                                                        Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck"
-                                                        $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck -ErrorVariable ErrorVar
+                                                        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck"
+                                                        $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck -ErrorVariable ErrorVar
                                                         if($? -ne $True){
                                                             Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
                                                         }
@@ -4833,8 +4833,8 @@ Function create_update_qospolicy_dr(
                                             qos=@{policy=@{name=$QosPolicyGroupName}}
                                         } | ConvertTo-Json
                                         $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$SecondaryVolUuid)
-                                        Write-Logdebug "Invoke-RestMethod -Method patch -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck"
-                                        $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck -ErrorVariable ErrorVar
+                                        Write-Logdebug "Invoke-RestMethod -ContentType 'application/json' -Method patch -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck"
+                                        $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck -ErrorVariable ErrorVar
                                         if($? -ne $True){
                                             Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
                                         }
@@ -4861,8 +4861,8 @@ Function create_update_qospolicy_dr(
                                                         
                                                         # * need to retry to set QOS on volume after having forced a none qos policy at SVM level
                                                         
-                                                        Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck"
-                                                        $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck -ErrorVariable ErrorVar
+                                                        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck"
+                                                        $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyqos -SkipCertificateCheck -ErrorVariable ErrorVar
                                                         if($? -ne $True){
                                                             Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
                                                         }
@@ -5127,8 +5127,8 @@ Try {
                                     }
                                     #$body.scope=$PrimaryJobScheduleScope
                                     $bodycron=$bodycron | ConvertTo-Json
-                                    Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $CredSecondary -Body $bodycron -SkipCertificateCheck"
-                                    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodycron -SkipCertificateCheck -ErrorVariable ErrorVar
+                                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method patch -Uri $url -Credential $CredSecondary -Body $bodycron -SkipCertificateCheck"
+                                    $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodycron -SkipCertificateCheck -ErrorVariable ErrorVar
                                     if($? -ne $True){
                                         Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
                                     }
@@ -5178,8 +5178,8 @@ Try {
                                 $body.name=$PrimaryJobScheduleName
                                 #$body.svm=@{"name"=$mySecondaryVserver}
                                 $body=$body | ConvertTo-Json
-                                Write-LogDebug "Invoke-RestMethod -Method post -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
-                                $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+                                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method post -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck"
+                                $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $CredSecondary -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
                                 if($? -ne $True){
                                     Write-LogError "ERROR: post request [$url] reason [$ErrorVar]"
                                 }
@@ -5193,7 +5193,7 @@ Try {
                     # $PrimaryName=(Get-NcCluster -Controller $myPrimaryController).ClusterName
                     Write-LogDebug "Get-NcJobSchedule -Controller $myPrimaryController -VserverContext $myPrimaryVserver -Query @{scope=svm}"
                     $PrimaryCronListVserver = Get-NcJobSchedule -Controller $myPrimaryController -ErrorVariable ErrorVar -VserverContext $myPrimaryVserver -Query @{scope="svm"}
-                    if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcJobSchedule failed [$ErrorVar]" }
+                    if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Get-NcJobSchedule failed [$ErrorVar]" }
                 }else{
                     if(Test-Path $($Global:JsonPath+"Get-NcJobSchedule_vserver.json")){
                         $PrimaryCronListVserver=Get-Content $($Global:JsonPath+"Get-NcJobSchedule_vserver.json") -Raw | ConvertFrom-Json
@@ -5369,8 +5369,8 @@ Try {
                                         $bodycron.svm=@{"name"=$mySecondaryVserver}
                                         #$bodycron.scope=$PrimaryJobScheduleScope
                                         $bodycron=$bodycron | ConvertTo-Json
-                                        Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $CredSecondary -Body $bodycron -SkipCertificateCheck"
-                                        $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodycron -SkipCertificateCheck -ErrorVariable ErrorVar
+                                        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method patch -Uri $url -Credential $CredSecondary -Body $bodycron -SkipCertificateCheck"
+                                        $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodycron -SkipCertificateCheck -ErrorVariable ErrorVar
                                         if($? -ne $True){
                                             Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
                                         }
@@ -5431,8 +5431,8 @@ Try {
                                     $bodycron.name=$PrimaryJobScheduleName
                                     $bodycron.svm=@{"name"=$mySecondaryVserver}
                                     $bodycron=$bodycron | ConvertTo-Json
-                                    Write-LogDebug "Invoke-RestMethod -Method post -Uri $url -Credential $CredSecondary -Body $bodycron -SkipCertificateCheck"
-                                    $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodycron -SkipCertificateCheck -ErrorVariable ErrorVar
+                                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method post -Uri $url -Credential $CredSecondary -Body $bodycron -SkipCertificateCheck"
+                                    $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodycron -SkipCertificateCheck -ErrorVariable ErrorVar
                                     if($? -ne $True){
                                         Write-LogError "ERROR: post request [$url] reason [$ErrorVar]"
                                     }
@@ -5750,8 +5750,8 @@ Try {
                             } | ConvertTo-Json
                             $url=$("https://"+$mySecondaryController.Name+"/api/storage/snapshot-policies/"+$NewSecondarySnapshotPolicyUuid+"/schedules")
                             $CredSecondary=get_local_cDotcred($mySecondaryController)
-                            Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $CredSecondary -Body $bodysnappolicy -SkipCertificateCheck"
-                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodysnappolicy -SkipCertificateCheck -ErrorVariable ErrorVar
+                            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method patch -Uri $url -Credential $CredSecondary -Body $bodysnappolicy -SkipCertificateCheck"
+                            $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodysnappolicy -SkipCertificateCheck -ErrorVariable ErrorVar
                             if($? -ne $True){
                                 Write-LogError "ERROR: Post request [$url] reason [$ErrorVar]"
                             }
@@ -5882,8 +5882,8 @@ Try {
                                 }
                                 $url=$("https://"+$mySecondaryController.Name+"/api/storage/snapshot-policies/"+$NewSecondarySnapshotPolicyUuid+"/schedules")
                                 $CredSecondary=get_local_cDotcred($mySecondaryController)
-                                Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $CredSecondary -Body $bodysnapshotpol -SkipCertificateCheck"
-                                $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodysnapshotpol -SkipCertificateCheck -ErrorVariable ErrorVar
+                                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method patch -Uri $url -Credential $CredSecondary -Body $bodysnapshotpol -SkipCertificateCheck"
+                                $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodysnapshotpol -SkipCertificateCheck -ErrorVariable ErrorVar
                                 if($? -ne $True){
                                     Write-LogError "ERROR: Post request [$url] reason [$ErrorVar]"
                                 }
@@ -6429,8 +6429,8 @@ Try {
                                 if($Global:PSTKCall -eq "Rest"){
                                     $cred=get_local_cDotcred($mySecondaryController)
                                     $url=$("https://"+$mySecondaryController.name+"/api/network/ip/interfaces?state=up&return_records=false&services=data_core|data_iscsi|data_nvme_tcp&svm.name="+$mySecondaryVserver)
-                                    Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $cred -SkipCertificateCheck"
-                                    $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $cred -SkipCertificateCheck -ErrorVariable ErrorVar
+                                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $cred -SkipCertificateCheck"
+                                    $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $cred -SkipCertificateCheck -ErrorVariable ErrorVar
                                     if($? -ne $True){
                                         Write-LogError "ERROR: Unable to lif informations [$ErrorVar]" 
                                         return $False
@@ -6848,8 +6848,8 @@ Try {
                 <# # REST does not support -AllowedProtocols parameter, need to address this by direct REST method
                 $CredSecondary=get_local_cDotcred($mySecondaryController)
                 $url=$("https://"+$mySecondaryController.Name+"/api/svm/svms?name="+$mySecondaryVserver)
-                Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $CredSecondary -SkipCertificateCheck"
-                $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $CredSecondary -SkipCertificateCheck -ErrorVariable ErrorVar
+                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $CredSecondary -SkipCertificateCheck"
+                $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $CredSecondary -SkipCertificateCheck -ErrorVariable ErrorVar
                 if($? -ne $True){
                     Write-LogError "ERROR: Unable to get svm [$mySecondaryVserver] from [$mySecondaryController]" 
                     return $False
@@ -6860,8 +6860,8 @@ Try {
                     return $False
                 }
                 $url=$("https://"+$mySecondaryController.Name+"/api/svm/svms/"+$svmUUID+"?fields=nfs,cifs,fcp,nvme,s3,iscsi,ndmp")
-                Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $CredSecondary -SkipCertificateCheck"
-                $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $CredSecondary -SkipCertificateCheck -ErrorVariable ErrorVar
+                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $CredSecondary -SkipCertificateCheck"
+                $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $CredSecondary -SkipCertificateCheck -ErrorVariable ErrorVar
                 if($? -ne $True){
                     Write-LogError "ERROR: Unable to get svm protocols [fbody$mySecondaryVserver] from [$mySecondaryController]" 
                     return $False
@@ -6929,8 +6929,8 @@ Try {
         if($Restore -eq $False){
             $Credential = get_local_cDotcred($myPrimaryController)
             $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/vserver?vserver="+$myPrimaryVserver+"&fields=qos-policy-group")
-            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-            $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+            $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: Unable to get svm qos policy. Reason [$ErrorVar]" 
             }else{
@@ -6958,8 +6958,8 @@ Try {
         if($Backup -eq $False){
             $Credential = get_local_cDotcred($mySecondaryController)
             $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/vserver?vserver="+$mySecondaryVserver+"&fields=qos-policy-group")
-            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-            $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+            $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: Unable to get svm qos policy. Reason [$ErrorVar]" 
             }else{
@@ -6980,9 +6980,9 @@ Try {
                         name=$PrimaryQOSPolicy
                     }
                 } | ConvertTo-Json
-                Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $cred -Body $bodysvm -SkipCertificateCheck"
+                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $cred -Body $bodysvm -SkipCertificateCheck"
                 $cred=get_local_cDotcred($mySecondaryController)
-                $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $cred -Body $bodysvm -SkipCertificateCheck -ErrorVariable ErrorVar
+                $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $cred -Body $bodysvm -SkipCertificateCheck -ErrorVariable ErrorVar
                 if($? -ne $True){
                     Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
                     $Return=$ret
@@ -7052,8 +7052,8 @@ try{
     [string]$bodycifs=$bodycifs | ConvertTo-Json
     $cleanbody.ad_domain.password="xxxxxxxxxxxxxx"
     [string]$cleanbody=$cleanbody | ConvertTo-Json
-    Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $cred -Body $cleanbody -SkipCertificateCheck"
-    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $cred -Body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
+    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $cred -Body $cleanbody -SkipCertificateCheck"
+    $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $cred -Body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
     if($? -ne $True){
         Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
         $Return=$ret
@@ -7111,8 +7111,8 @@ try{
     $VolDetailsUUID=$VolDetails.UUid
     $url=$("https://"+$controller.Name+"/api/storage/volumes/"+$VolDetailsUUID)
     [string]$bodyvol=$bodyvol | ConvertTo-Json
-    Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $cred -Body $bodyvol -SkipCertificateCheck"
-    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $cred -Body $bodyvol -SkipCertificateCheck -ErrorVariable ErrorVar
+    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $cred -Body $bodyvol -SkipCertificateCheck"
+    $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $cred -Body $bodyvol -SkipCertificateCheck -ErrorVariable ErrorVar
     if($? -ne $True){
         Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
         $Return=$ret
@@ -7169,8 +7169,8 @@ Function REST_set_lif(
     }
     $cred=get_local_cDotcred($myController)
     $url=$("https://"+$myController.Name+"/api/network/ip/interfaces/"+$myLIFuuid)
-    Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $cred -Body $body -SkipCertificateCheck"
-    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $cred -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
+    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $cred -Body $body -SkipCertificateCheck"
+    $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $cred -Body $body -SkipCertificateCheck -ErrorVariable ErrorVar
     if($? -ne $True){
         Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
         $Return=$ret
@@ -7364,8 +7364,8 @@ Try {
         }else{
             $PrimaryCredential = get_local_cDotcred($myPrimaryController)
             $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/vserver?vserver="+$myPrimaryVserver+"&fields=rootvolume,aggregate,rootvolume_security_style")
-            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck"
-            $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck"
+            $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: Unable to get svm rootvolume name. Reason [$ErrorVar]" 
             }else{
@@ -7396,8 +7396,8 @@ Try {
         }else{
             $SecondaryCredential = get_local_cDotcred($mySecondaryController)
             $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/vserver?vserver="+$mySecondaryVserver+"&fields=rootvolume,aggregate,rootvolume_security_style")
-            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
-            $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
+            $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: Unable to get svm rootvolume name. Reason [$ErrorVar]" 
             }else{
@@ -7475,8 +7475,8 @@ Try {
                     nas=@{export_policy=@{name=$PrimaryRootVolExportPolicy}}
                 } | ConvertTo-Json
                 $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$SecondaryVolUuid)
-                Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck"
-                $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck -ErrorVariable ErrorVar
+                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck"
+                $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck -ErrorVariable ErrorVar
                 if($? -ne $True){
                     Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
                 }
@@ -7695,8 +7695,8 @@ Try {
                                 nas=@{export_policy=@{name=$PrimaryVolExportPolicy}}
                             } | ConvertTo-Json
                             $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$SecondaryVolUuid)
-                            Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck"
-                            $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck -ErrorVariable ErrorVar
+                            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck"
+                            $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck -ErrorVariable ErrorVar
                             if($? -ne $True){
                                 Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
                             }
@@ -7777,8 +7777,8 @@ Try {
                             space=@{snapshot=@{reserve_percent=$PrimaryVolExportPolicy}}
                         } | ConvertTo-Json
                         $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$SecondaryVolUuid)
-                        Write-LogDebug "Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck"
-                        $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck -ErrorVariable ErrorVar
+                        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck"
+                        $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck -ErrorVariable ErrorVar
                         if($? -ne $True){
                             Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
                         }
@@ -7860,8 +7860,8 @@ Try {
     }else{
         $Credential = get_local_cDotcred($mySecondaryController)
         $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes?svm.name="+$DestinationVserverDR+"&fields=**,!metric,!statistics&is_svm_root=false")
-        Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-        $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+        $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
         if($? -ne $True){
             Clean_Throw "ERROR: Unable to get volume list. Reason [$ErrorVar]" 
         }else{
@@ -7905,8 +7905,8 @@ Try {
         }else{
             $Credential = get_local_cDotcred($mySecondaryController)
             $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes/"+$DestVolUUID+"/snapshots?owners=!snapmirror&name=!snapmirror*&fields=!reclaimable_space")
-            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-            $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+            $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Clean_Throw "ERROR: Unable to get volume list. Reason [$ErrorVar]" 
             }else{
@@ -8014,8 +8014,8 @@ Try {
                 # if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcVol failed [$ErrorVar]" }
                 $PrimaryCredential = get_local_cDotcred($myPrimaryController)
                 $url=$("https://"+$myPrimaryController.Name+"/api/storage/volumes?svm.name="+$myPrimaryVserver+"&fields=**,!metric,!statistics&is_svm_root=false")
-                Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck"
-                $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck"
+                $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
                 if($? -ne $True){
                     Clean_Throw "ERROR: Unable to get volume list. Reason [$ErrorVar]" 
                 }else{
@@ -8124,8 +8124,8 @@ Try {
             if($Restore -eq $False){
                 $Credential = get_local_cDotcred($myPrimaryController)
                 $url=$("https://"+$myPrimaryController.Name+"/api/storage/volumes/"+$PrimaryVol.Uuid+"?fields=**,!metric,!statistics")
-                Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-                $PrimaryVol=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+                $PrimaryVol=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                 if($? -ne $True){
                     Write-LogError "ERROR: Unable to get volume [$PrimaryVol] details Reason [$ErrorVar]" 
                 }else{
@@ -8312,8 +8312,8 @@ Try {
                     }else{
                         $Credential = get_local_cDotcred($mySecondaryController)
                         $url=$("https://"+$mySecondaryController.Name+"/api/storage/volumes?svm.name="+$mySecondaryVserver+"&fields=**,!metric,!statistics&name="+$PrimaryVolName)
-                        Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-                        $SecondaryVol=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+                        $SecondaryVol=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                         if($? -ne $True){
                             Clean_Throw "ERROR: Unable to get secondary volume [$PrimaryVolName] details Reason [$ErrorVar]" 
                         }
@@ -8529,8 +8529,8 @@ Try {
                             $NewNcVolParameters+=@{"type"="dp"}
                             if($ForceRest){
                                 $bodyvol=$NewNcVolParameters | ConvertTo-Json
-                                Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck"
-                                $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck -ErrorVariable ErrorVar
+                                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck"
+                                $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck -ErrorVariable ErrorVar
                                 if($? -ne $True){
                                     Write-LogError "ERROR: Unable to create volume [$PrimaryVolName] Reason [$ErrorVar]"
                                     Write-LogDebug "[$workOn]: end"
@@ -8593,8 +8593,8 @@ Try {
                                 Write-LogDebug "Create RW volume"
                                 if($ForceRest){
                                     $bodyvol=$NewNcVolParameters | ConvertTo-Json
-                                    Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck"
-                                    $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck -ErrorVariable ErrorVar
+                                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck"
+                                    $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck -ErrorVariable ErrorVar
                                     if($? -ne $True){
                                         Write-LogError "ERROR: Unable to create volume [$PrimaryVolName] Reason [$ErrorVar]"
                                         Write-LogDebug "[$workOn]: end"
@@ -8653,8 +8653,8 @@ Try {
                                         $NewNcVolParameters+=@{"type"="dp"}
                                     }
                                     $bodyvol=$NewNcVolParameters | ConvertTo-Json
-                                    Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck"
-                                    $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck -ErrorVariable ErrorVar
+                                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck"
+                                    $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck -ErrorVariable ErrorVar
                                     if($? -ne $True){
                                         Write-LogError "ERROR: Unable to create volume [$PrimaryVolName] Reason [$ErrorVar]"
                                         Write-LogDebug "[$workOn]: end"
@@ -9101,8 +9101,8 @@ Try {
     $bodyvol=$bodyvol | ConvertTo-Json
     $credential=get_local_cDotcred($myController)
     $url=$("https://"+$myController.Name+"/api/storage/volumes")
-    Write-LogDebug "Invoke-RestMethod -Method post -Uri $url -Credential $credential -body $bodyvol -SkipCertificateCheck"
-    $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $credential -body $bodyvol -SkipCertificateCheck -ErrorVariable ErrorVar
+    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method post -Uri $url -Credential $credential -body $bodyvol -SkipCertificateCheck"
+    $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $credential -body $bodyvol -SkipCertificateCheck -ErrorVariable ErrorVar
     if($? -ne $True){
         Write-LogError "ERROR: Unable to create flexgroup. Reason [$ErrorVar]"
         Write-LogDebug "[$workOn]: end"
@@ -9316,8 +9316,8 @@ Try {
     # }else{
     #     $PrimaryCredential = get_local_cDotcred($myController)
     #     $url=$("https://"+$myController.Name+"/api/private/cli/vserver?vserver="+$myVserver+"&fields=rootvolume")
-    #     Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck"
-    #     $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+    #     Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck"
+    #     $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
     #     if($? -ne $True){
     #         Write-LogError "ERROR: Unable to get svm rootvolume name. Reason [$ErrorVar]" 
     #     }else{
@@ -9337,8 +9337,8 @@ Try {
         if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get NotNested Volumes failed [$ErrorVar]" }
     }else{
         $url=$("https://"+$myController.Name+"/api/storage/volumes?svm.name="+$myVserver+"&nas.junction_parent.name="+$RootVolumeName+"&fields=name,nas.path,nas.junction_parent.name,style,nas.unix_permissions")
-        Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-        $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+        $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
         if($? -ne $True){
             Write-LogError "ERROR: Unable to get not nested volume. Reason [$ErrorVar]" 
         }else{
@@ -9426,8 +9426,8 @@ Try {
         if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get Nested Volumes failed [$ErrorVar]" }
     }else{
         $url=$("https://"+$myController.Name+"/api/storage/volumes?svm.name="+$myVserver+"&nas.path=!-,!/&nas.junction_parent.name=!"+$RootVolumeName+"&fields=name,nas.path,nas.junction_parent.name,style,nas.unix_permissions")
-        Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-        $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+        $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
         if($? -ne $True){
             Write-LogError "ERROR: Unable to nested volume. Reason [$ErrorVar]" 
         }else{
@@ -9601,8 +9601,8 @@ Try {
             }else{
                 $Credential=get_local_cDotcred($mySecondaryController)
                 $url=$("https://"+$mySecondaryController.Name+"/api/snapmirror/relationships?source.path="+$($myPrimaryVserver+":"+$VolumeName)+"&destination.path="+$($DestVserverDR+":"+$DestVolume)+"&fields=**")
-                Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-                $relationList=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+                $relationList=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                 if($? -ne $True){
                     Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
                 }
@@ -9803,8 +9803,8 @@ Try {
                 }else{
                     $Credential=get_local_cDotcred($mySecondaryController)
                     $url=$("https://"+$mySecondaryController.Name+"/api/snapmirror/relationships?source.path="+$($myPrimaryVserver+":"+$volume)+"&destination.path="+$($mySecondaryVserver+":"+$DestVolume)+"&fields=**")
-                    Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-                    $relationList=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+                    $relationList=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
                     }
@@ -9841,8 +9841,8 @@ Try {
                             $DestinationVolume=$DestinationLocation.split(':')[-1]
                             $SecondaryCredential = get_local_cDotcred($mySecondaryController)
                             $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/snapmirror?source-path="+$SourceLocation+"&destination-path="+$DestinationLocation+"&fields=state,status")
-                            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
-                            $SnapmirrorRelationshipStatus=Invoke-RestMethod -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+                            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
+                            $SnapmirrorRelationshipStatus=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
                             if($? -ne $True){
                                 Write-LogError "ERROR: Unable to get snapmirror relationship status. Reason [$ErrorVar]"
                                 Write-LogDebug "[$workOn]: end"
@@ -10304,8 +10304,8 @@ Function set_snapmirror_schedule_dr(
         }else{
             $Credential=get_local_cDotcred($mySecondaryController)
             $url=$("https://"+$mySecondaryController.Name+"/api/snapmirror/relationships?destination.path="+$($mySecondaryVserver+":*")+"&source.path="+$($myPrimaryVserver+":*")+"&fields=**")
-            Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-            $relationList=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+            $relationList=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
                 clean_and_exit 1
@@ -10380,8 +10380,8 @@ Try {
     }else{
         $Credential=get_local_cDotcred($mySecondaryController)
         $url=$("https://"+$mySecondaryController.Name+"/api/snapmirror/relationships?destination.path="+$($mySecondaryVserver+":*")+"&source.path="+$($myPrimaryVserver+":*")+"&fields=**")
-        Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-        $relationList=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+        $relationList=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
         if($? -ne $True){
             Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
             clean_and_exit 1
@@ -10404,8 +10404,8 @@ Try {
             $DestinationVolume=$DestinationLocation.split(':')[-1]
             $SecondaryCredential = get_local_cDotcred($mySecondaryController)
             $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/snapmirror?source-path="+$SourceLocation+"&destination-path="+$DestinationLocation+"&fields=state,status")
-            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
-            $SnapmirrorRelationshipStatus=Invoke-RestMethod -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
+            $SnapmirrorRelationshipStatus=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: Unable to get snapmirror relationship status. Reason [$ErrorVar]"
                 Write-LogDebug "[$workOn]: end"
@@ -10460,8 +10460,8 @@ Function wait_snapmirror_dr_status{
                 }else{
                     $Credential=get_local_cDotcred($mySecondaryController)
                     $url=$("https://"+$mySecondaryController.Name+"/api/snapmirror/relationships?destination.path="+$($DestinationVserver+":"+$SecondaryVolumeName)+"&source.path="+$($SourceVserver+":"+$PrimaryVolumeName)+"&fields=**")
-                    Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-                    $relation=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+                    $relation=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
                         clean_and_exit 1
@@ -10476,8 +10476,8 @@ Function wait_snapmirror_dr_status{
                 }else{
                     $Credential=get_local_cDotcred($mySecondaryController)
                     $url=$("https://"+$mySecondaryController.Name+"/api/snapmirror/relationships?destination.path="+$($DestinationVserver+":"+$SecondaryVolumeName)+"&fields=**")
-                    Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-                    $relation=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+                    $relation=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
                         clean_and_exit 1
@@ -10492,8 +10492,8 @@ Function wait_snapmirror_dr_status{
                     $SourceLocation=$rel.source.path
                     $DestinationLocation=$rel.destination.path
                     $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/snapmirror?source-path="+$SourceLocation+"&destination-path="+$DestinationLocation+"&fields=state,status")
-                    Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
-                    $SnapmirrorRelationshipStatus=Invoke-RestMethod -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
+                    $SnapmirrorRelationshipStatus=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: Unable to get snapmirror relationship status. Reason [$ErrorVar]"
                         Write-LogDebug "[$workOn]: end"
@@ -10564,8 +10564,8 @@ Function wait_snapmirror_dr(
             }else{
                 $Credential=get_local_cDotcred($mySecondaryController)
                 $url=$("https://"+$mySecondaryController.Name+"/api/snapmirror/relationships?destination.path="+$($mySecondaryVserver+":*")+"&source.path="+$($myPrimaryVserver+":*")+"&fields=**")
-                Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-                $relationList=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+                $relationList=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                 if($? -ne $True){
                     Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
                     clean_and_exit 1
@@ -10594,8 +10594,8 @@ Function wait_snapmirror_dr(
                     # ! Private CLI REST request necessary to get correct relationship-status
                     $SecondaryCredential = get_local_cDotcred($mySecondaryController)
                     $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/snapmirror?source-path="+$SourceLocation+"&destination-path="+$DestinationLocation+"&fields=state,status")
-                    #Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
-                    $SnapmirrorRelationshipStatus=Invoke-RestMethod -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+                    #Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
+                    $SnapmirrorRelationshipStatus=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: Unable to get snapmirror relationship status. Reason [$ErrorVar]"
                         Write-LogDebug "[$workOn]: end"
@@ -10695,8 +10695,8 @@ try{
         }
     }
     $bodylif=$bodylif | ConvertTo-Json
-    Write-LogDebug "Invoke-RestMethod -Method post -Uri $url -Credential $myCredential -body $bodylif -SkipCertificateCheck"
-    $LifCreate=Invoke-RestMethod -Method 'post' -Uri $url -Credential $myCredential -body $bodylif -SkipCertificateCheck -ErrorVariable ErrorVar
+    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method post -Uri $url -Credential $myCredential -body $bodylif -SkipCertificateCheck"
+    $LifCreate=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $myCredential -body $bodylif -SkipCertificateCheck -ErrorVariable ErrorVar
     if($? -ne $True){
         Write-LogError "ERROR: Unable to create lif. Reason [$ErrorVar]"
         Write-LogDebug "[$Vserver]: end"
@@ -10770,8 +10770,8 @@ Try{
         }
     }
     $bodysm=$bodysm | ConvertTo-Json
-    Write-LogDebug "Invoke-RestMethod -Method post -Uri $url -Credential $myCredential -body $bodysm -SkipCertificateCheck"
-    $SnapmirrorCreate=Invoke-RestMethod -Method 'post' -Uri $url -Credential $myCredential -body $bodysm -SkipCertificateCheck -ErrorVariable ErrorVar
+    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method post -Uri $url -Credential $myCredential -body $bodysm -SkipCertificateCheck"
+    $SnapmirrorCreate=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $myCredential -body $bodysm -SkipCertificateCheck -ErrorVariable ErrorVar
     if($? -ne $True){
         Write-LogError "ERROR: Unable to create snapmirror relationship. Reason [$ErrorVar]"
         Write-LogDebug "[$workOn]: end"
@@ -11050,8 +11050,8 @@ Try {
                 }else{
                     $Credential=get_local_cDotcred($mySecondaryController)
                     $url=$("https://"+$mySecondaryController.Name+"/api/snapmirror/relationships?source.path="+$($myPrimaryVserver+":"+$PrimaryVolName)+"&destination.path="+$($mySecondaryVserver+":"+$PrimaryVolName)+"&fields=**")
-                    Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-                    $relation=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+                    $relation=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
                     }
@@ -11061,8 +11061,8 @@ Try {
                         # ! Private CLI REST request necessary to get correct relationship-status
                         $SecondaryCredential = get_local_cDotcred($mySecondaryController)
                         $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/snapmirror?source-path="+$($myPrimaryVserver+":"+$PrimaryVolName)+"&destination-path="+$($mySecondaryVserver+":"+$PrimaryVolName)+"&fields=state,status")
-                        Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
-                        $SnapmirrorRelationshipStatus=Invoke-RestMethod -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+                        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
+                        $SnapmirrorRelationshipStatus=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
                         if($? -ne $True){
                             Write-LogError "ERROR: Unable to get snapmirror relationship status. Reason [$ErrorVar]"
                             Write-LogDebug "[$workOn]: end"
@@ -11124,8 +11124,8 @@ Try {
                         }else{
                             $Credential=get_local_cDotcred($mySecondaryController)
                             $url=$("https://"+$mySecondaryController.Name+"/api/snapmirror/relationships?source.path="+$($myPrimaryVserver+":"+$PrimaryVolName)+"&destination.path="+$($mySecondaryVserver+":"+$PrimaryVolName)+"&fields=**")
-                            Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-                            $relation=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+                            $relation=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                             if($? -ne $True){
                                 Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
                             }
@@ -11135,8 +11135,8 @@ Try {
                                 # ! Private CLI REST request necessary to get correct relationship-status
                                 $SecondaryCredential = get_local_cDotcred($mySecondaryController)
                                 $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/snapmirror?source-path="+$($myPrimaryVserver+":"+$PrimaryVolName)+"&destination-path="+$($mySecondaryVserver+":"+$PrimaryVolName)+"&fields=state,status")
-                                Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
-                                $SnapmirrorRelationshipStatus=Invoke-RestMethod -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+                                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
+                                $SnapmirrorRelationshipStatus=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
                                 if($? -ne $True){
                                     Write-LogError "ERROR: Unable to get snapmirror relationship status. Reason [$ErrorVar]"
                                     Write-LogDebug "[$workOn]: end"
@@ -11191,8 +11191,8 @@ Try {
                         }else{
                             $Credential=get_local_cDotcred($mySecondaryController)
                             $url=$("https://"+$mySecondaryController.Name+"/api/snapmirror/relationships?destination.path="+$($mySecondaryVserver+":"+$PrimaryVolName)+"&fields=**")
-                            Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-                            $relationList=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+                            $relationList=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                             if($? -ne $True){
                                 Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
                             }
@@ -11218,8 +11218,8 @@ Try {
                                 # ! Private CLI REST request necessary to get correct relationship-status
                                 $Credential = get_local_cDotcred($mySecondaryController)
                                 $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/snapmirror?source-path="+$SourceLocation+"&destination-path="+$DestinationLocation+"&fields=state,status")
-                                Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-                                $SnapmirrorRelationshipStatus=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+                                $SnapmirrorRelationshipStatus=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                                 if($? -ne $True){
                                     Write-LogError "ERROR: Unable to get snapmirror relationship status. Reason [$ErrorVar]"
                                     Write-LogDebug "[$workOn]: end"
@@ -11468,8 +11468,8 @@ Try {
                 }else{
                     $Credential=get_local_cDotcred($mySecondaryController)
                     $url=$("https://"+$mySecondaryController.Name+"/api/snapmirror/relationships?source.path="+$($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName)+"&destination.path="+$($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName)+"&fields=**")
-                    Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-                    $relation=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+                    $relation=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
                     }
@@ -11479,8 +11479,8 @@ Try {
                         # ! Private CLI REST request necessary to get correct relationship-status
                         $SecondaryCredential = get_local_cDotcred($mySecondaryController)
                         $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/snapmirror?source-path="+$($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName)+"&destination-path="+$($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName)+"&fields=state,status")
-                        Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
-                        $SnapmirrorRelationshipStatus=Invoke-RestMethod -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+                        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
+                        $SnapmirrorRelationshipStatus=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
                         if($? -ne $True){
                             Write-LogError "ERROR: Unable to get snapmirror relationship status. Reason [$ErrorVar]"
                             Write-LogDebug "[$workOn]: end"
@@ -11570,16 +11570,16 @@ Try {
 
                             $Credential=get_local_cDotcred($mySecondaryController)
                             $url=$("https://"+$mySecondaryController.Name+"/api/snapmirror/relationships?source.path="+$($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName)+"&destination.path="+$($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName))
-                            Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-                            $relation=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+                            $relation=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                             if($? -ne $True){
                                 Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
                             }
                             $relation=$relation.records
                             $SecondaryCredential = get_local_cDotcred($mySecondaryController)
                             $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/snapmirror?source-path="+$($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName)+"&destination-path="+$($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName)+"&fields=state,status")
-                            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
-                            $SnapmirrorRelationshipStatus=Invoke-RestMethod -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+                            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
+                            $SnapmirrorRelationshipStatus=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
                             if($? -ne $True){
                                 Write-LogError "ERROR: Unable to get snapmirror relationship status. Reason [$ErrorVar]"
                                 Write-LogDebug "[$workOn]: end"
@@ -11687,8 +11687,8 @@ Try {
     }else{
         $Credential=get_local_cDotcred($mySecondaryController)
             $url=$("https://"+$mySecondaryController.Name+"/api/snapmirror/relationships?source.path="+$($myPrimaryVserver+":*")+"&destination.path="+$($mySecondaryVserver+":*")+"&fields=**")
-            Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-            $relationList=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+            $relationList=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
             }
@@ -11709,8 +11709,8 @@ Try {
                 # ! Private CLI REST request necessary to get correct relationship-status
                 $SecondaryCredential = get_local_cDotcred($mySecondaryController)
                 $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/snapmirror?source-path="+$SourceLocation+"&destination-path="+$DestinationLocation+"&fields=state,status")
-                Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
-                $SnapmirrorRelationshipStatus=Invoke-RestMethod -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
+                $SnapmirrorRelationshipStatus=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
                 if($? -ne $True){
                     Write-LogError "ERROR: Unable to get snapmirror relationship status. Reason [$ErrorVar]"
                     Write-LogDebug "[$workOn]: end"
@@ -12219,8 +12219,8 @@ Try {
                             }
                         } | ConvertTo-Json
                         $url=$("https://"+$mySecondaryController.Name+"/api/network/ip/interfaces/"+$SecondaryInterfaceUuid)
-                        Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $myCred -body $bodylif -SkipCertificateCheck"
-                        $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $myCred -body $bodylif -SkipCertificateCheck -ErrorVariable ErrorVar
+                        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method patch -Uri $url -Credential $myCred -body $bodylif -SkipCertificateCheck"
+                        $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $myCred -body $bodylif -SkipCertificateCheck -ErrorVariable ErrorVar
                         if($? -ne $True){
                             Write-LogError "ERROR: Unable to patch LIF service-policy. Reason [$ErrorVar]"
                             Write-LogDebug "[$workOn]: end"
@@ -13055,8 +13055,8 @@ Try {
             $myVserver=Get-NcVserver -Name $myPrimaryVserver -Controller $myPrimaryController
             $myVserverUUID=$myVserver.Uuid
             $url=$("https://"+$myPrimaryController.Name+"/api/protocols/cifs/services/"+$myVserverUUID+"?fields=security,options,ad_domain")
-            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $myCred -SkipCertificateCheck"
-            $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $myCred -SkipCertificateCheck -ErrorVariable ErrorVar
+            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $myCred -SkipCertificateCheck"
+            $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $myCred -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: Unable to get CIFS options & security settings. Reason [$ErrorVar]"
                 Write-LogDebug "[$workOn]: end"
@@ -13230,8 +13230,8 @@ Try {
             $cleanbody.ad_domain.password="xxxxxxxxxxxxxx"
             [string]$cleanbody=$cleanbody | ConvertTo-Json
             $url=$("https://"+$mySecondaryController.Name+"/api/protocols/cifs/services/"+$myVserverUUID+"?force=true")
-            Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $myCred -body $cleanbody -SkipCertificateCheck"
-            $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $myCred -body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
+            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method patch -Uri $url -Credential $myCred -body $cleanbody -SkipCertificateCheck"
+            $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $myCred -body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: Unable to patch CIFS options & security settings. Reason [$ErrorVar]"
                 Write-LogDebug "[$workOn]: end"
@@ -13562,8 +13562,8 @@ Try {
                             oplock_mode="disable"
                         }|ConvertTo-Json   
                     }
-                    Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $SecondaryCredential -Body $bodyqtree -SkipCertificateCheck"
-                    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $SecondaryCredential -Body $bodyqtree -SkipCertificateCheck -ErrorVariable ErrorVar
+                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method patch -Uri $url -Credential $SecondaryCredential -Body $bodyqtree -SkipCertificateCheck"
+                    $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $SecondaryCredential -Body $bodyqtree -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: Unable to set Qtree oplocks mode. Reason [$ErrorVar]"
                         Write-LogDebug "[$workOn]: end"
@@ -13873,8 +13873,8 @@ Try {
                             windows_to_unix_no_domain_prefix="true"
                         }|ConvertTo-Json   
                     }
-                    Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $SecondaryCredential -Body $bodyldap -SkipCertificateCheck"
-                    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $SecondaryCredential -Body $bodyldap -SkipCertificateCheck -ErrorVariable ErrorVar
+                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method patch -Uri $url -Credential $SecondaryCredential -Body $bodyldap -SkipCertificateCheck"
+                    $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $SecondaryCredential -Body $bodyldap -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: Unable to set LDAP Schema noDomainPrefix. Reason [$ErrorVar]"
                         Write-LogDebug "[$workOn]: end"
@@ -14107,8 +14107,8 @@ Try {
                         svm=@{name=$mySecondaryVserver}
                     }|ConvertTo-Json
                     $url=$("https://"+$mySecondaryController.Name+"/api/name-services/ldap")
-                    Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyldap -SkipCertificateCheck"
-                    $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyldap -SkipCertificateCheck -ErrorVariable ErrorVar
+                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyldap -SkipCertificateCheck"
+                    $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyldap -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: Unable to create LDAP AD client. Reason [$ErrorVar]"
                         Write-LogDebug "[$workOn]: end"
@@ -14224,8 +14224,8 @@ Try {
                         svm=@{name=$mySecondaryVserver}
                     }|ConvertTo-Json
                     $url=$("https://"+$mySecondaryController.Name+"/api/name-services/ldap")
-                    Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyldap -SkipCertificateCheck"
-                    $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyldap -SkipCertificateCheck -ErrorVariable ErrorVar
+                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyldap -SkipCertificateCheck"
+                    $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyldap -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: Unable to create LDAP client. Reason [$ErrorVar]"
                         Write-LogDebug "[$workOn]: end"
@@ -14467,9 +14467,9 @@ Try {
                     } | ConvertTo-Json
                     $VserverUUID=$myVserver.Uuid
                     $url=$("https://"+$mySecondaryController.Name+"/api/protocols/cifs/services/"+$VserverUUID+"?force=true")
-                    #Write-LogDebug "Invoke-RestMethod -Method delete -Uri $url -Credential $Cred -SkipCertificateCheck   (body is intentionally hidden)"
-                    Write-LogDebug "Invoke-RestMethod -Method delete -Uri $url -Credential $Cred -SkipCertificateCheck -body $bodycifs"
-                    $ret=Invoke-RestMethod -Method 'delete' -Uri $url -Credential $Cred -Body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
+                    #Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method delete -Uri $url -Credential $Cred -SkipCertificateCheck   (body is intentionally hidden)"
+                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method delete -Uri $url -Credential $Cred -SkipCertificateCheck -body $bodycifs"
+                    $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'delete' -Uri $url -Credential $Cred -Body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: delete request [$url] reason [$ErrorVar]"
                     }
@@ -14782,8 +14782,8 @@ Try {
                             [string]$bodycifs=$bodycifs | ConvertTo-Json
                             $cleanbody.ad_domain.password="xxxxxxxxxxxxxx"
                             [string]$cleanbody=$cleanbody | ConvertTo-Json
-                            Write-LogDebug "Invoke-RestMethod -Method post -Uri $url -Credential $CredSecondary -SkipCertificateCheck -Body $cleanbody"
-                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
+                            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method post -Uri $url -Credential $CredSecondary -SkipCertificateCheck -Body $cleanbody"
+                            $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
                             if($? -ne $True){
                                 Write-LogError "ERROR: post request [$url] reason [$ErrorVar]"
                             }
@@ -14862,8 +14862,8 @@ Try {
                             [string]$bodycifs=$bodycifs | ConvertTo-Json
                             $cleanbody.ad_domain.password="xxxxxxxxxxxxxx"
                             [string]$cleanbody=$cleanbody | ConvertTo-Json
-                            Write-LogDebug "Invoke-RestMethod -Method post -Uri $url -Credential $CredSecondary -SkipCertificateCheck -body $cleanbody"
-                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
+                            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method post -Uri $url -Credential $CredSecondary -SkipCertificateCheck -body $cleanbody"
+                            $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
                             if($? -ne $True){
                                 Write-LogError "ERROR: post request [$url] reason [$ErrorVar]"
                             }
@@ -15768,8 +15768,8 @@ $request=@"
                             if($Restore -eq $False){
                                 $CredPrimary=get_local_cDotcred($myPrimaryController)
                                 $url=$("https://"+$myPrimaryController.Name+"/api/protocols/cifs/shares?svm.name="+$myPrimaryVserver+"&fields=**,!volume.uuid,!_links&name="+$PrimaryShareName)
-                                Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $CredPrimary -SkipCertificateCheck"
-                                $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $CredPrimary -SkipCertificateCheck -ErrorVariable ErrorVar
+                                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $CredPrimary -SkipCertificateCheck"
+                                $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $CredPrimary -SkipCertificateCheck -ErrorVariable ErrorVar
                                 if($? -ne $True){
                                     Write-LogError "ERROR: Unable to get cifs share [$PrimaryShareName] details from source. Reason [$ErrorVar]" 
                                     continue
@@ -15806,8 +15806,8 @@ $request=@"
                                 $DestinationShareDetails | Add-Member -MemberType NoteProperty -name "svm" -value @{"name"=$mySecondaryVserver}
                                 #$DestinationShareDetails=$DestinationShareDetails | Select-Object -Property * -ExcludeProperty browsable,show_previous_version
                                 $bodyshare=$DestinationShareDetails | ConvertTo-Json
-                                Write-LogDebug "Invoke-RestMethod -Method post -Uri $url -Credential $CredSecondary -Body $bodyshare -SkipCertificateCheck"
-                                $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyshare -SkipCertificateCheck -ErrorVariable ErrorVar
+                                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method post -Uri $url -Credential $CredSecondary -Body $bodyshare -SkipCertificateCheck"
+                                $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyshare -SkipCertificateCheck -ErrorVariable ErrorVar
                                 if($? -eq $True -and $ret.num_records -eq 1){
                                     Write-Log "[$workOn] Share [$PrimaryShareName] created successfully"
                                 }else{
@@ -16679,8 +16679,8 @@ Function show_vserver_dr (
             }else{
                 $Credential=get_local_cDotcred($mySecondaryController)
                 $url=$("https://"+$mySecondaryController.Name+"/api/snapmirror/relationships?source.path="+$($myPrimaryVserver+":*")+"&destination.path="+$($mySecondaryVserver+":*")+"&fields=**")
-                Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-                $relationList=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+                $relationList=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                 if($? -ne $True){
                     Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
                     clean_and_exit 1
@@ -16728,8 +16728,8 @@ Function show_vserver_dr (
                     $LagTimeDate=((Get-Date)-$LagTime).TotalSeconds #>
                     $LagTimeDate=$relation.lag_time
                     $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/snapmirror?source-path="+$SourceLocation+"&destination-path="+$DestinationLocation+"&fields=state,status,type,schedule,lag-time")
-                    Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-                    $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+                    $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
                     }elseif($ret.num_records -gt 0){
@@ -16804,8 +16804,8 @@ Function show_vserver_dr (
             }else{
                 $Credential=get_local_cDotcred($myPrimaryController)
                 $url=$("https://"+$myPrimaryController.Name+"/api/snapmirror/relationships?source.path="+$($mySecondaryVserver+":*")+"&destination.path="+$($myPrimaryVserver+":*")+"&fields=**")
-                Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-                $relationList=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+                $relationList=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                 if($? -ne $True){
                     Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
                 }
@@ -16852,8 +16852,8 @@ Function show_vserver_dr (
                     $LagTimeDate=((Get-Date)-$LagTime).TotalSeconds #>
                     $LagTimeDate=$relation.lag_time
                     $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/snapmirror?source-path="+$SourceLocation+"&destination-path="+$DestinationLocation+"&fields=state,status,type,schedule")
-                    Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-                    $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+                    $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
                     }elseif($ret.num_records -gt 0){
@@ -17144,8 +17144,8 @@ Function set_vserver_protocols_with_rest (
     # 1) get SVM UUID
     $myCred=get_local_cDotcred($myController)
     $url=$("https://"+$myController.Name+"/api/svm/svms?name="+$myVserver)
-    Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $myCred -SkipCertificateCheck"
-    $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $myCred -SkipCertificateCheck -ErrorVariable ErrorVar
+    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $myCred -SkipCertificateCheck"
+    $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $myCred -SkipCertificateCheck -ErrorVariable ErrorVar
     if($? -ne $True){
         Write-LogError "ERROR: Unable to get svm [$myVserver] from [$myController]" 
         return $False
@@ -17163,8 +17163,8 @@ Function set_vserver_protocols_with_rest (
     }
     $bodyproto=$bodyproto | ConvertTo-Json
     $url=$("https://"+$myController.Name+"/api/svm/svms/"+$svmUUID)
-    Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $myCred -SkipCertificateCheck"
-    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $myCred -Body $bodyproto -SkipCertificateCheck -ErrorVariable ErrorVar
+    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method patch -Uri $url -Credential $myCred -SkipCertificateCheck"
+    $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $myCred -Body $bodyproto -SkipCertificateCheck -ErrorVariable ErrorVar
     if($? -ne $True){
         Write-LogError "ERROR: Unable to get svm protocols [$myVserver] from [$myController]" 
         return $False
@@ -17245,8 +17245,8 @@ Try {
         }else{
             $PrimaryCredential = get_local_cDotcred($myPrimaryController)
             $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/vserver?vserver="+$myPrimaryVserver+"&fields=rootvolume,aggregate,rootvolume_security_style,allowed_protocols")
-            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck"
-            $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck"
+            $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: Unable to get svm rootvolume name. Reason [$ErrorVar]" 
             }else{
@@ -17293,8 +17293,8 @@ Try {
             <# if($Global:PSTKCall -eq "Rest"){
                 $SecondaryCredential = get_local_cDotcred($mySecondaryController)
                 $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/vserver?vserver="+$mySecondaryVserver+"&fields=rootvolume,aggregate,rootvolume_security_style,allowed_protocols")
-                Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
-                $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
+                $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
                 if($? -ne $True){
                     Write-LogError "ERROR: Unable to get svm rootvolume name. Reason [$ErrorVar]" 
                 }else{
@@ -17364,8 +17364,8 @@ Try {
                 }    
                 $SecondaryCredential = get_local_cDotcred($mySecondaryController)
                 $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/vserver?vserver="+$mySecondaryVserver+"&fields=rootvolume,aggregate,rootvolume_security_style,allowed_protocols")
-                Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
-                $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
+                $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
                 if($? -ne $True){
                     Write-LogError "ERROR: Unable to get svm rootvolume name. Reason [$ErrorVar]" 
                 }else{
@@ -17444,8 +17444,8 @@ Try {
         }else{
             $PrimaryCredential = get_local_cDotcred($myPrimaryController)
             $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/vserver?vserver="+$myPrimaryVserver+"&fields=rootvolume,aggregate,rootvolume_security_style,allowed_protocols")
-            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck"
-            $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck"
+            $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: Unable to get svm rootvolume name. Reason [$ErrorVar]" 
             }else{
@@ -17493,8 +17493,8 @@ Try {
             if($Global:PSTKCall -eq "Rest"){
                 $SecondaryCredential = get_local_cDotcred($mySecondaryController)
                 $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/vserver?vserver="+$mySecondaryVserver+"&fields=rootvolume,aggregate,rootvolume_security_style,allowed_protocols")
-                Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
-                $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
+                $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
                 if($? -ne $True){
                     Write-LogError "ERROR: Unable to get svm rootvolume name. Reason [$ErrorVar]" 
                 }else{
@@ -17524,8 +17524,8 @@ Try {
             }
             # we find a regex match first, but fall back to default.  If default is provided, we also assume autoselect (it's just for the rootvol)
             $RootAggr = select_data_aggr_from_cli -myController $mySecondaryController -myQuestion $Question -regExMatch $dataAggrMatchRegex -default $RootAggr -autoSelect ($Global:NonInteractive -or ($RootAggr -ne ""))
-            Write-LogDebug "Get-NcAggr -Controller $mySecondaryController -Name $RootAggr"
-            $out = Get-NcAggr -Controller $mySecondaryController -Name $RootAggr  -ErrorVariable ErrorVar
+            Write-LogDebug "Get-NcAggr -Controller $mySecondaryController -Name $RootAggr -ONTAPI"
+            $out = Get-NcAggr -Controller $mySecondaryController -Name $RootAggr -ONTAPI  -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcAggr failed [$ErrorVar]" ; }
 
             if ( $null -eq $out ) {
@@ -17564,8 +17564,8 @@ Try {
                 }    
                 $SecondaryCredential = get_local_cDotcred($mySecondaryController)
                 $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/vserver?vserver="+$mySecondaryVserver+"&fields=rootvolume,aggregate,rootvolume_security_style,allowed_protocols")
-                Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
-                $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
+                $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
                 if($? -ne $True){
                     Write-LogError "ERROR: Unable to get svm rootvolume name. Reason [$ErrorVar]" 
                 }else{
@@ -18075,9 +18075,9 @@ Try {
             } | ConvertTo-Json
             $VserverUUID=$myVserver.Uuid
             $url=$("https://"+$myPrimaryController.Name+"/api/protocols/cifs/services/"+$VserverUUID+"?force=true")
-            #Write-LogDebug "Invoke-RestMethod -Method delete -Uri $url -Credential $Cred -SkipCertificateCheck   (body is intentionally hidden)"
-            Write-LogDebug "Invoke-RestMethod -Method delete -Uri $url -Credential $Cred -SkipCertificateCheck -body $bodycifs"
-            $ret=Invoke-RestMethod -Method 'delete' -Uri $url -Credential $Cred -Body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
+            #Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method delete -Uri $url -Credential $Cred -SkipCertificateCheck   (body is intentionally hidden)"
+            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method delete -Uri $url -Credential $Cred -SkipCertificateCheck -body $bodycifs"
+            $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'delete' -Uri $url -Credential $Cred -Body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: delete request [$url] reason [$ErrorVar]"
             }
@@ -18213,8 +18213,8 @@ Try {
             $cleanbodycifs=$cleanbodycifs | ConvertTo-Json
             $VserverUUID=$VserverDetail.Uuid
             $url=$("https://"+$mySecondaryController.Name+"/api/protocols/cifs/services/"+$VserverUUID+"?force=true")
-            Write-LogDebug "Invoke-RestMethod -Method delete -Uri $url -Credential $Cred -SkipCertificateCheck -body $cleanbodycifs"
-            $ret=Invoke-RestMethod -Method 'delete' -Uri $url -Credential $Cred -Body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
+            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method delete -Uri $url -Credential $Cred -SkipCertificateCheck -body $cleanbodycifs"
+            $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'delete' -Uri $url -Credential $Cred -Body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: delete request [$url] reason [$ErrorVar]"
             }
@@ -18349,8 +18349,8 @@ Try {
             } | ConvertTo-Json
             $VserverUUID=$Vserver.Uuid
             $url=$("https://"+$mySecondaryController.Name+"/api/protocols/cifs/services/"+$VserverUUID+"?force=true")
-            Write-LogDebug "Invoke-RestMethod -Method delete -Uri $url -Credential $CredSecondary -SkipCertificateCheck   (body is intentionally hidden)"
-            $ret=Invoke-RestMethod -Method 'delete' -Uri $url -Credential $CredSecondary -Body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
+            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method delete -Uri $url -Credential $CredSecondary -SkipCertificateCheck   (body is intentionally hidden)"
+            $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'delete' -Uri $url -Credential $CredSecondary -Body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: delete request [$url] reason [$ErrorVar]"
             }
@@ -18465,8 +18465,8 @@ Try {
     }else{
         $Credential=get_local_cDotcred($mySecondaryController)
         $url=$("https://"+$mySecondaryController.Name+"/api/snapmirror/relationships?source.path="+$($myPrimaryVserver+":*")+"&destination.path="+$($mySecondaryVserver+":*")+"&fields=**")
-        Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-        $relationList=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+        $relationList=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
         if($? -ne $True){
             Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
         }
@@ -18521,8 +18521,8 @@ Try {
             # ! Private CLI REST request necessary to get correct relationship-status
             $Credential = get_local_cDotcred($mySecondaryController)
             $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/snapmirror?source-path="+$SourceLocation+"&destination-path="+$DestinationLocation+"&fields=state,status")
-            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-            $SnapmirrorRelationshipStatus=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+            $SnapmirrorRelationshipStatus=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: Unable to get snapmirror relationship status. Reason [$ErrorVar]"
                 Write-LogDebug "[$workOn]: end"
@@ -18604,8 +18604,8 @@ Try {
     }else{
         $Credential=get_local_cDotcred($mySecondaryController)
         $url=$("https://"+$mySecondaryController.Name+"/api/snapmirror/relationships?source.path="+$($myPrimaryVserver+":*")+"&destination.path="+$($mySecondaryVserver+":*")+"&fields=**")
-        Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-        $relationList=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+        $relationList=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
         if($? -ne $True){
             Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
         }
@@ -18682,8 +18682,8 @@ Try {
         }else{
             $Credential=get_local_cDotcred($myController)
             $url=$("https://"+$myController.Name+"/api/snapmirror/relationships?source.path="+$myPrimaryLocation+"&destination.path="+$mySecondaryLocation+"&fields=**")
-            Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-            $relationList=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+            $relationList=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
             }
@@ -18697,8 +18697,8 @@ Try {
         }else{
             $Credential=get_local_cDotcred($myController)
             $url=$("https://"+$myController.Name+"/api/snapmirror/relationships?source.path="+$($myPrimaryVserver+":*")+"&destination.path="+$($mySecondaryVserver+":*")+"&fields=**")
-            Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-            $relationList=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+            $relationList=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
             }
@@ -18727,8 +18727,8 @@ Try {
             # ! Private CLI REST request necessary to get correct relationship-status
             $Credential = get_local_cDotcred($myController)
             $url=$("https://"+$myController.Name+"/api/private/cli/snapmirror?source-path="+$SourceLocation+"&destination-path="+$DestinationLocation+"&fields=state,status")
-            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-            $SnapmirrorRelationshipStatus=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+            $SnapmirrorRelationshipStatus=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: Unable to get snapmirror relationship status. Reason [$ErrorVar]"
                 Write-LogDebug "[$workOn]: end"
@@ -19276,8 +19276,8 @@ try{
     }else{
         $Credential = get_local_cDotcred($myPrimaryController)
         $url=$("https://"+$myPrimaryController.Name+"/api/protocols/cifs/services?svm.name="+$myPrimaryVserver+"&fields=**")
-        Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-        $PrimaryCIFSserver=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+        $PrimaryCIFSserver=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
         if($? -ne $True){
             Write-LogError "ERROR: Unable to get CIFS server details. Reason [$ErrorVar]"
             return $False
@@ -20834,8 +20834,8 @@ Function activate_vserver_dr (
                 $bodycifs.enabled=$False
                 $bodycifs.name=$newCIFSName
                 $bodycifs=$bodycifs | ConvertTo-Json
-                Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $Cred -SkipCertificateCheck (body is intentionally hidden)"
-                $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $Cred -Body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
+                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method patch -Uri $url -Credential $Cred -SkipCertificateCheck (body is intentionally hidden)"
+                $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $Cred -Body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
                 if($? -ne $True){
                     Write-LogError "ERROR: patch request [$url] reason [$ErrorVar]"
                 }
@@ -21198,8 +21198,8 @@ Function resync_reverse_vserver_dr (
         }else{
             $Credential=get_local_cDotcred($mySecondaryController)
             $url=$("https://"+$mySecondaryController.Name+"/api/snapmirror/relationships?source.path="+$($myPrimaryVserver+":*")+"&destination.path="+$($mySecondaryVserver+":*")+"&fields=**")
-            Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-            $relationList=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+            $relationList=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
             }
@@ -21219,8 +21219,8 @@ Function resync_reverse_vserver_dr (
             }else{
                 $Credential=get_local_cDotcred($mySecondaryController)
                 $url=$("https://"+$mySecondaryController.Name+"/api/snapmirror/relationships?source.path="+$($myPrimaryVserver+":*")+"&destination.path="+$($mySecondaryVserver+":*")+"&fields=**")
-                Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-                $relationList=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+                $relationList=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                 if($? -ne $True){
                     Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
                     clean_and_exit 1
@@ -21265,8 +21265,8 @@ Function resync_reverse_vserver_dr (
                 # ! Private CLI REST request necessary to get correct relationship-status
                 $Credential = get_local_cDotcred($mySecondaryController)
                 $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/snapmirror?source-path="+$SourceLocation+"&destination-path="+$DestinationLocation+"&fields=state,status,type")
-                Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-                $SnapmirrorRelationshipStatus=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+                $SnapmirrorRelationshipStatus=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                 if($? -ne $True){
                     Write-LogError "ERROR: Unable to get snapmirror relationship status. Reason [$ErrorVar]"
                     Write-LogDebug "[$workOn]: end"
@@ -21312,8 +21312,8 @@ Function resync_reverse_vserver_dr (
                 }else{
                     $Credential=get_local_cDotcred($myPrimaryController)
                     $url=$("https://"+$myPrimaryController.Name+"/api/snapmirror/relationships?destination.path="+$SourceLocation+"&fields=**")
-                    Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-                    $ExistingReverseRelationShip=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+                    $ExistingReverseRelationShip=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
                         clean_and_exit 1
@@ -21333,8 +21333,8 @@ Function resync_reverse_vserver_dr (
                         $ExistingReverseRelationShipDestVserver=$ExistingReverseRelationShip.destination.svm.name
                         $Credential = get_local_cDotcred($myPrimaryController)
                         $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/snapmirror?destination-path="+$SourceLocation+"&fields=state,status")
-                        Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-                        $SnapmirrorRelationshipStatus=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+                        $SnapmirrorRelationshipStatus=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                         if($? -ne $True){
                             Write-LogError "ERROR: Unable to get snapmirror relationship status. Reason [$ErrorVar]"
                             Write-LogDebug "[$workOn]: end"
@@ -21378,8 +21378,8 @@ Function resync_reverse_vserver_dr (
                 }else{
                     $Credential=get_local_cDotcred($myPrimaryController)
                     $url=$("https://"+$myPrimaryController.Name+"/api/snapmirror/relationships?destination.path="+$SourceLocation+"&source.path="+$DestinationLocation+"&fields=**")
-                    Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-                    $reverseRelation=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+                    $reverseRelation=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
                         clean_and_exit 1
@@ -21403,8 +21403,8 @@ Function resync_reverse_vserver_dr (
                         # ! Private CLI REST request necessary to get correct relationship-status
                         $Credential = get_local_cDotcred($myPrimaryController)
                         $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/snapmirror?source-path="+$DestinationLocation+"&destination-path="+$SourceLocation+"&fields=state,status")
-                        Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-                        $SnapmirrorRelationshipStatus=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+                        $SnapmirrorRelationshipStatus=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                         if($? -ne $True){
                             Write-LogError "ERROR: Unable to get snapmirror relationship status. Reason [$ErrorVar]"
                             Write-LogDebug "[$workOn]: end"
@@ -21511,8 +21511,8 @@ Function resync_reverse_vserver_dr (
             $Credential=get_local_cDotcred($myPrimaryController)
             #$url=$("https://"+$myPrimaryController.Name+"/api/private/cli/snapmirror?fields=state,status,type,schedule&destination-vserver="+$myPrimaryVserver+"&state=snapmirrored|broken-off&status=idle")
             $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/snapmirror?fields=state,status,type,schedule&destination-vserver="+$myPrimaryVserver+"&state=snapmirrored|broken-off")
-            Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-            $AllExistingReverseRelationships=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+            $AllExistingReverseRelationships=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
             }
@@ -21626,8 +21626,8 @@ Function resync_vserver_dr (
             }else{
                 $Credential=get_local_cDotcred($mySecondaryController)
                 $url=$("https://"+$mySecondaryController.Name+"/api/snapmirror/relationships?source.path="+$($myPrimaryVserver+":*")+"&destination.path="+$($mySecondaryVserver+":*")+"&fields=**")
-                Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-                $relationList=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+                $relationList=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                 if($? -ne $True){
                     Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
                 }
@@ -21661,8 +21661,8 @@ Function resync_vserver_dr (
                     # ! Private CLI REST request necessary to get correct relationship-status
                     $Credential = get_local_cDotcred($mySecondaryController)
                     $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/snapmirror?source-path="+$SourceLocation+"&destination-path="+$DestinationLocation+"&fields=state,status")
-                    Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-                    $SnapmirrorRelationshipStatus=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+                    $SnapmirrorRelationshipStatus=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: Unable to get snapmirror relationship status. Reason [$ErrorVar]"
                         Write-LogDebug "[$workOn]: end"
@@ -21761,8 +21761,8 @@ Try {
     }else{
         $Credential=get_local_cDotcred($myController)
         $url=$("https://"+$myController.Name+"/api/snapmirror/relationships?source.path="+$($myVserver+":*")+"&destination.path="+$($mySecondaryVserver+":*")+"&fields=**")
-        Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-        $relationList=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+        $relationList=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
         if($? -ne $True){
             Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
         }
@@ -21794,8 +21794,8 @@ Try {
             # ! Private CLI REST request necessary to get correct relationship-status
             $Credential = get_local_cDotcred($myController)
             $url=$("https://"+$myController.Name+"/api/private/cli/snapmirror?source-path="+$SourceLocation+"&destination-path="+$DestinationLocation+"&fields=state,status,type")
-            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-            $SnapmirrorRelationshipStatus=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+            $SnapmirrorRelationshipStatus=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: Unable to get snapmirror relationship status. Reason [$ErrorVar]"
                 Write-LogDebug "[$workOn]: end"
@@ -21908,8 +21908,8 @@ Function create_subdir (
             }else{
                 $Credential=get_local_cDotcred($myController)
                 $url=$("https://"+$myController.Name+"/api/storage/volumes?svm.name="+$myVserver+"&name="+$RootVolume+"&fields=uuid")
-                Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-                $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+                $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                 if($? -ne $True){
                     Write-LogError "ERROR: Get volume uuid Reason [$ErrorVar]"
                     return $False
@@ -21917,10 +21917,10 @@ Function create_subdir (
                 $VolumeUUID=$ret.records[0].uuid
                 $PathToScan=$RESTsearch -replace "/","%2F"
                 $url=$("https://"+$myController.Name+"/api/storage/volumes/"+$VolumeUUID+"/files/"+$PathToScan+"?fields=name,size,type,is_empty,unix_permissions")
-                Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
                 $DirDetails=$null
                 try{
-                    $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                    $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                     $DirDetails=$ret.records[0]
                 }catch{
                     $response=$_.ErrorDetails.Message | ConvertFrom-Json
@@ -21956,18 +21956,18 @@ Function create_subdir (
                     }else{
                         $Credential=get_local_cDotcred($myPrimaryController)
                         $url=$("https://"+$myPrimaryController.Name+"/api/storage/volumes?svm.name="+$myPrimaryVserver+"&name="+$RootVolume+"&fields=uuid")
-                        Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-                        $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+                        $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                         if($? -ne $True){
                             Write-LogError "ERROR: Get volume uuid Reason [$ErrorVar]"
                             return $False
                         }
                         $VolumeUUID=$ret.records[0].uuid
                         $url=$("https://"+$myPrimaryController.Name+"/api/storage/volumes/"+$VolumeUUID+"/files/"+$RESTsearch+"?fields=name,size,type,is_empty,unix_permissions")
-                        Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+                        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
                         $PrimDirDetails=$null
                         try{
-                            $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                            $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                             $PrimDirDetails=$ret.records[0]
                             $PrimDirPerm=$PrimDirDetails.unix_permissions
                             $PrimDirType=$PrimDirDetails.type
@@ -22296,8 +22296,8 @@ Try {
         }else{
             $Credential=get_local_cDotcred($mySecondaryController)
             $url=$("https://"+$mySecondaryController.Name+"/api/snapmirror/relationships?source.path="+$($myPrimaryVserver+":"+$SourceVolume)+"&destination.path="+$($mySecondaryVserver+":"+$DestVolume)+"&fields=**")
-            Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-            $relationList=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+            $relationList=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
             }
@@ -22311,8 +22311,8 @@ Try {
         }else{
             $Credential=get_local_cDotcred($mySecondaryController)
             $url=$("https://"+$mySecondaryController.Name+"/api/snapmirror/relationships?source.path="+$($myPrimaryVserver+":"+$PrimaryVolumeName)+"&destination.path="+$($mySecondaryVserver+":*")+"&fields=**")
-            Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-            $relationList=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+            $relationList=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
             }
@@ -22405,8 +22405,8 @@ Try {
             # ! Private CLI REST request necessary to get correct relationship-status
             $Credential = get_local_cDotcred($myPrimaryController)
             $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/snapmirror/list-destination?source-path="+$($myPrimaryVserver+":"+$SourceVolume)+"&destination-path="+$($mySecondaryVserver+":"+$DestVolume)+"&fields=relationship_id,type,status,policy-type")
-            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-            $SnapmirrorRelationshipStatus=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+            $SnapmirrorRelationshipStatus=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: Unable to get snapmirror relationship status. Reason [$ErrorVar]"
                 Write-LogDebug "[$workOn]: end"
@@ -22429,8 +22429,8 @@ Try {
             # ! Private CLI REST request necessary to get correct relationship-status
             $Credential = get_local_cDotcred($myPrimaryController)
             $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/snapmirror/list-destination?source-path="+$($myPrimaryVserver+":"+$PrimaryVolumeName)+"&destination-path="+$($mySecondaryVserver+":"+$PrimaryVolumeName)+"&fields=relationship_id,type,status,policy-type")
-            Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-            $SnapmirrorRelationshipStatus=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+            $SnapmirrorRelationshipStatus=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: Unable to get snapmirror relationship status. Reason [$ErrorVar]"
                 Write-LogDebug "[$workOn]: end"
@@ -22665,8 +22665,8 @@ Try {
     }else{
         $Credential=get_local_cDotcred($myPrimaryController)
         $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/volume/quota/policy/rule?vserver="+$myPrimaryVserver+"&fields=vserver,type,policy-name,volume,target,qtree,user-mapping,disk-limit,file-limit,threshold,soft-disk-limit,soft-file-limit")
-        Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential"
-        $QuotaPolicyRules=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential"
+        $QuotaPolicyRules=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
         if($? -ne $True){
             Write-LogError "ERROR: Unable to get quota policy rule details. Reason [$ErrorVar]"
             Write-LogDebug "[$workOn]: end"
@@ -22701,8 +22701,8 @@ Try {
         }
         $Credential=get_local_cDotcred($myPrimaryController)
         $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/quota/policy?vserver="+$myPrimaryVserver)
-        Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential"
-        $QuotaPolicy=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential"
+        $QuotaPolicy=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
         if($? -ne $True){
             Write-LogError "ERROR: Unable to get quota policy rule details. Reason [$ErrorVar]"
             Write-LogDebug "[$workOn]: end"
@@ -22720,8 +22720,8 @@ Try {
 
         $Credential=get_local_cDotcred($mySecondaryController)
         $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/quota/policy?vserver="+$mySecondaryVserver)
-        Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential"
-        $QuotaPolicy=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential"
+        $QuotaPolicy=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
         if($? -ne $True){
             Write-LogError "ERROR: Unable to get quota policy rule details. Reason [$ErrorVar]"
             Write-LogDebug "[$workOn]: end"
@@ -22800,8 +22800,8 @@ Try {
                         # #     "&type="+$QuotaType+"&disk-limit="+$BytesDiskLimit+"&target="+$QuotaTarget+"&file-limit="+$FileLimit+"&qtree="+$Qtree+"&soft-disk-limit="+$BytesSoftDiskLimit+"&soft-file-limit="+$SoftFileLimit)
                         # $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/volume/quota/policy/rule?vserver="+$Vserver+"&fields=vserver,type,policy-name,volume,target,qtree,user-mapping,disk-limit,file-limit,threshold,soft-disk-limit,soft-file-limit&volume="+$Volume+`
                         #      "&type="+$QuotaType+"&disk-limit="+$BytesDiskLimit+"&target="+$QuotaTarget)
-                        # Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential"
-                        # $QuotaPolicy=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                        # Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential"
+                        # $QuotaPolicy=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                         # if($? -ne $True){
                         #     Write-LogError "ERROR: Unable to get quota policy rule details. Reason [$ErrorVar]"
                         #     Write-LogDebug "[$workOn]: end"
@@ -22992,8 +22992,8 @@ Function Purge_SelectVolumedb (
         }else{
             $Credential=get_local_cDotcred($mySecondaryController)
             $url=$("https://"+$mySecondaryController.Name+"/api/snapmirror/relationships?source.path="+$($SourceVserver+":*")+"&destination.path="+$($DestinationVserver+":*")+"&fields=**")
-            Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-            $PreviousRelationship=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+            $PreviousRelationship=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: Unable to get snapmirror details. Reason [$ErrorVar]"
             }
@@ -23596,9 +23596,9 @@ Function Set_CIFS_from_JSON (
                     $cleanbodycifs.ad_domain.password="xxxxxxxxxxxxxx"
                     $cleanbodycifs=$cleanbodycifs | ConvertTo-Json
                     #Write-logdebug "$cleanbody"
-                    Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $Cred -SkipCertificateCheck -body $cleanbodycifs"
+                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method patch -Uri $url -Credential $Cred -SkipCertificateCheck -body $cleanbodycifs"
                     #Write-LogDebug "$body"
-                    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $Cred -Body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
+                    $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $Cred -Body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: patch request [$url] reason [$ErrorVar]"
                     }
@@ -24312,8 +24312,8 @@ Function save_vol_options_to_voldb (
                     
                     <# $Credential = get_local_cDotcred($myPrimaryController)
                     $url="https://"+$myPrimaryController.Name+"/api/storage/volumes?svm="+$myVserver+"&name="+$SourceVolume+"&fields=efficiency"
-                    Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-                    $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+                    $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: Unable to get volume details. Reason [$ErrorVar]" 
                     }else{
@@ -25470,8 +25470,8 @@ Function restore_quota (
                             $bodyquota=$bodyquota | ConvertTo-Json
                             $Cred=get_local_cDotcred($myController)
                             $url=$("https://"+$myController.Name+"/api/storage/quota/rules")
-                            Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck"
-                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck -ErrorVariable ErrorVar
+                            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck"
+                            $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck -ErrorVariable ErrorVar
                             if($? -ne $True){
                                 Write-LogError "ERROR: Unable to post [$url]. Reason [$ErrorVar]"
                                 Write-LogDebug "[$workOn]: end"
@@ -25563,8 +25563,8 @@ Function restore_quota (
                             $bodyquota=$bodyquota | ConvertTo-Json
                             $Cred=get_local_cDotcred($myController)
                             $url=$("https://"+$myController.Name+"/api/storage/quota/rules")
-                            Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck"
-                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck -ErrorVariable ErrorVar
+                            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck"
+                            $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck -ErrorVariable ErrorVar
                             if($? -ne $True){
                                 Write-LogError "ERROR: Unable to post [$url]. Reason [$ErrorVar]"
                                 Write-LogDebug "[$workOn]: end"
@@ -25656,8 +25656,8 @@ Function restore_quota (
                             $bodyquota=$bodyquota | ConvertTo-Json
                             $Cred=get_local_cDotcred($myController)
                             $url=$("https://"+$myController.Name+"/api/storage/quota/rules")
-                            Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck"
-                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck -ErrorVariable ErrorVar
+                            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck"
+                            $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck -ErrorVariable ErrorVar
                             if($? -ne $True){
                                 Write-LogError "ERROR: Unable to post [$url]. Reason [$ErrorVar]"
                                 Write-LogDebug "[$workOn]: end"
@@ -25959,8 +25959,8 @@ Function create_quota_rules_from_quotadb (
                                             $bodyquota=$bodyquota | ConvertTo-Json
                                             $Cred=get_local_cDotcred($myController)
                                             $url=$("https://"+$myController.Name+"/api/storage/quota/rules")
-                                            Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck"
-                                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck -ErrorVariable ErrorVar
+                                            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck"
+                                            $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck -ErrorVariable ErrorVar
                                             if($? -ne $True){
                                                 Write-LogError "ERROR: Unable to post [$url]. Reason [$ErrorVar]"
                                                 Write-LogDebug "[$SVM]: end"
@@ -26066,8 +26066,8 @@ Function create_quota_rules_from_quotadb (
                                             $bodyquota=$bodyquota | ConvertTo-Json
                                             $Cred=get_local_cDotcred($myController)
                                             $url=$("https://"+$myController.Name+"/api/storage/quota/rules")
-                                            Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck"
-                                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck -ErrorVariable ErrorVar
+                                            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck"
+                                            $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck -ErrorVariable ErrorVar
                                             if($? -ne $True){
                                                 Write-LogError "ERROR: Unable to post [$url]. Reason [$ErrorVar]"
                                                 Write-LogDebug "[$SVM]: end"
@@ -26161,8 +26161,8 @@ Function create_quota_rules_from_quotadb (
                                             $bodyquota=$bodyquota | ConvertTo-Json
                                             $Cred=get_local_cDotcred($myController)
                                             $url=$("https://"+$myController.Name+"/api/storage/quota/rules")
-                                            Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck"
-                                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck -ErrorVariable ErrorVar
+                                            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck"
+                                            $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck -ErrorVariable ErrorVar
                                             if($? -ne $True){
                                                 Write-LogError "ERROR: Unable to post [$url]. Reason [$ErrorVar]"
                                                 Write-LogDebug "[$SVM]: end"
@@ -26251,8 +26251,8 @@ Try {
             }else{
                 
                 $url="https://"+$myController.Name+"/api/storage/volumes?svm.name="+$Vserver+"&name="+$Volume+"&fields=quota"
-                Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-                $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+                $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                 if($? -ne $True){
                     Write-LogError "ERROR: Enable to get policy admin owner. Reason [$ErrorVar]" 
                 }else{
@@ -26267,8 +26267,8 @@ Try {
                     if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Disable-NcQuota failed [$ErrorVar]" }
                 }else{
                     $url="https://"+$myController.Name+"/api/storage/volumes?svm.name="+$Vserver+"&name="+$Volume+"&fields=uuid"
-                    Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-                    $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+                    $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: Unable to get volume detail. Reason [$ErrorVar]" 
                     }else{
@@ -26278,8 +26278,8 @@ Try {
                     $url="https://"+$myController.Name+"/api/storage/volumes/"+$VolUuid
                     $bodyquota=@{"quota"=@{"enabled"=$False}}
                     $bodyquota=$bodyquota | convertTo-Json
-                    Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $Credential -body $bodyquota -SkipCertificateCheck"
-                    $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $Credential -SkipCertificateCheck -body $bodyquota -ErrorVariable ErrorVar
+                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method patch -Uri $url -Credential $Credential -body $bodyquota -SkipCertificateCheck"
+                    $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $Credential -SkipCertificateCheck -body $bodyquota -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: Disable to enable quota on volume [$Volume]. Reason [$ErrorVar]" 
                     }else{
@@ -26322,8 +26322,8 @@ Try {
                     $VolQuotaStatus=$status.Status
                 }else{
                     $url="https://"+$myController.Name+"/api/storage/volumes?svm.name="+$Vserver+"&name="+$Volume+"&fields=quota"
-                    Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-                    $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+                    $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: Unable to get policy admin owner. Reason [$ErrorVar]" 
                     }else{
@@ -26351,8 +26351,8 @@ Try {
                 if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Enable-NcQuota failed [$ErrorVar]" }
             }else{
                 $url="https://"+$myController.Name+"/api/storage/volumes?svm.name="+$Vserver+"&name="+$Volume+"&fields=uuid"
-                Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-                $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+                $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                 if($? -ne $True){
                     Write-LogError "ERROR: Unable to get volume detail. Reason [$ErrorVar]" 
                 }else{
@@ -26362,8 +26362,8 @@ Try {
                 $url="https://"+$myController.Name+"/api/storage/volumes/"+$VolUuid
                 $bodyqouta=@{"quota"=@{"enabled"=$True}}
                 $bodyqouta=$bodyqouta | convertTo-Json
-                Write-LogDebug "Invoke-RestMethod -Method patch -Uri $url -Credential $Credential -body $bodyqouta -SkipCertificateCheck"
-                $ret=Invoke-RestMethod -Method 'patch' -Uri $url -Credential $Credential -SkipCertificateCheck -body $bodyqouta -ErrorVariable ErrorVar
+                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method patch -Uri $url -Credential $Credential -body $bodyqouta -SkipCertificateCheck"
+                $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $Credential -SkipCertificateCheck -body $bodyqouta -ErrorVariable ErrorVar
                 if($? -ne $True){
                     Write-LogError "ERROR: Unable to enable quota on volume [$Volume]. Reason [$ErrorVar]" 
                 }else{
@@ -26402,8 +26402,8 @@ Try {
                 $VolQuotaStatus=$status.Status
             }else{
                 $url="https://"+$myController.Name+"/api/storage/volumes?svm.name="+$Vserver+"&name="+$Volume+"&fields=quota"
-                Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-                $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+                $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                 if($? -ne $True){
                     Write-LogError "ERROR: Unable to get policy admin owner. Reason [$ErrorVar]" 
                 }else{
@@ -26419,8 +26419,8 @@ Try {
                     $VolQuotaStatus=$status.Status
                 }else{
                     $url="https://"+$myController.Name+"/api/storage/volumes?svm.name="+$Vserver+"&name="+$Volume+"&fields=quota"
-                    Write-LogDebug "Invoke-RestMethod -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-                    $ret=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+                    $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: Unable to get policy admin owner. Reason [$ErrorVar]" 
                     }else{
@@ -26489,8 +26489,8 @@ Try {
             $Credential=get_local_cDotcred($myController)
             $url=$("https://"+$myController.Name+"/api/private/cli/volume/quota/policy/rule?vserver="+$myVserver+"&fields=vserver,type,policy-name,volume,target,qtree,user-mapping,disk-limit,file-limit,threshold,soft-disk-limit,soft-file-limit&volume="+$Volume+`
             "type="+$QuotaType+"&disk-limit="+$DiskLimit+"&target="+$QuotaTarget+"&file-limit="+$FileLimit+"&qtree="+$Qtree+"&soft-disk-limit="+$SoftDiskLimit+"&soft-file-limit="+$SoftFileLimit)
-            Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
-            $QuotaPolicy=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck"
+            $QuotaPolicy=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: Unable to get quota policy rule details. Reason [$ErrorVar]"
                 Write-LogDebug "[$workOn]: end"
@@ -26934,8 +26934,8 @@ Function create_update_servicepolicy_dr(
             if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcNetServicePolicy failed [$ErrorVar]" }
             <# $Cred=get_local_cDotcred($mySecondaryController)
             $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/network/interface/service-policy?vserver="+$myPrimaryVserver+"&fields=service_allowed_addresses,policy,vserver,services,is_built_in")
-            Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $Cred -SkipCertificateCheck"
-            $PrimaryServicePolicies=Invoke-RestMethod -Method 'get' -Uri $url -Credential $Cred -SkipCertificateCheck -ErrorVariable ErrorVar
+            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Cred -SkipCertificateCheck"
+            $PrimaryServicePolicies=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Cred -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: Unable to get service-policies. Reason [$ErrorVar]"
                 Write-LogDebug "[$workOn]: end"
@@ -26995,8 +26995,8 @@ Function create_update_servicepolicy_dr(
                         Clean_Throw "ERROR: Fail to read service-policy [$PolicyName] on secondary"
                     } #>
                     $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/network/interface/service-policy?vserver="+$mySecondaryVserver+"&policy="+$PolicyName+"&fields=service_allowed_addresses")
-                    Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $CredSecondary -SkipCertificateCheck"
-                    $DetailedSecondaryService=Invoke-RestMethod -Method 'get' -Uri $url -Credential $CredSecondary -SkipCertificateCheck -ErrorVariable ErrorVar
+                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $CredSecondary -SkipCertificateCheck"
+                    $DetailedSecondaryService=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $CredSecondary -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: Unable to get service-allowed-addresses. Reason [$ErrorVar]"
                         Write-LogDebug "[$workOn]: end"
@@ -27014,8 +27014,8 @@ Function create_update_servicepolicy_dr(
                 }
                 if($Restore -eq $False){
                     $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/network/interface/service-policy?vserver="+$myPrimaryVserver+"&policy="+$PolicyName+"&fields=service_allowed_addresses")
-                    Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $CredPrimary -SkipCertificateCheck"
-                    $DetailedPrimaryService=Invoke-RestMethod -Method 'get' -Uri $url -Credential $CredPrimary -SkipCertificateCheck -ErrorVariable ErrorVar
+                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $CredPrimary -SkipCertificateCheck"
+                    $DetailedPrimaryService=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $CredPrimary -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: Unable to get service-allowed-addresses. Reason [$ErrorVar]"
                         Write-LogDebug "[$workOn]: end"
@@ -27054,8 +27054,8 @@ Function create_update_servicepolicy_dr(
                 }
                 if($Backup -eq $False){
                     $url=$("https://"+$mySecondaryController.Name+"/api/private/cli/network/interface/service-policy?vserver="+$mySecondaryVserver+"&policy="+$PolicyName+"&fields=service_allowed_addresses")
-                    Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $CredSecondary -SkipCertificateCheck"
-                    $DetailedSecondaryService=Invoke-RestMethod -Method 'get' -Uri $url -Credential $CredSecondary -SkipCertificateCheck -ErrorVariable ErrorVar
+                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $CredSecondary -SkipCertificateCheck"
+                    $DetailedSecondaryService=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $CredSecondary -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: Unable to get service-allowed-addresses. Reason [$ErrorVar]"
                         Write-LogDebug "[$workOn]: end"
@@ -27067,8 +27067,8 @@ Function create_update_servicepolicy_dr(
                         Write-Log "Create missing Policy [$PolicyName] on secondary Vserver [$mySecondaryVserver]"
                         Write-LogDebug "New-NcNetServicePolicy -Name $PolicyName -Scope $PolicyScope -IpSpaceName $PolicyIpSpace -Services $PolicyServices -Vserver $mySecondaryVserver -Controller $mySecondaryController"
                         $ret=New-NcNetServicePolicy -Name $PolicyName -Scope $PolicyScope -IpSpaceName $PolicyIpSpace -Services $PolicyServices -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
-                        Write-LogDebug "Invoke-RestMethod -Method 'get' -Uri $url -Credential $cred -SkipCertificateCheck"
-                        $DetailedSecondaryService=Invoke-RestMethod -Method 'get' -Uri $url -Credential $cred -SkipCertificateCheck -ErrorVariable ErrorVar
+                        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $cred -SkipCertificateCheck"
+                        $DetailedSecondaryService=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $cred -SkipCertificateCheck -ErrorVariable ErrorVar
                         if($? -ne $True){
                             Write-LogError "ERROR: Unable to get service-allowed-addresses. Reason [$ErrorVar]"
                             Write-LogDebug "[$workOn]: end"
@@ -27107,8 +27107,8 @@ Function create_update_servicepolicy_dr(
                                     service=$Name
                                     allowed_addresses=$Addresses
                                 } | ConvertTo-Json
-                                Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodypol -SkipCertificateCheck"
-                                $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodypol -SkipCertificateCheck -ErrorVariable ErrorVar
+                                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodypol -SkipCertificateCheck"
+                                $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodypol -SkipCertificateCheck -ErrorVariable ErrorVar
                                 if($? -ne $True){
                                     Write-LogError "ERROR: Unable to modify a service [$Name] for policy [$PolicyName]. Reason [$ErrorVar]"
                                     Write-LogDebug "[$workOn]: end"
@@ -27129,8 +27129,8 @@ Function create_update_servicepolicy_dr(
                                 service=$Name
                                 #allowed_addresses=$Addresses
                             } | ConvertTo-Json
-                            Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodypol -SkipCertificateCheck"
-                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodypol -SkipCertificateCheck -ErrorVariable ErrorVar
+                            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodypol -SkipCertificateCheck"
+                            $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodypol -SkipCertificateCheck -ErrorVariable ErrorVar
                             if($? -ne $True){
                                 Write-LogError "ERROR: Unable to add a service [$Name] for policy [$PolicyName]. Reason [$ErrorVar]"
                                 Write-LogDebug "[$workOn]: end"
@@ -27145,8 +27145,8 @@ Function create_update_servicepolicy_dr(
                                 service=$Name
                                 allowed_addresses=$Addresses
                             } | ConvertTo-Json
-                            Write-LogDebug "Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodypol -SkipCertificateCheck"
-                            $ret=Invoke-RestMethod -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodypol -SkipCertificateCheck -ErrorVariable ErrorVar
+                            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodypol -SkipCertificateCheck"
+                            $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodypol -SkipCertificateCheck -ErrorVariable ErrorVar
                             if($? -ne $True){
                                 Write-LogError "ERROR: Unable to modify a service [$Name] for policy [$PolicyName]. Reason [$ErrorVar]"
                                 Write-LogDebug "[$workOn]: end"
