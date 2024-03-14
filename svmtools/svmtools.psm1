@@ -5193,7 +5193,7 @@ Try {
                     # $PrimaryName=(Get-NcCluster -Controller $myPrimaryController).ClusterName
                     Write-LogDebug "Get-NcJobSchedule -Controller $myPrimaryController -VserverContext $myPrimaryVserver -Query @{scope=svm}"
                     $PrimaryCronListVserver = Get-NcJobSchedule -Controller $myPrimaryController -ErrorVariable ErrorVar -VserverContext $myPrimaryVserver -Query @{scope="svm"}
-                    if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcJobSchedule failed [$ErrorVar]" }
+                    if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Get-NcJobSchedule failed [$ErrorVar]" }
                 }else{
                     if(Test-Path $($Global:JsonPath+"Get-NcJobSchedule_vserver.json")){
                         $PrimaryCronListVserver=Get-Content $($Global:JsonPath+"Get-NcJobSchedule_vserver.json") -Raw | ConvertFrom-Json

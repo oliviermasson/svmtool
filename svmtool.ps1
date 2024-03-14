@@ -569,6 +569,7 @@
         - 0.6.0     Complete rewrite of migrate, activateDR and ReActivate
         - 0.7.0     Rest Transition
         - 0.7.1     ForceZapi modified
+        - 0.7.2     Correct webrequest with pwsh 7.4.x
 
 #>
 [CmdletBinding(HelpURI = "https://github.com/oliviermasson/svmtool", DefaultParameterSetName = "ListInstance")]
