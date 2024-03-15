@@ -1365,6 +1365,19 @@ Function ask_IpAddr_from_cli ([string] $myIpAddr,[string] $workOn="",[bool]$forc
 }
 
 
+Function ask_IpNameserver_from_cli ([string] $myIpAddr,[string] $workOn="",[bool]$forceAsk=$False) {
+	$loop = $True
+	While ( $loop -eq $True ) {
+        # Wait-Debugger
+		$AskIPAddr = Read-HostDefault -question "[$workOn] Please Enter a valid Nameserver IP Address" -default $myIPAddr -forceAsk $forceAsk
+		if ( ( validate_ip_format $AskIPAddr ) -eq $True ) {
+				$loop = $False
+				return $AskIPAddr
+		}
+	}
+	return $AskIPAddr
+}
+
 #############################################################################################
 Function ask_gateway_from_cli ([string]$myGateway,[string] $workOn="",[bool]$forceAsk=$False) {
 	$loop = $True
@@ -1377,6 +1390,20 @@ Function ask_gateway_from_cli ([string]$myGateway,[string] $workOn="",[bool]$for
 		}
 	}
 	return $AskGateway
+}
+
+#############################################################################################
+Function ask_dnsdomain_from_cli ([string]$myDomain,[string] $workOn="",[bool]$forceAsk=$False) {
+	$loop = $True
+	While ( $loop -eq $True ) {
+        #Wait-Debugger
+		$AskDNSDomain = Read-HostDefault -question "[$workOn] Please Enter DNS domain" -default $myDomain -forceAsk $forceAsk
+		if ( $AskDNSDomain.length -gt 0 ) {
+            $loop = $False
+            return $AskDNSDomain
+		}
+	}
+	return $AskDNSDomain
 }
 
 #############################################################################################
@@ -6950,9 +6977,11 @@ Try {
                 $PrimaryQOSPolicy=Get-Content $($Global:JsonPath+"Get-RESTQOSpolicy.json") -Raw | ConvertFrom-Json
                 Write-LogDebug "$($Global:JsonPath+"Get-RESTQOSpolicy.json") successfully imported"
             }else{
-                $Return=$False
+                $Return=$True
                 $filepath=$($Global:JsonPath+"Get-RESTQOSpolicy.json")
-                Clean_Throw "ERROR: failed to read $filepath"
+                #Clean_Throw "ERROR: failed to read $filepath"
+                Write-LogWarn "WARNING: Failed to read [$filepath]. Skip QOS policy configuration"
+                return $Return
             }
         }
         if($Backup -eq $False){
@@ -8215,6 +8244,22 @@ Try {
                 $PrimaryVolAsyncDeleteClientState=$null
                 $PrimaryVolAsyncDeleteClientTrashDirectory=$null
                 
+                if(Test-Path $($Global:JsonPath+"Get-NcSystemVersionInfo.json")){
+                    $PrimaryVersion=Get-Content $($Global:JsonPath+"Get-NcSystemVersionInfo.json") -Raw | ConvertFrom-Json
+                    if($PSCulture -eq "en-US"){
+                        $doubleseparator='.'
+                    }else{
+                        $doubleseparator=','
+                    }
+                    $Global:OntapPrimaryVersion=[double]::parse($([string](($PrimaryVersion)[0].VersionTuple.Generation)+$doubleseparator+[string](($PrimaryVersion)[0].VersionTuple.Major)))
+                    $PrimaryVersion=(Get-NcSystemVersionInfo -Controller $myPrimaryCtrl)[0].VersionTuple | Join-String
+                    Write-LogDebug "$($Global:JsonPath+"Get-NcSystemVersionInfo.json") successfully imported"
+                }else{
+                    $Return=$False
+                    $filepath=$($Global:JsonPath+"Get-NcSystemVersionInfo.json")
+                    Clean_Throw "ERROR: failed to read $filepath"
+                }
+
                 if(($Global:OntapPrimaryVersion -ge 9.10)){
                     # ONTAP >= 9.10
                     $PrimaryVolAntiRansomware=$PrimaryVol.anti_ransomware.state
@@ -8236,6 +8281,10 @@ Try {
                     # ONTAP >= 9.11
                     $PrimaryVolAsyncDeleteClientState=$PrimaryVol.asynchronous_directory_delete.enabled
                     $PrimaryVolAsyncDeleteClientTrashDirectory=$PrimaryVol.asynchronous_directory_delete.trash_bin
+                }
+                if(($Global:OntapPrimaryVersion -ge 9.12)){
+                    # ONTAP >= 9.11
+                    $PrimaryVolTamperProofSnapshot=$PrimaryVol.snapshot_locking_enabled
                 }
             }
             if($Backup -eq $True){
@@ -8452,7 +8501,7 @@ Try {
                         }
                         $ForceRest=$False
                         $NewNcVolParameters=@{}
-                        
+                        $checkComplianceClock=$False
                         if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapSecondaryVersion -ge 9.10)){
                             # * Rest POST method does not support to set anti-ransomware state on DP volume
                             if(($PrimaryVolAntiRansomware -eq "enabled") -and ($Global:VOLUME_TYPE -eq "rw")){
@@ -8461,6 +8510,7 @@ Try {
                             }
                             if(($null -ne $PrimaryVolSnaplockType) -and ($PrimaryVolSnaplockType -ne "non_snaplock")){
                                 $NewNcVolParameters.snaplock=@{"type"=$PrimaryVolSnaplockType}
+                                $checkComplianceClock=$True
                                 $ForceRest=$True
                             }
                             # ! Disable because of a burt in REST. This parameter is currently only available during patch and not post, so during update and not create
@@ -8477,7 +8527,7 @@ Try {
                             }
                         }
                         # * Rest POST method does not support to set analytics state on DP volume
-                        if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapPrimaryVersion -ge 9.11) -and ($Global:VOLUME_TYPE -eq "rw")){
+                        if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapSecondaryVersion -ge 9.11) -and ($Global:VOLUME_TYPE -eq "rw")){
                             if($PrimaryVolAsyncDeleteClientState -eq $True){
                                 $NewNcVolParameters.asynchronous_directory_delete=@{"enabled"=$True}
                                 $ForceRest=$True
@@ -8487,10 +8537,48 @@ Try {
                                 $ForceRest=$True
                             }
                         }
+
+                        if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapSecondaryVersion -ge 9.12)){
+                            $NewNcVolParameters.snapshot_locking_enabled=$PrimaryVolTamperProofSnapshot
+                            $checkComplianceClock=$True
+                        }
                         
                         if($Global:PSTKCall -eq "Rest"){
                             #! Force Direct Rest call because of burt with New-NcVol in REST mode with Type = DP
                             $ForceRest=$True
+                        }
+                        if($checkComplianceClock -eq $True){
+                            #Need to check an initialize compliance clock on secondary because there is at least one snaplock volume or tamper proof snapshot
+                            $Credential = get_local_cDotcred($mySecondaryController)
+                            $url=$("https://"+$mySecondaryController.Name+"/api/storage/snaplock/compliance-clocks?fields=time&return_timeout=15&return_records=true")
+                            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+                            $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                            if($? -ne $True){
+                                Write-LogError "ERROR: Unable to get compliance clocks. Reason [$ErrorVar]" 
+                            }else{
+                                $ComplianceClocks=$ret.records | convertTo-json
+                                if(-not $ComplianceClocks.Contains("time")){
+                                    Write-LogDebug "secondary not does not contains any Compliance Clock"
+                                    foreach($node in $ret.records.node.name){
+                                        $bodyclock=@{}
+                                        $bodyclock.node=@{
+                                            "name"=$node
+                                        }
+                                        $bodyclock=$bodyclock | ConvertTo-Json
+                                        $url=$("https://"+$mySecondaryController.Name+"/api/storage/snaplock/compliance-clocks")
+                                        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method post -Uri $url -Credential $Credential -body $bodyclock -SkipCertificateCheck"
+                                        $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $Credential -body $bodyclock -SkipCertificateCheck -ErrorVariable ErrorVar
+                                        if($? -ne $True){
+                                            Write-LogError "ERROR: Unable to initialize compliance clock on node [$node]. Reason [$ErrorVar]"
+                                            Write-LogDebug "[$workOn]: end"
+                                            return $False
+                                        }
+                                    }
+                                    Write-LogDebug "Compliance clock initialized on all nodes"
+                                }else{  
+                                    Write-LogDebug "Compliance Clocks already configured on secondary nodes"
+                                }
+                            }
                         }
                         if($ForceRest){
                             $NewNcVolParameters+=@{
@@ -10695,6 +10783,7 @@ try{
         }
     }
     $bodylif=$bodylif | ConvertTo-Json
+    #Write-Log "Invoke-RestMethod -ContentType 'application/json' -Method post -Uri $url -Credential $myCredential -body $bodylif -SkipCertificateCheck"
     Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method post -Uri $url -Credential $myCredential -body $bodylif -SkipCertificateCheck"
     $LifCreate=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $myCredential -body $bodylif -SkipCertificateCheck -ErrorVariable ErrorVar
     if($? -ne $True){
@@ -10706,6 +10795,7 @@ try{
     return $True
 }catch{
     Error_Handling $_ $Vserver
+    Write-Log "ErrorDetail : $_.ErrorDetails"
 	return $False
 }
 }
@@ -11876,6 +11966,7 @@ Try {
         $PrimaryDnsDomainName=$PrimaryInterface.DnsDomainName
         $PrimaryRole=$PrimaryInterface.Role
         $PrimaryCurrentNode=$PrimaryInterface.CurrentNode
+        #Write-Log "Primary Netmask Length [$PrimaryNetmaskLength]"
         if($Global:PSTKCall -eq "Rest"){$PrimaryServicePolicy=$PrimaryInterface.ServicePolicy}
         #$PrimaryCurrentPortObj=Get-NcNetPort -Name $PrimaryCurrentPort -Node $PrimaryCurrentNode -Controller $myPrimaryController -ErrorVariable ErrorVar
         $PrimaryCurrentPortObj=$PrimaryNetPortList | where-object {($_.Port -eq $PrimaryCurrentPort) -and ($_.Node -eq $PrimaryCurrentNode)}   
@@ -12059,7 +12150,7 @@ Try {
                             if($Global:PSTKCall -ne "Rest"){
                                 $LIF = '[' + $PrimaryInterfaceName + '] [' + $myIpAddr + '] [' + $myNetMask +  '] [' + $myGateway + '] [' +$myNode + '] [' + $myPort + ']'	
                             }else{
-                                $LIF = '[' + $PrimaryInterfaceName + '] [' + $myIpAddr + '] [ netmask length /' + $PrimaryNetMaskLength + '] [' + $myGateway + '] [' +$myNode + '] [' + $myPort + ']'	
+                                $LIF = '[' + $PrimaryInterfaceName + '] [' + $myIpAddr + '] [ netmask length /' + $myNetMask + '] [' + $myGateway + '] [' +$myNode + '] [' + $myPort + ']'	
                             }				
                             $ANS2 = Read-HostOptions -question "[$mySecondaryVserver] Ready to create the LIF $LIF ?" -options "y/n" -default "y"
                             if ( $ANS2 -eq 'y' ) 
@@ -12089,7 +12180,7 @@ Try {
                                     # $SecondaryInterface=New-NcNetInterface -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver  -Role $PrimaryRole -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -FirewallPolicy $PrimaryFirewallPolicy -Address $myIpAddr -Netmask $myNetMask -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus down -AutoRevert $PrimaryIsAutoRevert  -Controller $mySecondaryController  -ErrorVariable ErrorVar
                                 }
                                 if($Global:PSTKCall -match "Rest|ZapiEnforced"){
-                                    $ret=REST_create_lif -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver -ServicePolicy $PrimaryServicePolicy -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -Address $myIpAddr -NetmaskLength $PrimaryNetMaskLength -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus $AdminStatus -AutoRevert $PrimaryIsAutoRevert -Controller $mySecondaryController
+                                    $ret=REST_create_lif -Name $PrimaryInterfaceName -Vserver $mySecondaryVserver -ServicePolicy $PrimaryServicePolicy -Node $myNode -Port $myPort -DataProtocols $PrimaryDataProtocols -Address $myIpAddr -NetmaskLength $myNetMask -DnsDomain $PrimaryDnsDomainName -AdministrativeStatus $AdminStatus -AutoRevert $PrimaryIsAutoRevert -Controller $mySecondaryController
                                     if($ret -eq $False){
                                         Write-LogError "ERROR : Failed to create lif [$PrimaryInterfaceName]"
                                         clean_and_exit 1
@@ -12448,11 +12539,31 @@ Try {
                     } #>  
                 # }else{
                     if($Global:PSTKCall -match "Rest|ZapiEnforced"){
-                        Write-LogDebug "New-NcNetDns -Domains $PrimaryDomains -NameServers $PrimaryNameServers -SkipConfigValidation -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                        $out=New-NcNetDns -Domains $PrimaryDomains -NameServers $PrimaryNameServers -SkipConfigValidation -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                        if($Global:Run_Mode -eq "Restore"){
+                            $PrimaryDomains=ask_dnsdomain_from_cli -myDomain $PrimaryDomains -workOn $workOn
+                            $myNameservers=@()
+                            foreach($Nameserver in $PrimaryNameServers){    
+                                $myNameservers+=ask_IpNameserver_from_cli -myIpAddr $Nameserver -workOn $workOn
+                            }
+                            Write-LogDebug "New-NcNetDns -Domains $PrimaryDomains -NameServers $myNameservers -SkipConfigValidation -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                            $out=New-NcNetDns -Domains $PrimaryDomains -NameServers $myNameservers -SkipConfigValidation -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar  
+                        }else{
+                            Write-LogDebug "New-NcNetDns -Domains $PrimaryDomains -NameServers $PrimaryNameServers -SkipConfigValidation -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                            $out=New-NcNetDns -Domains $PrimaryDomains -NameServers $PrimaryNameServers -SkipConfigValidation -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                        }
                     }else{
-                        Write-LogDebug "New-NcNetDns -Domains $PrimaryDomains -NameServers $PrimaryNameServers -State $PrimaryDnsState -SkipConfigValidation -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                        $out=New-NcNetDns -Domains $PrimaryDomains -NameServers $PrimaryNameServers -State $PrimaryDnsState -SkipConfigValidation -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                        if($Global:Run_Mode -eq "Restore"){
+                            $PrimaryDomains=ask_dnsdomain_from_cli -myDomain $PrimaryDomains -workOn $workOn
+                            $myNameservers=@()
+                            foreach($Nameserver in $PrimaryNameServers){    
+                                $myNameservers+=ask_IpNameserver_from_cli -myIpAddr $Nameserver -workOn $workOn
+                            }
+                            Write-LogDebug "New-NcNetDns -Domains $PrimaryDomains -NameServers $myNameservers -State $PrimaryDnsState -SkipConfigValidation -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                            $out=New-NcNetDns -Domains $PrimaryDomains -NameServers $myNameservers -State $PrimaryDnsState -SkipConfigValidation -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                        }else{
+                            Write-LogDebug "New-NcNetDns -Domains $PrimaryDomains -NameServers $PrimaryNameServers -State $PrimaryDnsState -SkipConfigValidation -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                            $out=New-NcNetDns -Domains $PrimaryDomains -NameServers $PrimaryNameServers -State $PrimaryDnsState -SkipConfigValidation -TimeoutSeconds $PrimaryTimeout -Attempts $PrimaryAttempts -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                        }
                     }
                     
                     if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: New-NcNetDns failed [$ErrorVar]" }
@@ -13210,8 +13321,14 @@ Try {
         Write-LogDebug "Stop-NcCifsServer -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:False"
         $ret=Stop-NcCifsServer -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False
         if($Global:PSTKCall -eq "Rest"){
+            #Write-LogDebug "[$mySecondaryController] [$PrimaryADDomain]"
             $myCred=get_local_cDotcred($mySecondaryController)
-            $ADCred = get_local_cred ($PrimaryADDomain) -ADcred
+            if($Global:Run_Mode -eq "Restore" -or $Restore -eq $True){
+                Write-LogDebug "Get-NcCifsServer -VserverContext $mySecondaryVserver -controller $mySecondaryController"
+                $SecondaryCIFSServer=Get-NcCifsServer -VserverContext $mySecondaryVserver -controller $mySecondaryController
+                $PrimaryADDomain = $SecondaryCIFSServer.Domain
+            }
+            $ADCred = get_local_cred ($PrimaryADDomain) -ADcred           
             $myVserver=Get-NcVserver -Name $mySecondaryVserver -Controller $mySecondaryController
             $myVserverUUID=$myVserver.Uuid
             $bodycifs=@{
@@ -13509,18 +13626,21 @@ Try {
                     Write-LogDebug "Flexgroup on source so volume name on secondary is [$Volume] "
                 }
             }else{
-                if($Global:RESTORE_ORIGINAL -eq $True){
-                    Write-LogDebug "[$workOn] In RESTORE_ORIGINAL mode Flexgroup volume name [$Volume] is not changed"
-                }else{
-                    # Destination Flexgroup name must be changed only if name not already in format <name>__dst which is the name format created by snapmirror protect on flexgroup destination
-                    if($Volume -notmatch "_dst$"){
-                        $NewVolumeName=$($Volume+"__dst")
-                        if($NewVolumeName -match "__dst__dst$"){
-                            Write-LogDebug $("Work in mode ["+$Global:Run_Mode+"] with secondary name [$NewVolumeName] so replace it with ["+$($NewVolumeName -Replace "__dst__dst","")+"]")
-                            $NewVolumeName=$NewVolumeName -Replace "__dst__dst",""
+                $VolumeDetails= Get-NcVol -Name $Volume -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                if($VolumeDetails.VolumeIdAttributes.StyleExtended -eq "flexgroup"){
+                    if($Global:RESTORE_ORIGINAL -eq $True){
+                        Write-LogDebug "[$workOn] In RESTORE_ORIGINAL mode Flexgroup volume name [$Volume] is not changed"
+                    }else{
+                        # Destination Flexgroup name must be changed only if name not already in format <name>__dst which is the name format created by snapmirror protect on flexgroup destination
+                        if($Volume -notmatch "_dst$"){
+                            $NewVolumeName=$($Volume+"__dst")
+                            if($NewVolumeName -match "__dst__dst$"){
+                                Write-LogDebug $("Work in mode ["+$Global:Run_Mode+"] with secondary name [$NewVolumeName] so replace it with ["+$($NewVolumeName -Replace "__dst__dst","")+"]")
+                                $NewVolumeName=$NewVolumeName -Replace "__dst__dst",""
+                            }
+                            Write-LogDebug "[$workOn] In Restore without RESTORE_ORIGINAL mode Flexgroup volume name [$Volume] must be changed to [$NewVolumeName]"
+                            $Volume=$NewVolumeName
                         }
-                        Write-LogDebug "[$workOn] In Restore without RESTORE_ORIGINAL mode Flexgroup volume name [$Volume] must be changed to [$NewVolumeName]"
-                        $Volume=$NewVolumeName
                     }
                 }
             }
@@ -14575,8 +14695,9 @@ Try {
                         while ( $ANS -ne 'y' ) {
                             $SecondaryCifsServer = Read-HostDefault  -question "[$mySecondaryVserver] Please Enter your default Secondary CIFS server Name" -default $SecondaryCifsServer
                             if ( ( $SecondaryDomain -eq $PrimaryCifsServerInfos.Domain ) -and ( $SecondaryCifsServer -eq $PrimaryCifsServerInfos.CifsServer ) -and ($Global:RESTORE_ORIGINAL -ne $True)) { 
-                                Write-LogError "ERROR: Secondary CIFS server cannot use the same name has primary CIFS server in the same domain to prevent duplicate entry"
-                                Write-LogError "ERROR: Or you need to use the RESTORE_ORIGINAL"
+                                # Write-LogError "ERROR: Secondary CIFS server cannot use the same name has primary CIFS server in the same domain to prevent duplicate entry"
+                                # Write-LogError "ERROR: Or you need to use the RESTORE_ORIGINAL"
+                                $ANS = Read-HostOptions -question "WARNING: Are you sure you want to restore CIFS server with original name (risk of duplicate if CIFS server already exists in this Domain) ?" -options "y/n" -default "y"
                             } else {
                                     Write-Log "[$workOn] Default Secondary CIFS Name:      [$SecondaryCifsServer]"
                                 Write-Log ""
@@ -15989,6 +16110,7 @@ $request=@"
 }
 Catch {
     Error_Handling $_ $workOn
+    Write-Host "$_.ErrorDetails"
 	return $Return
 }
 }
@@ -16084,7 +16206,7 @@ Try {
                 if($AuthenticationType -eq "chap"){
                     if($InitiatorSecurityDone -notcontains $InitiatorName){
                         Write-LogDebug "Need to set CHAP authentication on secondary"
-                        if($null -ne $Global:DefaultChapCredentials -or $Global:Run_Mode -eq "ConfigureDR"){
+                        if($null -ne $Global:DefaultChapCredentials -or $Global:Run_Mode -match "ConfigureDR"){
                             $ChapPassword=get_pwd_from_cli -workOn $workOn -for "CHAP" -name $InitiatorName
                             Write-LogDebug "Remove-NcIscsiInitiatorAuth -Initiator $InitiatorName  -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False"
                             $ret=Remove-NcIscsiInitiatorAuth -Initiator $InitiatorName  -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False -ErrorVariable ErrorVar
@@ -27108,11 +27230,18 @@ Function create_update_servicepolicy_dr(
                                     allowed_addresses=$Addresses
                                 } | ConvertTo-Json
                                 Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodypol -SkipCertificateCheck"
-                                $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodypol -SkipCertificateCheck -ErrorVariable ErrorVar
-                                if($? -ne $True){
-                                    Write-LogError "ERROR: Unable to modify a service [$Name] for policy [$PolicyName]. Reason [$ErrorVar]"
+                                try{
+                                    $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodypol -SkipCertificateCheck -ErrorVariable ErrorVar
+                                        if($? -ne $True){
+                                        Write-LogError "ERROR: Unable to modify a service [$Name] for policy [$PolicyName]. Reason [$ErrorVar]"
+                                        Write-LogDebug "[$workOn]: end"
+                                        return $False
+                                    }
+                                }catch{
+                                    $ErrorDetails = $_.ErrorDetails  
+                                    Write-LogError "ERROR: [$ErrorDetails]"
                                     Write-LogDebug "[$workOn]: end"
-                                    return $False
+                                    return $False  
                                 }
                             }
                             Write-LogDebug "Primary [$ServiceAllowedAddresses] identical on secondary [$DetailedSecondaryService]"

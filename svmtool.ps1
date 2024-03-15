@@ -570,6 +570,7 @@
         - 0.7.0     Rest Transition
         - 0.7.1     ForceZapi modified
         - 0.7.2     Correct webrequest with pwsh 7.4.x
+        - 0.7.3     Add support of compliance-clock and so support of snaplock and tamper-proof snapshot
 
 #>
 [CmdletBinding(HelpURI = "https://github.com/oliviermasson/svmtool", DefaultParameterSetName = "ListInstance")]
@@ -1180,7 +1181,7 @@ $Global:MIN_MINOR = 5
 $Global:MIN_BUILD = 0
 $Global:MIN_REVISION = 0
 #############################################################################################
-$Global:RELEASE = "0.7.2"
+$Global:RELEASE = "0.7.3"
 $Global:SCRIPT_RELEASE = "0.1.31"
 if($PSVersionTable.PSVersion.Major -lt 7){
     $Global:BASEDIR = 'C:\Scripts\SVMTOOL'      
@@ -1687,8 +1688,12 @@ if ( $Backup ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$Backup]" 
         clean_and_exit 1
     }
-
-    $Global:OntapPrimaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $myPrimaryController)[0].VersionTuple.Generation)+','+[string]((Get-NcSystemVersionInfo -Controller $myPrimaryController)[0].VersionTuple.Major)))
+    if($PSCulture -eq "en-US"){
+        $doubleseparator='.'
+    }else{
+        $doubleseparator=','
+    }
+    $Global:OntapPrimaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $myPrimaryController)[0].VersionTuple.Generation)+$doubleseparator+[string]((Get-NcSystemVersionInfo -Controller $myPrimaryController)[0].VersionTuple.Major)))
     $PrimaryVersion=(Get-NcSystemVersionInfo -Controller $myPrimaryController)[0].VersionTuple | Join-String
     Write-LogDebug "ONTAP Version       [$PrimaryVersion]"  
 
@@ -2210,8 +2215,12 @@ if ( $Restore ) {
         Write-LogError "ERROR: Unable to Connect to NcController [$Destination]" 
         clean_and_exit 1
     }
-
-    $Global:OntapSecondaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $DestinationController -ONTAPI)[0].VersionTuple.Generation)+','+[string]((Get-NcSystemVersionInfo -Controller $DestinationController -ONTAPI)[0].VersionTuple.Major)))
+    if($PSCulture -eq "en-US"){
+        $doubleseparator='.'
+    }else{
+        $doubleseparator=','
+    }
+    $Global:OntapSecondaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $DestinationController -ONTAPI)[0].VersionTuple.Generation)+$doubleseparator+[string]((Get-NcSystemVersionInfo -Controller $DestinationController -ONTAPI)[0].VersionTuple.Major)))
     $SecondaryVersion=(Get-NcSystemVersionInfo -Controller $DestinationController -ONTAPI)[0].VersionTuple | Join-String
     Write-LogDebug "ONTAP Version       [$SecondaryVersion]"
 
@@ -2899,7 +2908,12 @@ if ( $RestoreObject ){
         Write-LogError "ERROR: Unable to Connect to NcController [$RESTORE_SRC_CLUSTER]" 
         clean_and_exit 1
     }
-    $Global:OntapPrimaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $NcPrimaryCtrl)[0].VersionTuple.Generation)+','+[string]((Get-NcSystemVersionInfo -Controller $NcPrimaryCtrl)[0].VersionTuple.Major)))
+    if($PSCulture -eq "en-US"){
+        $doubleseparator='.'
+    }else{
+        $doubleseparator=','
+    }
+    $Global:OntapPrimaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $NcPrimaryCtrl)[0].VersionTuple.Generation)+$doubleseparator+[string]((Get-NcSystemVersionInfo -Controller $NcPrimaryCtrl)[0].VersionTuple.Major)))
     $PrimaryVersion=(Get-NcSystemVersionInfo -Controller $NcPrimaryCtrl)[0].VersionTuple | Join-String
 
     $myCred = get_local_cDotcred ($RESTORE_DST_CLUSTER) 
@@ -2908,7 +2922,12 @@ if ( $RestoreObject ){
         Write-LogError "ERROR: Unable to Connect to NcController [$RESTORE_DST_CLUSTER]" 
         clean_and_exit 1
     }
-    $Global:OntapSecondaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Generation)+','+[string]((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Major)))
+    if($PSCulture -eq "en-US"){
+        $doubleseparator='.'
+    }else{
+        $doubleseparator=','
+    }
+    $Global:OntapSecondaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Generation)+$doubleseparator+[string]((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Major)))
     $SecondaryVersion=(Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple | Join-String
     
 
@@ -3080,7 +3099,12 @@ Write-LogDebug "connect_cluster -myController $PRIMARY_CLUSTER -myCred $MyCred -
 if ( ( $NcPrimaryCtrl = connect_cluster -myController $PRIMARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
     Write-LogError "ERROR: Unable to Connect to NcController [$PRIMARY_CLUSTER]" 
 }else{
-    $Global:OntapPrimaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $myPrimaryCtrl)[0].VersionTuple.Generation)+','+[string]((Get-NcSystemVersionInfo -Controller $myPrimaryCtrl)[0].VersionTuple.Major)))
+    if($PSCulture -eq "en-US"){
+        $doubleseparator='.'
+    }else{
+        $doubleseparator=','
+    }
+    $Global:OntapPrimaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $myPrimaryCtrl)[0].VersionTuple.Generation)+$doubleseparator+[string]((Get-NcSystemVersionInfo -Controller $myPrimaryCtrl)[0].VersionTuple.Major)))
     $PrimaryVersion=(Get-NcSystemVersionInfo -Controller $myPrimaryCtrl)[0].VersionTuple | Join-String
 }
 
@@ -3091,7 +3115,12 @@ Write-LogDebug "connect_cluster -myController $SECONDARY_CLUSTER -myCred $MyCred
 if ( ( $NcSecondaryCtrl = connect_cluster -myController $SECONDARY_CLUSTER -myCred $MyCred -myTimeout $Global:Timeout ) -eq $False ) {
     Write-LogError "ERROR: Unable to Connect to NcController [$SECONDARY_CLUSTER]"
 }else{
-    $Global:OntapSecondaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Generation)+','+[string]((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Major)))
+    if($PSCulture -eq "en-US"){
+        $doubleseparator='.'
+    }else{
+        $doubleseparator=','
+    }
+    $Global:OntapSecondaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Generation)+$doubleseparator+[string]((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Major)))
     $SecondaryVersion=(Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple | Join-String
 }
 
