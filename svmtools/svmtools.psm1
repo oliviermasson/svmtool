@@ -1407,6 +1407,20 @@ Function ask_dnsdomain_from_cli ([string]$myDomain,[string] $workOn="",[bool]$fo
 }
 
 #############################################################################################
+Function ask_CIFSdomain_from_cli ([string]$myDomain,[string] $workOn="",[bool]$forceAsk=$False) {
+	$loop = $True
+	While ( $loop -eq $True ) {
+        #Wait-Debugger
+		$AskCIFSDomain = Read-HostDefault -question "[$workOn] Please Enter CIFS domain" -default $myDomain -forceAsk $forceAsk
+		if ( $AskCIFSDomain.length -gt 0 ) {
+            $loop = $False
+            return $AskCIFSDomain
+		}
+	}
+	return $AskCIFSDomain
+}
+
+#############################################################################################
 # $myNetMask=ask_NetMask_from_cli -myNetMask $PrimaryAddress
 Function ask_NetMask_from_cli ([string] $myNetMask,[string] $workOn="",[bool]$forceAsk=$False) {
 	$loop = $True
@@ -14658,6 +14672,9 @@ Try {
             $SecondaryDomain = $PrimaryCifsServerInfos.Domain
             $SecondaryDomainWorkgroup = $PrimaryCifsServerInfos.DomainWorkgroup
             $SecondaryOrganizationalUnit = $PrimaryCifsServerInfos.OrganizationalUnit
+            if($Global:Run_Mode -eq "Restore"){
+                $SecondaryDomain=ask_CIFSdomain_from_cli -myDomain $SecondaryDomain -workOn $workOn    
+            }
             if ($ActiveDirectoryCustomOU) {
                 Write-Log "[$workOn] A custom OU has been provided, using this one [$ActiveDirectoryCustomOU] instead of [$SecondaryOrganizationalUnit]" 
                 $SecondaryOrganizationalUnit = $ActiveDirectoryCustomOU
