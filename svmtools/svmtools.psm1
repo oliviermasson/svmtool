@@ -221,6 +221,7 @@ Function Error_Handling([object]$object,[string]$vserver,[switch]$donotcleanlog4
 	Write-LogDebug  "Trap Type: [$Type]"
 	Write-LogDebug  "Trap CategoryInfo: [$CategoryInfo]"
 	Write-LogDebug  "Trap ErrorDetails: [$ErrorDetails]"
+    Write-Error "ErrorDetails: [$ErrorDetails]"
 	Write-LogDebug  "Trap Exception: [$Exception]"
 	Write-LogDebug  "Trap FullyQualifiedErrorId: [$FullyQualifiedErrorId]"
 	Write-LogDebug  "Trap InvocationInfo: [$InvocationInfoLineNumber] [$InvocationInfoLine]"
@@ -7605,19 +7606,36 @@ Try {
         foreach ( $PrimaryVol in ( $PrimaryVolList | Skip-Null ) ) {
             $PrimaryVolName=$PrimaryVol.Name
             Write-LogDebug "PrimaryVol [$PrimaryVolName]"
-            $PrimaryVolStyle=$PrimaryVol.VolumeSecurityAttributes.Style
-            $PrimaryVolExportPolicy=$PrimaryVol.VolumeExportAttributes.Policy
-            $PrimaryVolType=$PrimaryVol.VolumeIdAttributes.Type
-            $PrimaryVolLang=$PrimaryVol.VolumeLanguageAttributes.LanguageCode
-            $PrimaryVolSize=$PrimaryVol.VolumeSpaceAttributes.Size
-            $PrimaryVolIsSis=$PrimaryVol.VolumeSisAttributes.IsSisVolume
-            $PrimaryVolSpaceGuarantee=$PrimaryVol.VolumeSpaceAttributes.SpaceGuarantee
-            $PrimaryVolPercentSnapReserved=$PrimaryVol.VolumeSpaceAttributes.PercentageSnapshotReserve
-            $PrimaryVolState=$PrimaryVol.State
-            $PrimaryVolJunctionPath=$PrimaryVol.VolumeIdAttributes.JunctionPath
-            $PrimaryVolIsInfiniteVolume=$PrimaryVol.IsInfiniteVolume
-            $PrimaryVolIsVserverRoot=$PrimaryVol.VolumeStateAttributes.IsVserverRoot
-            $PrimaryVolExtendStyle=$PrimaryVol.VolumeIdAttributes.StyleExtended
+            # check if volume properties are obtained from pure REST or from cmdlet get-ncvol
+            if(($PrimaryVol | Get-Member -MemberType Property -Name VolumeIdAttributes).count -ge 1) {
+                $PrimaryVolStyle=$PrimaryVol.VolumeSecurityAttributes.Style
+                $PrimaryVolExportPolicy=$PrimaryVol.VolumeExportAttributes.Policy
+                $PrimaryVolType=$PrimaryVol.VolumeIdAttributes.Type
+                $PrimaryVolLang=$PrimaryVol.VolumeLanguageAttributes.LanguageCode
+                $PrimaryVolSize=$PrimaryVol.VolumeSpaceAttributes.Size
+                $PrimaryVolIsSis=$PrimaryVol.VolumeSisAttributes.IsSisVolume
+                $PrimaryVolSpaceGuarantee=$PrimaryVol.VolumeSpaceAttributes.SpaceGuarantee
+                $PrimaryVolPercentSnapReserved=$PrimaryVol.VolumeSpaceAttributes.PercentageSnapshotReserve
+                $PrimaryVolState=$PrimaryVol.State
+                $PrimaryVolJunctionPath=$PrimaryVol.VolumeIdAttributes.JunctionPath
+                $PrimaryVolIsInfiniteVolume=$PrimaryVol.IsInfiniteVolume
+                $PrimaryVolIsVserverRoot=$PrimaryVol.VolumeStateAttributes.IsVserverRoot
+                $PrimaryVolExtendStyle=$PrimaryVol.VolumeIdAttributes.StyleExtended
+            }else{
+                $PrimaryVolStyle=$PrimaryVol.style
+                $PrimaryVolExportPolicy=$PrimaryVol.nas.export_policy.name
+                $PrimaryVolType=$PrimaryVol.type
+                $PrimaryVolLang=$PrimaryVol.language
+                $PrimaryVolSize=$PrimaryVol.size
+                #$PrimaryVolIsSis=$PrimaryVol.
+                $PrimaryVolSpaceGuarantee=$PrimaryVol.guarantee.type
+                $PrimaryVolPercentSnapReserved=$PrimaryVol.space.snapshot.reserve_percent
+                $PrimaryVolState=$PrimaryVol.state
+                $PrimaryVolJunctionPath=$PrimaryVol.nas.path
+                $PrimaryVolIsInfiniteVolume=$False   # if REST so recent ontap version and so no more inifinite volume
+                $PrimaryVolIsVserverRoot=$PrimaryVol.is_svm_root
+                $PrimaryVolExtendStyle=$PrimaryVol.style  
+            }
             if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapPrimaryVersion -ge 9.10)){
                 # ONTAP >= 9.10
                 # support of AntiRansomware state per volume
@@ -7853,10 +7871,9 @@ Try {
                         }
                     }  
                 }
-            }
-            else 
-            {
+            }else{
                 Write-Log "[$workOn] Ignore volume [$PrimaryVolName]" 
+                Write-LogDebug "[$workOn] Ignore volume [$PrimaryVolName]" 
                 Write-LogDebug "PrimaryVolState  [$PrimaryVolState]"
                 Write-LogDebug "PrimaryVolIsVserverRoot [$PrimaryVolIsVserverRoot]"
                 Write-LogDebug "PrimaryVolIsInfiniteVolume [$PrimaryVolIsInfiniteVolume]"
@@ -9082,6 +9099,7 @@ Try {
             }
         }else {
             Write-Log "[$workOn] Ignore volume [$PrimaryVolName]"
+            Write-LogDebug "[$workOn] Ignore volume [$PrimaryVolName]"
             Write-LogDebug "PrimaryVolState  [$PrimaryVolState]"
             Write-LogDebug "PrimaryVolIsVserverRoot [$PrimaryVolIsVserverRoot]"
             Write-LogDebug "PrimaryVolIsInfiniteVolume [$PrimaryVolIsInfiniteVolume]"
@@ -12605,24 +12623,35 @@ Try {
                 $SecondaryNameServers=$SecondaryDNS.NameServers
                 $SecondaryTimeout=$SecondaryDNS.Timeout
                 $SecondaryAttempts=$SecondaryDNS.Attempts
-                foreach ( $NameServer in ( $PrimaryNameServers | Skip-Null  )  ) { $str1 = $str1 + $NameServer }
-                foreach ( $NameServer in ( $SecondaryNameServers | Skip-Null ) ) { $str2 = $str2 + $NameServer }
-                if ( $str1 -ne $str2 ) {
-                    Write-LogDebug "Set-NcNetDns -NameServers $PrimaryNameServers -SkipConfigValidation -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                    $out=Set-NcNetDns -NameServers $PrimaryNameServers -SkipConfigValidation -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                    if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcNetDns failed [$ErrorVar]" }
-                }
-                foreach ( $Domain in ( $PrimaryDomains | Skip-Null ) ) { $str1 = $str1 + $Domain }
-                foreach ( $Domain in ( $SecondaryDomains | Skip-Null ) ) { $str2 = $str2 + $Domain }
-                if ( $str1 -ne $str2 ) {
-                    Write-LogDebug "Set-NcNetDns -Domains $PrimaryDomains -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                    $out=Set-NcNetDns -Domains $PrimaryDomains -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                    if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcNetDns failed [$ErrorVar]" }
-                }
-                if ( $PrimaryDnsState -ne $SecondaryDnsState ) {
-                    Write-LogDebug "Set-NcNetDns -State $PrimaryDnsState -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                    $out=Set-NcNetDns -State $PrimaryDnsState -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                    if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcNetDns failed [$ErrorVar]" }
+                if($Global:Run_Mode -eq "Restore"){
+                    $PrimaryDomains=ask_dnsdomain_from_cli -myDomain $SecondaryDomains -workOn $workOn
+                    $myNameservers=@()
+                    foreach($Nameserver in $SecondaryNameServers){    
+                        $myNameservers+=ask_IpNameserver_from_cli -myIpAddr $Nameserver -workOn $workOn
+                    }
+                    Write-LogDebug "Set-NcNetDns -Domains $PrimaryDomains -NameServers $myNameservers -SkipConfigValidation -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                    $out=Set-NcNetDns -Domains $PrimaryDomains -NameServers $myNameservers -SkipConfigValidation -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcNetDns failed [$ErrorVar]" }    
+                }else{
+                    foreach ( $NameServer in ( $PrimaryNameServers | Skip-Null  )  ) { $str1 = $str1 + $NameServer }
+                    foreach ( $NameServer in ( $SecondaryNameServers | Skip-Null ) ) { $str2 = $str2 + $NameServer }
+                    if ( $str1 -ne $str2 ) {
+                        Write-LogDebug "Set-NcNetDns -NameServers $PrimaryNameServers -SkipConfigValidation -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                        $out=Set-NcNetDns -NameServers $PrimaryNameServers -SkipConfigValidation -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                        if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcNetDns failed [$ErrorVar]" }
+                    }
+                    foreach ( $Domain in ( $PrimaryDomains | Skip-Null ) ) { $str1 = $str1 + $Domain }
+                    foreach ( $Domain in ( $SecondaryDomains | Skip-Null ) ) { $str2 = $str2 + $Domain }
+                    if ( $str1 -ne $str2 ) {
+                        Write-LogDebug "Set-NcNetDns -Domains $PrimaryDomains -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                        $out=Set-NcNetDns -Domains $PrimaryDomains -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                        if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcNetDns failed [$ErrorVar]" }
+                    }
+                    if ( $PrimaryDnsState -ne $SecondaryDnsState ) {
+                        Write-LogDebug "Set-NcNetDns -State $PrimaryDnsState -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                        $out=Set-NcNetDns -State $PrimaryDnsState -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                        if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcNetDns failed [$ErrorVar]" }
+                    }
                 }
             }
         }
@@ -14618,8 +14647,8 @@ Try {
                     } | ConvertTo-Json
                     $VserverUUID=$myVserver.Uuid
                     $url=$("https://"+$mySecondaryController.Name+"/api/protocols/cifs/services/"+$VserverUUID+"?force=true")
-                    #Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method delete -Uri $url -Credential $Cred -SkipCertificateCheck   (body is intentionally hidden)"
-                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method delete -Uri $url -Credential $Cred -SkipCertificateCheck -body $bodycifs"
+                    Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method delete -Uri $url -Credential $Cred -SkipCertificateCheck   (body is intentionally hidden)"
+                    #Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method delete -Uri $url -Credential $Cred -SkipCertificateCheck -body $bodycifs"
                     $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'delete' -Uri $url -Credential $Cred -Body $bodycifs -SkipCertificateCheck -ErrorVariable ErrorVar
                     if($? -ne $True){
                         Write-LogError "ERROR: delete request [$url] reason [$ErrorVar]"
@@ -17587,6 +17616,15 @@ Try {
             Write-LogError "ERROR: Vserver $myPrimaryVserver not found" 
             clean_and_exit 1
         }
+        if($Global:OntapPrimaryVersion -ge 9.09){
+            $Credential = get_local_cDotcred($myPrimaryController)
+            $url=$("https://"+$myPrimaryController.Name+"/api/svm/svms/"+$PrimaryVserver.Uuid+"?fields=**")
+            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
+            $RESTPrimaryVserver = Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+            if($? -ne $True){
+                Write-LogError "ERROR: Unable to get vserver [$PrimaryVserver] details Reason [$ErrorVar]"
+            } 
+        }
         if($Global:PSTKCall -match "Zapi"){
             if($null -eq $PrimaryVserver.RootVolume){
                 $PrimaryVserver = Get-NcVserver -Controller $myPrimaryController -Name $myPrimaryVserver  -ErrorVariable ErrorVar -ONTAPI 
@@ -17622,6 +17660,14 @@ Try {
             $filepath=$($Global:JsonPath+"Get-NcVserver.json")
             Clean_Throw "ERROR: failed to read $filepath"
         }
+        if(Test-Path $($Global:JsonPath+"Get-RESTNcVserver.json")){
+            $RESTPrimaryVserver=Get-Content $($Global:JsonPath+"Get-RESTNcVserver.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-RESTNcVserver.json") successfully imported"
+        }else{
+            $Return=$False
+            $filepath=$($Global:JsonPath+"Get-RESTNcVserver.json")
+            Clean_Throw "ERROR: failed to read $filepath"
+        }
         $mySecondaryVserver=$myPrimaryVserver
     }
     if($Backup -eq $True){
@@ -17630,6 +17676,14 @@ Try {
             Write-LogDebug "$($Global:JsonPath+"Get-NcVserver.json") saved successfully"
         }else{
             Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcVserver.json")"
+        }
+        if($Global:OntapPrimaryVersion -ge 9.09){
+            $RESTPrimaryVserver | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-RESTNcVserver.json") -Encoding ASCII -Width 65535
+            if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-RESTNcVserver.json") -ErrorAction SilentlyContinue) ){
+                Write-LogDebug "$($Global:JsonPath+"Get-RESTNcVserver.json") saved successfully"
+            }else{
+                Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-RESTNcVserver.json")"
+            }
         }
     }
 
@@ -17668,6 +17722,76 @@ Try {
             $SecondaryNameServerSwitch=$SecondaryVserver.NameServerSwitch
             $SecondaryComment=$SecondaryVserver.Comment	
             $SecondaryRootVolumeAggregate=$SecondaryVserver.RootVolumeAggregate
+
+            if($Global:OntapSecondaryVersion -ge 9.09){
+                $SecondaryCredential = get_local_cDotcred($mySecondaryController)
+                $url=$("https://"+$mySecondaryController.Name+"/api/svm/svms/"+$SecondaryVserver.Uuid+"?fields=**")
+                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
+                $RESTSecondaryVserver=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+                if($? -ne $True){
+                    Write-LogError "ERROR: Unable to get Vserver [$SecondaryVserver] details Reason [$ErrorVar]" 
+                }
+                $bodysvm=@{}
+                if($RESTSecondaryVserver.max_volumes -ne $RESTPrimaryVserver.max_volumes){
+                    $bodysvm+=@{max_volumes=$RESTPrimaryVserver.max_volumes}
+                } 
+                if($Global:OntapSecondaryVersion -ge 9.11){
+                    $bodysvm+=@{is_space_reporting_logical=$RESTPrimaryVserver.is_space_reporting_logical}
+                    $bodysvm+=@{is_space_enforcement_logical=$RESTPrimaryVserver.is_space_enforcement_logical}
+                }
+                if($Global:OntapSecondaryVersion -ge 9.12){
+                    $bodysvm+=@{auto_enable_analytics=$RESTPrimaryVserver.auto_enable_analytics}
+                    $bodysvm+=@{auto_enable_activity_tracking=$RESTPrimaryVserver.auto_enable_activity_tracking}
+                }
+                if($Global:OntapSecondaryVersion -ge 9.13){
+                    $bodysvm+=@{anti_ransomware_auto_switch_from_learning_to_enabled=$RESTPrimaryVserver.anti_ransomware_auto_switch_from_learning_to_enabled}
+                    $bodysvm+=@{anti_ransomware_auto_switch_minimum_incoming_data_percent=$RESTPrimaryVserver.anti_ransomware_auto_switch_minimum_incoming_data_percent}
+                    $bodysvm+=@{anti_ransomware_auto_switch_duration_without_new_file_extension=$RESTPrimaryVserver.anti_ransomware_auto_switch_duration_without_new_file_extension}
+                    $bodysvm+=@{anti_ransomware_auto_switch_minimum_learning_period=$RESTPrimaryVserver.anti_ransomware_auto_switch_minimum_learning_period}
+                    $bodysvm+=@{anti_ransomware_auto_switch_minimum_file_count=$RESTPrimaryVserver.anti_ransomware_auto_switch_minimum_file_count}
+                    $bodysvm+=@{anti_ransomware_auto_switch_minimum_file_extension=$RESTPrimaryVserver.anti_ransomware_auto_switch_minimum_file_extension}
+                }
+                if($Global:OntapSecondaryVersion -ge 9.14){
+                    $bodysvm+=@{anti_ransomware=$RESTPrimaryVserver.anti_ransomware}
+                }
+                $bodysvm=$bodysvm | convertTo-Json
+                $url=$("https://"+$mySecondaryController.Name+"/api/svm/svms/"+$SecondaryVserver.Uuid)
+                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $SecondaryCredential -Body $bodysvm -SkipCertificateCheck"
+                Write-Log "[$SecondaryVserver] Update SVM Settings"
+                $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $SecondaryCredential -Body $bodysvm -SkipCertificateCheck -ErrorVariable ErrorVar
+                if($? -ne $True){
+                    Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
+                    $Return=$ret
+                }
+                $JobUuid=$ret.job.uuid
+                $StartTime=Get-date
+                $Timeout=$False
+                $JobDone=$False
+                While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+                    $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
+                    if($JobDetail.JobCompletion -eq "success"){
+                        $JobDone=$True
+                        break
+                    }else{
+                        $JobStatus=$JobDetail.JobState
+                        Write-LogDebug "[$mySecondaryVserver] Patch SVM status [$JobStatus]"
+                        if($JobStatus -eq "failure"){
+                            $JobCompletion=$JobDetail.JobCompletion
+                            Write-LogError "[$mySecondaryVserver] Patch SVM failed  [$JobCompletion]"
+                            $Return=$False
+                            break
+                        }
+                    }
+                    $CurrentTime=Get-date
+                    $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+                    if($TimeSpend -gt $Global:STOP_TIMEOUT){
+                        Write-LogWarn "[$mySecondaryVserver] Patch SVM take too much time. Check in Ontap its status"
+                        $Timeout=$True
+                        return $False
+                    }
+                    Start-Sleep 5
+                }
+            }
         }else {
             Write-Log "[$workOn] Create new vserver"
             $Question = "[$workOn] Please Select root aggregate on Cluster [$MySecondaryController]:"
@@ -17750,7 +17874,77 @@ Try {
                 $SecondaryNameServerSwitch=$SecondaryVserver.NameServerSwitch
                 $SecondaryComment=$SecondaryVserver.Comment	
                 $SecondaryRootVolumeAggregate=$SecondaryVserver.RootVolumeAggregate
-            } 
+            }
+
+            if($Global:OntapSecondaryVersion -ge 9.09){
+                $SecondaryCredential = get_local_cDotcred($mySecondaryController)
+                $url=$("https://"+$mySecondaryController.Name+"/api/svm/svms/"+$SecondaryVserver.Uuid+"?fields=**")
+                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck"
+                $RESTSecondaryVserver=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $SecondaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
+                if($? -ne $True){
+                    Write-LogError "ERROR: Unable to get Vserver [$SecondaryVserver] details Reason [$ErrorVar]" 
+                }
+                $bodysvm=@{}
+                if($RESTSecondaryVserver.max_volumes -ne $RESTPrimaryVserver.max_volumes){
+                    $bodysvm+=@{max_volumes=$RESTPrimaryVserver.max_volumes}
+                } 
+                if($Global:OntapSecondaryVersion -ge 9.11){
+                    $bodysvm+=@{is_space_reporting_logical=$RESTPrimaryVserver.is_space_reporting_logical}
+                    $bodysvm+=@{is_space_enforcement_logical=$RESTPrimaryVserver.is_space_enforcement_logical}
+                }
+                if($Global:OntapSecondaryVersion -ge 9.12){
+                    $bodysvm+=@{auto_enable_analytics=$RESTPrimaryVserver.auto_enable_analytics}
+                    $bodysvm+=@{auto_enable_activity_tracking=$RESTPrimaryVserver.auto_enable_activity_tracking}
+                }
+                if($Global:OntapSecondaryVersion -ge 9.13){
+                    $bodysvm+=@{anti_ransomware_auto_switch_from_learning_to_enabled=$RESTPrimaryVserver.anti_ransomware_auto_switch_from_learning_to_enabled}
+                    $bodysvm+=@{anti_ransomware_auto_switch_minimum_incoming_data_percent=$RESTPrimaryVserver.anti_ransomware_auto_switch_minimum_incoming_data_percent}
+                    $bodysvm+=@{anti_ransomware_auto_switch_duration_without_new_file_extension=$RESTPrimaryVserver.anti_ransomware_auto_switch_duration_without_new_file_extension}
+                    $bodysvm+=@{anti_ransomware_auto_switch_minimum_learning_period=$RESTPrimaryVserver.anti_ransomware_auto_switch_minimum_learning_period}
+                    $bodysvm+=@{anti_ransomware_auto_switch_minimum_file_count=$RESTPrimaryVserver.anti_ransomware_auto_switch_minimum_file_count}
+                    $bodysvm+=@{anti_ransomware_auto_switch_minimum_file_extension=$RESTPrimaryVserver.anti_ransomware_auto_switch_minimum_file_extension}
+                }
+                if($Global:OntapSecondaryVersion -ge 9.14){
+                    $bodysvm+=@{anti_ransomware=$RESTPrimaryVserver.anti_ransomware}
+                }
+                $bodysvm=$bodysvm | convertTo-Json
+                $url=$("https://"+$mySecondaryController.Name+"/api/svm/svms/"+$SecondaryVserver.Uuid)
+                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $SecondaryCredential -Body $bodysvm -SkipCertificateCheck"
+                $cred=get_local_cDotcred($mySecondaryController)
+                $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'patch' -Uri $url -Credential $SecondaryCredential -Body $bodysvm -SkipCertificateCheck -ErrorVariable ErrorVar
+                if($? -ne $True){
+                    Write-LogError "ERROR: Patch request [$url] reason [$ErrorVar]"
+                    $Return=$ret
+                }
+                $JobUuid=$ret.job.uuid
+                $StartTime=Get-date
+                $Timeout=$False
+                $JobDone=$False
+                While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+                    $JobDetail=Get-NcJob -Uuid $JobUuid -Controller $mySecondaryController
+                    if($JobDetail.JobCompletion -eq "success"){
+                        $JobDone=$True
+                        break
+                    }else{
+                        $JobStatus=$JobDetail.JobState
+                        Write-LogDebug "[$mySecondaryVserver] Patch SVM status [$JobStatus]"
+                        if($JobStatus -eq "failure"){
+                            $JobCompletion=$JobDetail.JobCompletion
+                            Write-LogError "[$mySecondaryVserver] Patch SVM failed  [$JobCompletion]"
+                            $Return=$False
+                            break
+                        }
+                    }
+                    $CurrentTime=Get-date
+                    $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+                    if($TimeSpend -gt $Global:STOP_TIMEOUT){
+                        Write-LogWarn "[$mySecondaryVserver] Patch SVM take too much time. Check in Ontap its status"
+                        $Timeout=$True
+                        return $False
+                    }
+                    Start-Sleep 5
+                }
+            }
         }
     }
     if ( ( $ret=check_update_vserver -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed check update vserver" ; $Return = $False }
