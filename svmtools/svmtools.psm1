@@ -8185,12 +8185,6 @@ Try {
                     $PrimaryVolAsyncDeleteClientState=$null
                     $PrimaryVolAsyncDeleteClientTrashDirectory=$null
                     
-                    if(($Global:OntapPrimaryVersion -ge 9.10)){
-                        # ONTAP >= 9.10
-                        $PrimaryVolAntiRansomware=$PrimaryVol.anti_ransomware.state
-                        $PrimaryVolSnaplockType=$PrimaryVol.snaplock.type 
-                        $PrimaryVolActivityTrackState=$PrimaryVol.activity_tracking.state
-                    }
                     if(($Global:OntapPrimaryVersion -ge 9.08)){
                         # ONTAP >= 9.8
                         # support of Filesystem Analytics per volume
@@ -8201,14 +8195,37 @@ Try {
                         if($null -ne $PrimaryVol.tiering.object_tags){
                             $PrimaryVolTieringObjectTags=$PrimaryVol.tiering.object_tags
                         }
+                        $PrimaryAccessTime=$PrimaryVol.access_time_enabled
+                        
                     }
+
+                    if(($Global:OntapPrimaryVersion -ge 9.10)){
+                        # ONTAP >= 9.10
+                        $PrimaryVolAntiRansomware=$PrimaryVol.anti_ransomware.state
+                        $PrimaryVolAntiRansomwareAttackProbability=$PrimaryVol.anti_ransomware.attack_probability
+                        $PrimaryVolAntiRansomwareDryRunStart=$PrimaryVol.anti_ransomware.dry_run_start_time
+                        $PrimaryVolSnaplockType=$PrimaryVol.snaplock.type 
+                        $PrimaryVolSnaplockAppendMode=$PrimaryVol.snaplock.append_mode_enabled
+                        $PrimaryVolSnaplockAutoCommitPeriod=$PrimaryVol.snaplock.autocommit_period
+                        $PrimaryVolSnaplockPrivilegedDelete=$PrimaryVol.snaplock.privileged_delete
+                        $PrimaryVolActivityTrackState=$PrimaryVol.activity_tracking.state
+                    }
+                    
                     if(($Global:OntapPrimaryVersion -ge 9.11)){
                         # ONTAP >= 9.11
                         $PrimaryVolAsyncDeleteClientState=$PrimaryVol.asynchronous_directory_delete.enabled
                         $PrimaryVolAsyncDeleteClientTrashDirectory=$PrimaryVol.asynchronous_directory_delete.trash_bin
-                    }               
+                    }  
+                    if(($Global:OntapPrimaryVersion -ge 9.13)){
+                        $PrimaryVolAggressiveReadaheadMode=$PrimaryVol.aggressive_readahead_mode
+                        $PrimaryCloudWriteEnabled=$PrimaryVol.cloud_write_enabled
+                    }
+                    if(($Global:OntapPrimaryVersion -ge 9.14)){
+                        $PrimaryVolAntiRansomwareEventOnNewFile=$PrimaryVol.anti_ransomware.event_log.is_enabled_on_new_file_extension_seen
+                        $PrimaryVolAntiRansomwareEventOnNewSnap=$PrimaryVol.anti_ransomware.event_log.is_enabled_on_snapshot_copy_creation
+                    }            
                 }
-            }else{
+            }else{ #Begin a restore with in REST API context
                 if(Test-Path $($Global:JsonPath+"Get-RESTVol_"+$PrimaryVol.Uuid+".json")){
                     $PrimaryVol=Get-Content $($Global:JsonPath+"Get-RESTVol_"+$PrimaryVol.Uuid+".json") -Raw | ConvertFrom-Json
                     Write-LogDebug "$($Global:JsonPath+"Get-RESTVol_"+$PrimaryVol.Uuid+".json") successfully imported"
@@ -9070,7 +9087,7 @@ Catch {
 #############################################################################################
 # create an empty flexgroup based on already created flexgroup
 # used currently only in restore mode
-# in normal mode we still use a snamirror_protect job even if it requires us to add a suffix (__dst) to the name of the destination flexgroup. 
+# in normal mode we still use a snapmirror_protect job even if it requires us to add a suffix (__dst) to the name of the destination flexgroup. 
 Function create_flexgroup(
     [NetApp.Ontapi.Filer.C.NcController] $myController,
     [string] $myVserver,
