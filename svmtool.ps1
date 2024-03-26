@@ -1244,6 +1244,7 @@ $Global:BACKUPALLSVM = $False
 $Global:PreserveIdentity=$PreserveIdentity
 $Global:TieringPolicy=$TieringPolicy
 $Global:InsideMCC=$False
+$Global:ForceNonInteractive=$False
 if($RW.IsPresent){
     $Global:VOLUME_TYPE="rw"
 }else{

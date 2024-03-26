@@ -8812,7 +8812,7 @@ Try {
                                                 if( $? -ne $True){Write-LogError("ERROR: Failed to create snaplock audit log config. Reason [$ErrorVar]")}
                                             }
                                         }
-                                        if($PrimaryVol.snaplock.type -ne "non_snaplock"){
+                                        if($PrimaryVol.snaplock.type -ne "non-snaplock"){
                                             $NewNcVolParameters.snaplock=@{append_mode_enabled=$PrimaryVol.snaplock.append_mode_enabled}
                                             $NewNcVolParameters.snaplock+=@{autocommit_period=$PrimaryVol.snaplock.autocommit_period}
                                             if($PrimaryVol.snaplock.privileged_delete -match "enabled|permanently-disabled"){
@@ -18127,7 +18127,7 @@ Try {
     }else{
         if ($ret -ne $True){ Write-LogError "ERROR: Failed to create all LIF" ; $Return = $True }
     }
-    if($Global:ForceNonInteractive -eq $True){
+    if($null -ne $Global:ForceNonInteractive -and $Global:ForceNonInteractive -eq $True){
         Write-LogDebug "Reset NonInteractive Mode to its previous mode [$Global:PreviousNonInteractiveMode]"
         $Global:NonInteractive=$Global:PreviousNonInteractiveMode
     }
