@@ -8752,11 +8752,11 @@ Try {
                                 Write-LogDebug "Create RW volume"
                                 if($ForceRest){
                                     if($Global:OntapSecondaryVersion -ge 9.08){
-                                        try{
-                                            $NewNcVolParameters+=@{analytics=@{state=$PrimaryVol.analytics.state}}
-                                        }catch{
-                                            $NewNcVolParameters.analytics.state=$PrimaryVol.analytics.state   
-                                        }
+                                        # try{
+                                        #     $NewNcVolParameters+=@{analytics=@{state=$PrimaryVol.analytics.state}}
+                                        # }catch{
+                                        #     $NewNcVolParameters.analytics.state=$PrimaryVol.analytics.state   
+                                        # }
                                         #$NewNcVolParameters+=@{access_time_enabled=$PrimaryVol.access_time_enabled}  Error cannot be set during POST
                                         $NewNcVolParameters+=@{cloud_retrieval_policy=$PrimaryVol.cloud_retrieval_policy}
                                         if($PrimaryVol.efficiency.application_io_size -match "8k|auto"){   # only 8k and auto supported during POST
@@ -8801,19 +8801,24 @@ Try {
                                                         Write-LogDebug "Compliance Clocks already configured on secondary nodes"
                                                     }
                                                 }
-                                                # There is no snaplock log volume. Need to create one
+                                                # There is no snaplock audit log volume. Need to create one
                                                 $snaplock_options=New-Object DataONTAP.C.Types.Volume.Snaplock
                                                 $snaplock_options.Type="compliance"
-                                                Write-LogDebug "New-NcVol -Name audit_sl_log -size 1G -type RW -Aggregate $Global:RootAggr -Snaplock $snaplock_options -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar"
-                                                $ret=New-NcVol -Name audit_sl_log -size 1G -type RW -Aggregate $Global:RootAggr -Snaplock $snaplock_options -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
-                                                if( $? -ne $True){Write-LogError("ERROR: Failed to create snaplock audit log volume. Reason [$ErrorVar]")}
+                                                if($null -eq (Get-NcVol -Name audit_sl_log -VserverContext $mySecondaryVserver -Controller $mySecondaryController )){
+                                                    Write-LogDebug "New-NcVol -Name audit_sl_log -size 1G -type RW -Aggregate $Global:RootAggr -Snaplock $snaplock_options -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar"
+                                                    $ret=New-NcVol -Name audit_sl_log -size 1G -type RW -Aggregate $Global:RootAggr -Snaplock $snaplock_options -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                                    if( $? -ne $True){Write-LogError("ERROR: Failed to create snaplock audit log volume. Reason [$ErrorVar]")}
+                                                }
                                                 Write-LogDebug "New-NcSnaplockLogConfig -VserverContext $mySecondaryVserver -Volume audit_sl_log -Controller $mySecondaryController"
-                                                $ret=New-NcSnaplockLogConfig -VserverContext $mySecondaryVserver -Volume audit_sl_log -Controller $mySecondaryController -ErrorVariable ErrorVar
-                                                if( $? -ne $True){Write-LogError("ERROR: Failed to create snaplock audit log config. Reason [$ErrorVar]")}
+                                                try{
+                                                    $ret=New-NcSnaplockLogConfig -VserverContext $mySecondaryVserver -Volume audit_sl_log -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                                }catch{
+                                                    Write-LogError("ERROR: Failed to create snaplock audit log config. Reason [$ErrorVar]")
+                                                }
                                             }
                                         }
                                         if($PrimaryVol.snaplock.type -match "enterprise|compliance"){
-                                            $NewNcVolParameters.snaplock=@{append_mode_enabled=$PrimaryVol.snaplock.append_mode_enabled}
+                                            $NewNcVolParameters.snaplock+=@{append_mode_enabled=$PrimaryVol.snaplock.append_mode_enabled}
                                             $NewNcVolParameters.snaplock+=@{autocommit_period=$PrimaryVol.snaplock.autocommit_period}
                                             if($PrimaryVol.snaplock.privileged_delete -match "enabled|permanently-disabled"){
                                                 $NewNcVolParameters.snaplock+=@{privileged_delete=$PrimaryVol.snaplock.privileged_delete}
