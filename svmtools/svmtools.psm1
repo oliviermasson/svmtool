@@ -8812,8 +8812,10 @@ Try {
                                                 if( $? -ne $True){Write-LogError("ERROR: Failed to create snaplock audit log config. Reason [$ErrorVar]")}
                                             }
                                         }
-                                        if($PrimaryVol.snaplock.type -ne "non-snaplock"){
-                                            $NewNcVolParameters.snaplock=@{append_mode_enabled=$PrimaryVol.snaplock.append_mode_enabled}
+                                        if($PrimaryVol.snaplock.type -match "enterprise|compliance"){
+                                            if($PrimaryVol.snaplock.append_mode_enabled -eq "enabled"){
+                                                $NewNcVolParameters.snaplock=@{append_mode_enabled=$PrimaryVol.snaplock.append_mode_enabled}
+                                            }
                                             $NewNcVolParameters.snaplock+=@{autocommit_period=$PrimaryVol.snaplock.autocommit_period}
                                             if($PrimaryVol.snaplock.privileged_delete -match "enabled|permanently-disabled"){
                                                 $NewNcVolParameters.snaplock+=@{privileged_delete=$PrimaryVol.snaplock.privileged_delete}
