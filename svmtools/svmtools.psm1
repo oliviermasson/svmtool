@@ -8817,32 +8817,27 @@ Try {
                                                 }
                                             }
                                         }
+                                        # if($PrimaryVol.name -eq "sle"){
+                                        #     Write-Log "begin debug"
+                                        # }
                                         if($PrimaryVol.snaplock.type -match "enterprise|compliance"){
                                             $NewNcVolParameters.snaplock+=@{append_mode_enabled=$PrimaryVol.snaplock.append_mode_enabled}
                                             $NewNcVolParameters.snaplock+=@{autocommit_period=$PrimaryVol.snaplock.autocommit_period}
                                             if($PrimaryVol.snaplock.privileged_delete -match "enabled|permanently-disabled"){
                                                 $NewNcVolParameters.snaplock+=@{privileged_delete=$PrimaryVol.snaplock.privileged_delete}
                                             }
-                                            if($null -ne $PrimaryVol.snaplock.snaplock.retention.default){
+                                            if($null -ne $PrimaryVol.snaplock.retention.default){
                                                 try{
-                                                    $NewNcVolParameters.snaplock+=@{retention=@{default=$PrimaryVol.snaplock.snaplock.retention.default}}
+                                                    $NewNcVolParameters.snaplock+=@{retention=@{default=$PrimaryVol.snaplock.retention.default}}
                                                 }catch{
-                                                    $NewNcVolParameters.snaplock.retention=@{default=$PrimaryVol.snaplock.snaplock.retention.default}
+                                                    $NewNcVolParameters.snaplock.retention+=@{default=$PrimaryVol.snaplock.retention.default}
                                                 } 
                                             }
-                                            if ($null -ne $PrimaryVol.snaplock.snaplock.retention.maximum){
-                                                try{
-                                                    $NewNcVolParameters.snaplock+=@{retention=@{maximum=$PrimaryVol.snaplock.snaplock.retention.maximum}}
-                                                }catch{
-                                                    $NewNcVolParameters.snaplock.retention=@{maximum=$PrimaryVol.snaplock.snaplock.retention.maximum}
-                                                }
+                                            if ($null -ne $PrimaryVol.snaplock.retention.maximum){
+                                                $NewNcVolParameters.snaplock.retention+=@{maximum=$PrimaryVol.snaplock.retention.maximum}
                                             }
-                                            if ($null -ne $PrimaryVol.snaplock.snaplock.retention.minimum){
-                                                try{
-                                                    $NewNcVolParameters.snaplock+=@{retention=@{minimum=$PrimaryVol.snaplock.snaplock.retention.minimum}}
-                                                }catch{
-                                                    $NewNcVolParameters.snaplock.retention=@{minimum=$PrimaryVol.snaplock.snaplock.retention.minimum} 
-                                                }
+                                            if ($null -ne $PrimaryVol.snaplock.retention.minimum){
+                                                $NewNcVolParameters.snaplock.retention+=@{minimum=$PrimaryVol.snaplock.retention.minimum} 
                                             }
                                         }
                                     }
@@ -25994,7 +25989,7 @@ Function restore_quota (
                             $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck -ErrorVariable ErrorVar
                             if($? -ne $True){
                                 Write-LogError "ERROR: Unable to post [$url]. Reason [$ErrorVar]"
-                                Write-LogDebug "[$workOn]: end"
+                                Write-LogDebug "[$myVserver]: end"
                                 return $False
                             }
                             $JobUuid=$ret.job.uuid
@@ -26009,10 +26004,10 @@ Function restore_quota (
                                     break
                                 }else{
                                     $JobStatus=$JobDetail.JobState
-                                    Write-LogDebug "[$workOn] Create quota rule job status [$JobStatus]"
+                                    Write-LogDebug "[$myVserver] Create quota rule job status [$JobStatus]"
                                     if($JobStatus -eq "failure"){
                                         $JobCompletion=$JobDetail.JobCompletion
-                                        Write-LogError "[$workOn] Create quota rule failed [$JobCompletion]"
+                                        Write-LogError "[$myVserver] Create quota rule failed [$JobCompletion]"
                                         break
                                     }
                                 }
@@ -26087,7 +26082,7 @@ Function restore_quota (
                             $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck -ErrorVariable ErrorVar
                             if($? -ne $True){
                                 Write-LogError "ERROR: Unable to post [$url]. Reason [$ErrorVar]"
-                                Write-LogDebug "[$workOn]: end"
+                                Write-LogDebug "[$myVserver]: end"
                                 return $False
                             }
                             $JobUuid=$ret.job.uuid
@@ -26102,10 +26097,10 @@ Function restore_quota (
                                     break
                                 }else{
                                     $JobStatus=$JobDetail.JobState
-                                    Write-LogDebug "[$workOn] Create quota rule job status [$JobStatus]"
+                                    Write-LogDebug "[$myVserver] Create quota rule job status [$JobStatus]"
                                     if($JobStatus -eq "failure"){
                                         $JobCompletion=$JobDetail.JobCompletion
-                                        Write-LogError "[$workOn] Create quota rule failed [$JobCompletion]"
+                                        Write-LogError "[$myVserver] Create quota rule failed [$JobCompletion]"
                                         break
                                     }
                                 }
@@ -26180,7 +26175,7 @@ Function restore_quota (
                             $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $Cred -Body $bodyquota -SkipCertificateCheck -ErrorVariable ErrorVar
                             if($? -ne $True){
                                 Write-LogError "ERROR: Unable to post [$url]. Reason [$ErrorVar]"
-                                Write-LogDebug "[$workOn]: end"
+                                Write-LogDebug "[$myVserver]: end"
                                 return $False
                             }
                             $JobUuid=$ret.job.uuid
@@ -26195,10 +26190,10 @@ Function restore_quota (
                                     break
                                 }else{
                                     $JobStatus=$JobDetail.JobState
-                                    Write-LogDebug "[$workOn] Create quota rule job status [$JobStatus]"
+                                    Write-LogDebug "[$myVserver] Create quota rule job status [$JobStatus]"
                                     if($JobStatus -eq "failure"){
                                         $JobCompletion=$JobDetail.JobCompletion
-                                        Write-LogError "[$workOn] Create quota rule failed [$JobCompletion]"
+                                        Write-LogError "[$myVserver] Create quota rule failed [$JobCompletion]"
                                         break
                                     }
                                 }
@@ -26814,17 +26809,17 @@ Try {
                                 break
                             }else{
                                 $JobStatus=$JobDetail.JobState
-                                Write-LogDebug "[$workOn] Disable quota job status [$JobStatus]"
+                                Write-LogDebug "[$myVserver] Disable quota job status [$JobStatus]"
                                 if($JobStatus -eq "failure"){
                                     $JobCompletion=$JobDetail.JobCompletion
-                                    Write-LogError "[$workOn] Disable quota job status [$JobCompletion]"
+                                    Write-LogError "[$myVserver] Disable quota job status [$JobCompletion]"
                                     break
                                 }
                             }
                             $CurrentTime=Get-date
                             $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
                             if($TimeSpend -gt $Global:STOP_TIMEOUT){
-                                Write-LogWarn "[$workOn] Disable quota job take too much time. Check in Ontap its status"
+                                Write-LogWarn "[$myVserver] Disable quota job take too much time. Check in Ontap its status"
                                 $Timeout=$True
                             }
                             Start-Sleep 5
@@ -26898,17 +26893,17 @@ Try {
                             break
                         }else{
                             $JobStatus=$JobDetail.JobState
-                            Write-LogDebug "[$workOn] Enable quota job status [$JobStatus]"
+                            Write-LogDebug "[$myVserver] Enable quota job status [$JobStatus]"
                             if($JobStatus -eq "failure"){
                                 $JobCompletion=$JobDetail.JobCompletion
-                                Write-LogError "[$workOn] Enable quota job status [$JobCompletion]"
+                                Write-LogError "[$myVserver] Enable quota job status [$JobCompletion]"
                                 break
                             }
                         }
                         $CurrentTime=Get-date
                         $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
                         if($TimeSpend -gt $Global:STOP_TIMEOUT){
-                            Write-LogWarn "[$workOn] Enable quota job take too much time. Check in Ontap its status"
+                            Write-LogWarn "[$myVserver] Enable quota job take too much time. Check in Ontap its status"
                             $Timeout=$True
                         }
                         Start-Sleep 5
@@ -27013,7 +27008,7 @@ Try {
             $QuotaPolicy=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
                 Write-LogError "ERROR: Unable to get quota policy rule details. Reason [$ErrorVar]"
-                Write-LogDebug "[$workOn]: end"
+                Write-LogDebug "[$myVserver]: end"
                 return $False
             }elseif($QuotaPolicy.num_records -gt 0){
                 $Policy=$PolicyName.records[0].policy_name
