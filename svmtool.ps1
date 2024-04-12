@@ -572,6 +572,7 @@
         - 0.7.2     Correct webrequest with pwsh 7.4.x
         - 0.7.3     Add support of compliance-clock and so support of snaplock and tamper-proof snapshot
         - 0.7.4     Correct Fpolicy, Correct snaplock and add current vol options
+        - 0.7.5     Correct exit behavior with log4net
 
 #>
 [CmdletBinding(HelpURI = "https://github.com/oliviermasson/svmtool", DefaultParameterSetName = "ListInstance")]
@@ -1182,7 +1183,7 @@ $Global:MIN_MINOR = 14
 $Global:MIN_BUILD = 1
 $Global:MIN_REVISION = 2401
 #############################################################################################
-$Global:RELEASE = "0.7.4"
+$Global:RELEASE = "0.7.5"
 $Global:SCRIPT_RELEASE = "0.1.32"
 if($PSVersionTable.PSVersion.Major -lt 7){
     $Global:BASEDIR = 'C:\Scripts\SVMTOOL'      

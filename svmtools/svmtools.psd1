@@ -95,13 +95,14 @@
 #   1.6.0   REST Transition
 #   1.6.1   Add compliance-clock, snaplock and tamperproof snapshot support
 #   1.6.2   Correct Fpolicy. Correct snaplock and add all current volume options
+#   1.6.3   Correct log4net exit
 @{
 
     # Script module or binary module file associated with this manifest.
     RootModule        = '.\svmtools.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.6.2'
+    ModuleVersion     = '1.6.3'
 
     # Supported PSEditions
     # CompatiblePSEditions = @()
