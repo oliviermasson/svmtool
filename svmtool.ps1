@@ -571,6 +571,7 @@
         - 0.7.1     ForceZapi modified
         - 0.7.2     Correct webrequest with pwsh 7.4.x
         - 0.7.3     Add support of compliance-clock and so support of snaplock and tamper-proof snapshot
+        - 0.7.4     Correct Fpolicy, Correct snaplock and add current vol options
 
 #>
 [CmdletBinding(HelpURI = "https://github.com/oliviermasson/svmtool", DefaultParameterSetName = "ListInstance")]
@@ -1176,13 +1177,13 @@ Param (
 #############################################################################################
 # Minimum Netapp Supported PSTK
 #############################################################################################
-$Global:MIN_MAJOR = 4
-$Global:MIN_MINOR = 5
-$Global:MIN_BUILD = 0
-$Global:MIN_REVISION = 0
+$Global:MIN_MAJOR = 9
+$Global:MIN_MINOR = 14
+$Global:MIN_BUILD = 1
+$Global:MIN_REVISION = 2401
 #############################################################################################
-$Global:RELEASE = "0.7.3"
-$Global:SCRIPT_RELEASE = "0.1.31"
+$Global:RELEASE = "0.7.4"
+$Global:SCRIPT_RELEASE = "0.1.32"
 if($PSVersionTable.PSVersion.Major -lt 7){
     $Global:BASEDIR = 'C:\Scripts\SVMTOOL'      
 }
@@ -1243,6 +1244,7 @@ $Global:BACKUPALLSVM = $False
 $Global:PreserveIdentity=$PreserveIdentity
 $Global:TieringPolicy=$TieringPolicy
 $Global:InsideMCC=$False
+$Global:ForceNonInteractive=$False
 if($RW.IsPresent){
     $Global:VOLUME_TYPE="rw"
 }else{
@@ -1432,8 +1434,8 @@ if($null -eq $module){
         $module = Get-Module NetApp.ONTAP,DataONTAP -ListAvailable
         if ($null -ne $module) {
             if($PSTKalpha.IsPresent){
-                Write-Log "Import PSTK Core Alpha"
-                $module = Import-Module NetApp.ONTAP -MinimumVersion 9.12.1.2302 -PassThru
+                Write-Log "Import PSTK Core"
+                $module = Import-Module NetApp.ONTAP -MinimumVersion 9.14.1.2401 -PassThru
                 $Global:PSTKCall="Rest"
             }else{
                 
@@ -1459,7 +1461,7 @@ if($null -eq $module){
                     $module = Import-Module $module[$indexModule].Path -PassThru
                 }else{
                     Write-LogDebug "Only one module NetApp.ONTAP is available"
-                    $module = Import-Module NetApp.ONTAP -PassThru
+                    $module = Import-Module NetApp.ONTAP -MinimumVersion 9.14.1.2401 -PassThru
                 # workaround for BURT 1385162
                 #$DataONTAP_SkipEmsReport = $null
                 #$DataONTAP_SkipUsageReport = $true 
@@ -2334,10 +2336,26 @@ if ( $Restore ) {
                 Write-LogDebug "restore_quota return False [$ret]"
                 #return $False
             }
-        }
+        } 
         else {
             Write-Log "Once Data restored via SnapMirror on DP destinations volumes, update, as necessarry, Snapshot Policy and Efficiency"
         }
+        # Restart everything
+        $lifToRestart=@()
+        foreach($lif in Get-NcNetInterface -Vserver $svm -Controller $DestinationController){
+            $lifToRestart+=$lif.InterfaceName
+        }
+        if ( ( $out=set_all_lif -mySecondaryVserver $svm -myPrimaryVserver $svm -mySecondaryController $DestinationController  -myPrimaryController $DestinationController -workOn $svm  -state up -Backup $False -Restore $True -lifRestored $lifToRestart ) -ne $True ) {
+            $Return=$False
+            Write-LogError "ERROR: Failed to set all lif up on [$svm]"
+        }
+        Write-LogDebug "Enable-NcNfs -VserverContext $svm -Controller $DestinationController"
+        $ret=Enable-NcNfs -VserverContext $svm -Controller $DestinationController -ErrorVariable ErrorVar -ErrorAction SilentlyContinue
+        Write-LogDebug "Start-NcCifsServer -VserverContext $svm -Controller $DestinationController"
+        $ret=Start-NcCifsServer -VserverContext $svm -Controller $DestinationController -ErrorVariable ErrorVar -ErrorAction SilentlyContinue
+        Write-LogDebug "Enable-NcIscsi -VserverContext $svm -Controller $DestinationController"
+        $ret=Enable-NcIscsi -VserverContext $svm -Controller $DestinationController -ErrorAction SilentlyContinue -ErrorVariable ErrorVar
+
         flush_log4net -loggerinstance "console_$guid"
         flush_log4net -loggerinstance "logonly_$guid"
         clean_and_exit 0
