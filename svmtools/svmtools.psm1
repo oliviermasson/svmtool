@@ -974,7 +974,7 @@ Try {
 }
 
 Catch {
-	Error_Handling $_ $Instance
+	Error_Handling $_ $Instance -donotcleanlog4net
 	return $False
 }
 }
@@ -1138,7 +1138,7 @@ Try {
 }
 
 Catch {
-	Error_Handling $_ $myController
+	Error_Handling $_ $myController -donotcleanlog4net
 	return $false
 }
 }
@@ -1185,7 +1185,7 @@ Function set_cDotcred_from_cli ([string]$filer, [string]$cred_file ) {
 	    }
     }
     Catch {
-	    Error_Handling $_ $filer
+	    Error_Handling $_ $filer -donotcleanlog4net
 	    return $False
     }
 
@@ -2069,7 +2069,7 @@ Function create_update_vscan_dr (
     }
     catch
     {
-        Error_Handling $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
         return $Return        
     }
 }
@@ -2184,7 +2184,7 @@ Function create_update_firewallpolicy_dr(
     }
     catch
     {
-        Error_Handling $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	    return $false        
     }
 }
@@ -2225,7 +2225,7 @@ Function get_vserver_clone(
     }
     catch
     {
-        Error_Handling $_ $DestinationVserver
+        Error_Handling $_ $DestinationVserver -donotcleanlog4net
 	    return $false        
     }
 }
@@ -2343,7 +2343,7 @@ Function create_update_usermapping_dr(
     }
     catch
     {
-        Error_Handling $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
         return $Return        
     }
 }
@@ -2550,7 +2550,7 @@ Function create_update_localuser_dr(
     }
     catch
     {
-        Error_Handling $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	    return $Return        
     }
 }
@@ -2712,7 +2712,7 @@ Function create_update_localunixgroupanduser_dr(
     }
     catch
     {
-        Error_Handling $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
         return $Return        
     }
 }
@@ -2898,7 +2898,7 @@ Function create_update_role_dr(
     }
     catch
     {
-        Error_Handling $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
         return $Return       
     }
 }
@@ -4037,7 +4037,7 @@ Function create_update_fpolicy_dr(
     }
     catch
     {
-        Error_Handling $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
         Write-LogDebug "$ErrorVar"
         return $Return        
     }
@@ -4996,7 +4996,7 @@ Try {
         $PrimaryName=(Get-NcCluster -Controller $myPrimaryController).ClusterName
         Write-LogDebug "Get-NcJobSchedule -Controller $myPrimaryController -Query @{scope=cluster;JobScheduleCluster=$PrimaryName}"
         $PrimaryCronList = Get-NcJobSchedule -Controller $myPrimaryController -ErrorVariable ErrorVar -Query @{scope="cluster";JobScheduleCluster=$PrimaryName}
-        if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcJobSchedule failed [$ErrorVar]" }
+        if ( $? -ne $True ) { $Return = $False ; Write-LogError  "ERROR: Get-NcJobSchedule failed [$ErrorVar]" }
     }else{
         if(Test-Path $($Global:JsonPath+"Get-NcJobSchedule_cluster.json")){
             $PrimaryCronList=Get-Content $($Global:JsonPath+"Get-NcJobSchedule_cluster.json") -Raw | ConvertFrom-Json
@@ -5940,7 +5940,7 @@ Try {
 	return $Return
 }
 Catch {
-	Error_Handling $_ $workOn
+	Error_Handling $_ $workOn -donotcleanlog4net
 	return $Return
 }
 }
@@ -6099,7 +6099,7 @@ Function create_update_efficiency_policy_dr(
     }
     Catch 
     {
-	    Error_Handling $_ $myPrimaryVserver
+	    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	    return $Return
     }
 }
@@ -6228,7 +6228,7 @@ Try {
 	return $Return
 }
 Catch {
-	Error_Handling $_ $myPrimaryVserver
+	Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -6342,7 +6342,7 @@ Try {
 	return $Return
 }
 Catch {
-	Error_Handling $_ $myPrimaryVserver
+	Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -6553,7 +6553,7 @@ Try {
 	return $Return
 }
 Catch {
-	Error_Handling $_ $myPrimaryVserver
+	Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -6719,7 +6719,7 @@ Function set_serial_lundr (
     } 
     Catch 
     {
-        Error_Handling $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
     }
 	if ( $NeedChangeSerial ) 
     {
@@ -6804,7 +6804,7 @@ Try {
 	Return $Return 
 }
 Catch {
-	Error_Handling $_ $myPrimaryVserver
+	Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -7132,7 +7132,7 @@ try{
     Write-LogDebug "[$myVserver]: end"
     return $Return
 }catch{
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
     return $False
 }   
 }
@@ -7191,7 +7191,7 @@ try{
     Write-LogDebug "[$myVserver]: end"
     return $Return
 }catch{
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
     return $False
 }   
 }
@@ -7868,7 +7868,7 @@ Try {
 	return $Return 
 }
 Catch {
-	Error_Handling $_ $myPrimaryVserver
+	Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -7983,7 +7983,7 @@ Try {
     return $Return  
 }
 Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -9093,7 +9093,7 @@ Try {
 	return $Return  
 }
 Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -9260,7 +9260,7 @@ Try {
 	return $Return 
 }
 Catch {
-    Error_Handling $_ $myVserver
+    Error_Handling $_ $myVserver -donotcleanlog4net
 	return $Return
     }
 }
@@ -9411,7 +9411,7 @@ Try {
 	return $Return 
 }
 Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	return $Return
     }
 }
@@ -9641,7 +9641,7 @@ Try {
     return $Return
 }
 Catch {
-    Error_Handling $_ $myVserver
+    Error_Handling $_ $myVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -9670,7 +9670,7 @@ Function read_subdir (
                 $Return=$False
             }
         }catch{
-            Error_Handling $_ $myVserver
+            Error_Handling $_ $myVserver -donotcleanlog4net
             return $Return    
         }
     } 
@@ -9766,7 +9766,7 @@ Try {
 	return $Return 
 }
 Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -10042,7 +10042,7 @@ Try {
 	return $Return 
 }
 Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -10103,7 +10103,7 @@ Try {
 	return $Return 
 }
 Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -10150,7 +10150,7 @@ Try {
 	return $Return 
 }
 Catch {
-    Error_Handling $_ $myPrimaryCluster
+    Error_Handling $_ $myPrimaryCluster -donotcleanlog4net
 	return $Return
 }
 }
@@ -10208,7 +10208,7 @@ Try {
     }
 }
 Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -10245,7 +10245,7 @@ Try {
 	return $Return 
 }
 Catch {
-    Error_Handling $_ $clustername
+    Error_Handling $_ $clustername -donotcleanlog4net
 	return $Return
 }
 }
@@ -10351,7 +10351,7 @@ Try {
 	return $Return 
 }
 Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -10394,7 +10394,7 @@ Try {
 	return $Return 
 }
 Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -10473,7 +10473,7 @@ Function set_snapmirror_schedule_dr(
     }
     Catch 
     {
-        Error_Handling $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
         return $Return
     }
 }
@@ -10544,7 +10544,7 @@ Try {
 	return $Return 
 }
 Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -10643,7 +10643,7 @@ Function wait_snapmirror_dr_status{
         Write-LogDebug "[$DestinationVserver]: end"
     	return $Return 
     }catch{
-        Error_Handling $_ $mySecondaryVserver
+        Error_Handling $_ $mySecondaryVserver -donotcleanlog4net
     	return $Return
     }
 }
@@ -10758,7 +10758,7 @@ Function wait_snapmirror_dr(
     } 
     Catch 
     {
-        Error_Handling $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
         return $Return
     }
 }
@@ -10825,7 +10825,7 @@ try{
     Write-LogDebug "[$Vserver]: stop"
     return $True
 }catch{
-    Error_Handling $_ $Vserver
+    Error_Handling $_ $Vserver -donotcleanlog4net
     Write-Log "ErrorDetail : $_.ErrorDetails"
 	return $False
 }
@@ -10929,7 +10929,7 @@ Try{
     }
 }
 catch{
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	return $False
 }
 }
@@ -10962,7 +10962,7 @@ Try {
     return $Return 
 }
 Catch {
-Error_Handling $_ $workOn
+Error_Handling $_ $workOn -donotcleanlog4net
 return $Return
 }
 }
@@ -11037,7 +11037,7 @@ Try {
     return $Return 
 }
 Catch {
-Error_Handling $_ $workOn
+Error_Handling $_ $workOn -donotcleanlog4net
 return $Return
 }
 }
@@ -11780,7 +11780,7 @@ Try {
 	return $Return 
 }
 Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -11913,7 +11913,7 @@ Try {
 	return $Return 
 }
 Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -12486,7 +12486,7 @@ Try {
 }
     Catch 
     {
-        Error_Handling $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	    return $Return
     }
 }
@@ -12632,7 +12632,7 @@ Try {
 	return $Return 
 }
 Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -12762,7 +12762,7 @@ Try {
     return $True 
 }
 Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
     return $Return
 }
 }
@@ -12852,7 +12852,7 @@ Try {
 	return $Return
 }
 Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -12958,7 +12958,7 @@ Try {
 	return $NfsServiceDiff 
 }
 Catch {
-    Error_Handling $_ "compare NFS services"
+    Error_Handling $_ "compare NFS services" -donotcleanlog4net
 	return $Return
 }
 }
@@ -13072,7 +13072,7 @@ Try {
 	return $Return 
 }
 Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -13145,7 +13145,7 @@ Function check_update_CIFS_server_dr (
         Write-LogDebug "[$workOn]: end"
     }
     Catch {
-        Error_Handling $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	    return $Return
     }
 }
@@ -13563,7 +13563,7 @@ Try {
     return $Return
 }
 Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -13727,7 +13727,7 @@ Try {
     return $Return
 }
 Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
     return $Return
 }
 }
@@ -13809,7 +13809,7 @@ Try {
     return $True 
 }
 Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
     return $Return
 }
 }
@@ -14491,7 +14491,7 @@ Try {
     return $True 
 }
 Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
     return $Return
 }
 }
@@ -15262,7 +15262,7 @@ Try {
     return $True
 }
 Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
     return $Return
     }
 }
@@ -16143,7 +16143,7 @@ $request=@"
 	return $True
 }
 Catch {
-    Error_Handling $_ $workOn
+    Error_Handling $_ $workOn -donotcleanlog4net
     Write-Host "$_.ErrorDetails"
 	return $Return
 }
@@ -16262,7 +16262,7 @@ Try {
 	return $Return 
 }
 Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -17095,7 +17095,7 @@ Function show_vserver_dr (
     }
     Catch 
     {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
     }
 }
 
@@ -17284,7 +17284,7 @@ Try {
     Write-LogDebug "[$myPrimaryVserver]: end"
     return $Return 
 } Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	return $False
 }
 }
@@ -17546,7 +17546,7 @@ Try {
     Write-LogDebug "[$myPrimaryVserver]: end"
     return $Return 
 } Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -17907,7 +17907,7 @@ Try {
     Write-LogDebug "[$myPrimaryVserver]: end"
     return $Return 
 } Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -18017,7 +18017,7 @@ Try {
     Write-LogDebug "end"
     return $Return 
 } Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
     return $Return
 }
 }
@@ -18153,7 +18153,7 @@ Try {
     Write-LogDebug "end" 
     return $Return
 }catch{
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
     return $Return
 }
 }
@@ -18312,7 +18312,7 @@ Try {
 
 }
 catch{
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -18428,7 +18428,7 @@ Try {
     return $Return
 }
 Catch {
-    Error_Handling $_ $mySecondaryVserver
+    Error_Handling $_ $mySecondaryVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -18576,7 +18576,7 @@ Try {
 	return $true 
 }
 Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -18799,7 +18799,7 @@ Try {
 	return $Return 
 }
 Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -18956,7 +18956,7 @@ Try {
         }
 	}
 } Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 }
     Write-LogDebug "end"
 	return $Return 
@@ -19129,7 +19129,7 @@ try{
     return $Return
 } 
 Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 }
     Write-LogDebug "end"
 	return $Return 
@@ -19372,7 +19372,7 @@ try{
     }
 
 } Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 }
     Write-LogDebug "end"
 	return $Return 
@@ -19824,7 +19824,7 @@ try{
         }
     }
 } Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 }
     Write-LogDebug "end Migrate_cifs_server"
 	return $Return 
@@ -20318,7 +20318,7 @@ try{
     Write-LogDebug "[$myPrimaryVserver]: end"
     return $True
 } Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 }
     Write-LogDebug "end"
 	return $Return 
@@ -20622,7 +20622,7 @@ Try {
 	return $Return 
 }
 Catch {
-    Error_Handling $_ $myVserver
+    Error_Handling $_ $myVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -20711,7 +20711,7 @@ Try {
 	return $Return 
 }
 Catch {
-    Error_Handling $_ $myVserver
+    Error_Handling $_ $myVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -20746,7 +20746,7 @@ Try {
     Write-LogDebug "end"
     Return $Return
 }catch{
-    Error_Handling $_ $myVserver
+    Error_Handling $_ $myVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -21742,7 +21742,7 @@ Function resync_reverse_vserver_dr (
     }
     Catch 
     {
-        Error_Handling $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	    return $Return
     }
 }
@@ -21875,7 +21875,7 @@ Function resync_vserver_dr (
     }
     Catch 
     {
-        Error_Handling $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
         return $Return
     }
 }
@@ -22015,7 +22015,7 @@ Try {
 	return $Return
 }
 Catch {
-    Error_Handling $_ $myVserver
+    Error_Handling $_ $myVserver -donotcleanlog4net
 	return $Return
     }
 }
@@ -22166,7 +22166,7 @@ Function create_subdir (
                 Write-LogDebug "directory [$fullpath] already exist on [$myVserver]"
             }
         }catch{
-            Error_Handling $_ $myVserver
+            Error_Handling $_ $myVserver -donotcleanlog4net
             return $Return    
         }
     } 
@@ -22316,7 +22316,7 @@ Function mount_volume (
         Write-LogDebug "end $myVolumeName"
         return $Return  
     }catch{
-        Error_Handling $_ $myVserver
+        Error_Handling $_ $myVserver -donotcleanlog4net
         return $Return    
     }                 
     Write-LogDebug "end $myVolumeName"
@@ -22416,7 +22416,7 @@ Try {
         Write-LogDebug "end"
         return $Return
     }catch{
-        Error_Handling $_ $myVserver
+        Error_Handling $_ $myVserver -donotcleanlog4net
         return $Return
     }
 }
@@ -22618,7 +22618,7 @@ Try {
     Write-LogDebug "end"
     return $Return
     }catch{
-        Error_Handling $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
         return $Return
     }
 }
@@ -22790,7 +22790,7 @@ Try {
     }
 }
 Catch {
-    Error_Handling $_ $myVserver
+    Error_Handling $_ $myVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -23020,7 +23020,7 @@ Try {
     Return $Return
 }
 Catch {
-    Error_Handling $_ $myPrimaryVserver
+    Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -23062,7 +23062,7 @@ Function get_volumes_from_selectvolumedb (
     }
     Catch 
     {
-        Error_Handling $_ $myVserver
+        Error_Handling $_ $myVserver -donotcleanlog4net
         return $Return
     }
 }
@@ -23098,7 +23098,7 @@ Function Is_SelectVolumedb (
             return $False   
         }    
     }catch{
-        Error_Handling $_ $SourceVserver
+        Error_Handling $_ $SourceVserver -donotcleanlog4net
     	return $Return
     }
 }
@@ -23184,7 +23184,7 @@ Function Purge_SelectVolumedb (
         }
            
     }catch{
-        Error_Handling $_ $SourceVserver
+        Error_Handling $_ $SourceVserver -donotcleanlog4net
     	return $Return
     }
 }
@@ -23268,7 +23268,7 @@ Function Save_Cluster_To_JSON (
         Write-LogDebug "end"
         return $Return
     }catch{
-        Error_Handling $_ $SourceVserver
+        Error_Handling $_ $SourceVserver -donotcleanlog4net
     	return $Return    
     }    
 }
@@ -23361,7 +23361,7 @@ Function Save_Cifs_Infos_To_JSON (
         Write-LogDebug "end"
         return $Return
     }catch{
-        Error_Handling $_ $SourceVserver
+        Error_Handling $_ $SourceVserver -donotcleanlog4net
     	return $Return    
     }
 }
@@ -23414,7 +23414,7 @@ Function Read_Cifs_Symlink_from_Json (
         return $CifsInfos,$CifsSearchDir,$CifsShare,$CifsShareAcl
 
     }catch{
-        Error_Handling $_ $myVserver
+        Error_Handling $_ $myVserver -donotcleanlog4net
     	return $False    
     }
 }
@@ -23471,7 +23471,7 @@ Function Save_Cifs_Symlink_To_JSON (
         Write-LogDebug "end"
         return $Return
     }catch{
-        Error_Handling $_ $SourceVserver
+        Error_Handling $_ $SourceVserver -donotcleanlog4net
     	return $Return    
     }
 }
@@ -23518,7 +23518,7 @@ Function Restore_Cifs_Symlink_from_Json (
         Write-LogDebug "end"
         return $True
     }catch{
-        Error_Handling $_ $myVserver
+        Error_Handling $_ $myVserver -donotcleanlog4net
     	return $Return    
     }
 }
@@ -23633,7 +23633,7 @@ Function Save_CIFS_To_JSON (
         Write-LogDebug "end"
         return $Return
     }catch{
-        Error_Handling $_ $SourceVserver
+        Error_Handling $_ $SourceVserver -donotcleanlog4net
     	return $Return    
     }
 }
@@ -23823,7 +23823,7 @@ Function Set_CIFS_from_JSON (
         Write-LogDebug "end"
         return $Return
     }catch{
-        Error_Handling $_ $ToVserver
+        Error_Handling $_ $ToVserver -donotcleanlog4net
     	return $Return    
     }
 }
@@ -23879,7 +23879,7 @@ Function Add_CIFS_from_JSON (
         Write-LogDebug "end"
         return $True
     }catch{
-        Error_Handling $_ $ToVserver
+        Error_Handling $_ $ToVserver -donotcleanlog4net
     	return $Return    
     }
 }
@@ -24037,7 +24037,7 @@ Function Set_LIF_from_JSON (
         Write-LogDebug "end"
         return $True
     }catch{
-        Error_Handling $_ $ToVserver
+        Error_Handling $_ $ToVserver -donotcleanlog4net
     	return $Return    
     }
 }
@@ -24150,7 +24150,7 @@ Function Save_Route_To_JSON (
         Write-LogDebug "end"
         return $Return
     }catch{
-        Error_Handling $_ $SourceVserver
+        Error_Handling $_ $SourceVserver -donotcleanlog4net
     	return $Return    
     }
 }
@@ -24262,7 +24262,7 @@ Function Save_LIF_To_JSON (
         Write-LogDebug "end"
         return $Return
     }catch{
-        Error_Handling $_ $SourceVserver
+        Error_Handling $_ $SourceVserver -donotcleanlog4net
     	return $Return    
     }
 }
@@ -24348,7 +24348,7 @@ Function Save_Volume_To_Selectvolumedb (
     }
     Catch 
     {
-        Error_Handling $_ $SourceVserver
+        Error_Handling $_ $SourceVserver -donotcleanlog4net
     	return $Return
     }
 }
@@ -24503,7 +24503,7 @@ Function save_vol_options_to_voldb (
     }
     Catch 
     {
-        Error_Handling $_ $myVserver
+        Error_Handling $_ $myVserver -donotcleanlog4net
         return $Return
     }
 }
@@ -25097,7 +25097,7 @@ Function set_vol_options_from_voldb (
     }
     Catch 
     {
-        Error_Handling $_ $myVserver
+        Error_Handling $_ $myVserver -donotcleanlog4net
     	return $Return
     }
 }
@@ -25274,7 +25274,7 @@ Function save_shareacl_options_to_shareacldb (
     }
     Catch 
     {
-        Error_Handling $_ $myPrimaryVserver
+        Error_Handling $_ $myPrimaryVserver -donotcleanlog4net
     	return $Return
     }
 }
@@ -25402,7 +25402,7 @@ Function set_shareacl_options_from_shareacldb (
     }
     Catch 
     {
-        Error_Handling $_ $myVserver
+        Error_Handling $_ $myVserver -donotcleanlog4net
     	return $Return
     }
 }
@@ -25867,7 +25867,7 @@ Function restore_quota (
     }
     Catch 
     {
-        Error_Handling $_ $myVserver
+        Error_Handling $_ $myVserver -donotcleanlog4net
 	    return $Return
     }
 }
@@ -26377,7 +26377,7 @@ Function create_quota_rules_from_quotadb (
     }
     Catch 
     {
-        Error_Handling $_ $myVserver
+        Error_Handling $_ $myVserver -donotcleanlog4net
 	    return $Return
     }
 }
@@ -26598,7 +26598,7 @@ Try {
     return $Return
 }
 Catch {
-    Error_Handling $_ $myVserver
+    Error_Handling $_ $myVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -26839,7 +26839,7 @@ Try {
 	return $Return 
 }
 Catch {
-    Error_Handling $_ $myVserver
+    Error_Handling $_ $myVserver -donotcleanlog4net
 	return $Return
 }
 }
@@ -26991,7 +26991,7 @@ Try {
     return $Return
 }
 Catch {
-        Error_Handling $_ $workOn
+        Error_Handling $_ $workOn -donotcleanlog4net
         return $Return
     }
 }
@@ -27025,7 +27025,7 @@ Try {
     Write-LogDebug "end"
 }
 Catch {
-        Error_Handling $_ $workOn
+        Error_Handling $_ $workOn -donotcleanlog4net
         return $Return
     }
 }
@@ -27326,7 +27326,7 @@ Function create_update_servicepolicy_dr(
     }
     catch
     {
-        Error_Handling $_ $workOn
+        Error_Handling $_ $workOn -donotcleanlog4net
 	    return $false        
     }
 }
