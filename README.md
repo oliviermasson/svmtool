@@ -9,9 +9,9 @@ If you need to Encrypt your destination volumes you will need at least the versi
 
 It also require at least .Net Framework v3.5 and Windows Powershell at least v7.4 and last version of PSTK (at least 9.14.1)
 
-SVMTOOL is now compatible with Powershell Core (Powershell version 7.x and upper)
+SVMTOOL requiere PWSH Core version v7.4.2 at least
 
-So SVMTOOL is now compatible under Windows, Linux and MacOS.
+SVMTOOL is now compatible under Windows, Linux and MacOS.
 
 Due to BURT 1525926 and with Metrocluster in the loop you must run the following ONTAP version or upper:
 9.10.1P14, 9.11.1P11, 9.12.1P5, 9.13.1P2
