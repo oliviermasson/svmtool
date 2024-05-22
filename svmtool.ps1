@@ -573,6 +573,7 @@
         - 0.7.3     Add support of compliance-clock and so support of snaplock and tamper-proof snapshot
         - 0.7.4     Correct Fpolicy, Correct snaplock and add current vol options
         - 0.7.5     Correct exit behavior with log4net
+        - 0.7.6     Correct ExportPolicy create, Vol create, Fpolicy create
 
 #>
 [CmdletBinding(HelpURI = "https://github.com/oliviermasson/svmtool", DefaultParameterSetName = "ListInstance")]
@@ -1183,7 +1184,7 @@ $Global:MIN_MINOR = 14
 $Global:MIN_BUILD = 1
 $Global:MIN_REVISION = 2401
 #############################################################################################
-$Global:RELEASE = "0.7.5"
+$Global:RELEASE = "0.7.6"
 $Global:SCRIPT_RELEASE = "0.1.32"
 if($PSVersionTable.PSVersion.Major -lt 7){
     $Global:BASEDIR = 'C:\Scripts\SVMTOOL'      
@@ -1210,7 +1211,7 @@ $Global:SINGLE_CLUSTER = $False
 $Global:SILENT_PERIOD = 3 				# SILENT_PERIOD in seconds after which we will test again if Primary site is alive
 if($ForceRestoreOriginal.IsPresent){
     $Global:RESTORE_ORIGINAL = $True    
-}
+}else{$Global:RESTORE_ORIGINAL = $Fasle}
 $Global:ForceRestoreOriginal=$ForceRestoreOriginal
 $DebugPreference = "SilentlyContinue"
 $VerbosePreference = "SilentlyContinue"
@@ -1220,6 +1221,7 @@ $WarningPreference="SilentlyContinue"   # ! this is related to REST call behavio
 if ($WfaIntegration -or $UpdateDR -or $UpdateReverse) {
     $NonInteractive = $true
 }
+$Global:NonInteractive=$False
 $Global:RootAggr = $RootAggr
 $Global:DataAggr = $DataAggr
 $Global:NonInteractive = $NonInteractive

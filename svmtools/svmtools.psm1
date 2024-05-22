@@ -5,7 +5,7 @@
     This module contains several functions to manage SVMDR, Backup and Restore Configuration...
 .NOTES
     Authors  : Olivier Masson, Jerome Blanchet, Mirko Van Colen
-    Release  : February 24th 2022
+    Release  : May 22th 2024
 
 #>
 
@@ -1041,16 +1041,18 @@ Function get_local_cred ([string]$myCredential,[switch]$ResetPassword,[switch]$A
     }
 	if ( $null -eq $cred ) 
     {
+        # Write-Log "global noninteractive [$Global:NonInteractive]"
+        # Write-Log "global adcred [$Global:ActiveDirectoryCredentials]"
         if( -not $Global:NonInteractive -or ( $null -ne $Global:ActiveDirectoryCredentials ) ){
             $status = set_cred_from_cli $myCredential $Global:CRED_CONF_FILE
             $cred=read_cred_from_file $Global:CRED_CONF_FILE
             if ( $null -eq $cred ) 
             {
-                Write-LogError "ERROR: Unable to set your credentials for $myCredential Exit" 
+                Write-LogError "ERROR: Unable to set your credentials for $myCredential" 
                 clean_and_exit 1
             }
         }else{
-            Write-LogError "ERROR: Unable to set your credentials for $myCredential in NonInteractive Mode | Exit" 
+            Write-LogError "ERROR: Unable to set your credentials for $myCredential in NonInteractive Mode" 
             clean_and_exit 1
         }
 	}
@@ -1222,11 +1224,11 @@ Function get_local_cDotcred ([string]$myCluster) {
         	$status = set_cDotcred_from_cli $myCluster $Global:CRED_CONF_FILE
 		    $cred=read_cred_from_file $Global:CRED_CONF_FILE
 		    if ( $null -eq $cred ) {
-			    Write-LogError "ERROR: Unable to set your credential for $myCluster Exit" 
+			    Write-LogError "ERROR: Unable to set your credential for $myCluster" 
         		    clean_and_exit 1
 		    }
         }else{
-			Write-LogError "ERROR: Unable to set your credentials for $myCluster in NonInteractive Mode | Exit" 
+			Write-LogError "ERROR: Unable to set your credentials for $myCluster in NonInteractive Mode" 
         	clean_and_exit 1
         }
 	}
@@ -3405,7 +3407,9 @@ Function create_update_fpolicy_dr(
                                     name=$PrimaryFpolicyEngineName
                                     port=$PrimaryFpolicyEnginePort
                                     primary_servers=$PrimaryFpolicyEnginePrimaryServers
-                                    secondary_servers=$PrimaryFpolicyEngineSecondaryServers
+                                }
+                                if($null -ne $PrimaryFpolicyEngineSecondaryServers){
+                                    $bodyfpolicy.secondary_servers=$PrimaryFpolicyEngineSecondaryServers
                                 }
                                 if($PrimaryFpolicyEngineExternEngineType -eq "Synchronous"){
                                     $bodyfpolicy.type="synchronous"
@@ -6228,21 +6232,22 @@ Try {
                     if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Remove-NcExportRule failed [$ErrorVar]" }
                 } 
                 Write-LogDebug "$RuleIndex"
-                Write-LogDebug "New-NcExportRule -Policy $PolicyName -Index $RuleIndex  -ClientMatch $ClientMatch -ReadOnlySecurityFlavor  $RoRule -ReadWriteSecurityFlavor  $RwRule -Protocol  $Protocol -Anon  $AnonymousUserId -SuperUserSecurityFlavor $SuperUserSecurity -NtfsUnixSecurityOps $ExportNtfsUnixSecurityOps -ChownMode $ExportChownMode -Vserver $mySecondaryVserver -Controller $mySecondaryController"
-                $out=New-NcExportRule -Policy $PolicyName -Index $RuleIndex  -ClientMatch $ClientMatch -ReadOnlySecurityFlavor  $RoRule -ReadWriteSecurityFlavor  $RwRule -Protocol  $Protocol -Anon  $AnonymousUserId -SuperUserSecurityFlavor $SuperUserSecurity -NtfsUnixSecurityOps $ExportNtfsUnixSecurityOps -ChownMode $ExportChownMode -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                Write-LogDebug "New-NcExportRule -Policy $PolicyName -ClientMatch $ClientMatch -ReadOnlySecurityFlavor  $RoRule -ReadWriteSecurityFlavor  $RwRule -Protocol  $Protocol -Anon  $AnonymousUserId -SuperUserSecurityFlavor $SuperUserSecurity -NtfsUnixSecurityOps $ExportNtfsUnixSecurityOps -ChownMode $ExportChownMode -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                $out=New-NcExportRule -Policy $PolicyName -ClientMatch $ClientMatch -ReadOnlySecurityFlavor  $RoRule -ReadWriteSecurityFlavor  $RwRule -Protocol  $Protocol -Anon  $AnonymousUserId -SuperUserSecurityFlavor $SuperUserSecurity -NtfsUnixSecurityOps $ExportNtfsUnixSecurityOps -ChownMode $ExportChownMode -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: New-NcExportRule failed [$ErrorVar]" }
+                $createdRuleIndex=$out.RuleIndex
                 if ( $IsAllowSetUidEnabled -eq $True ) {
-                    $out=Set-NcExportRule -Policy $PolicyName -Index $RuleIndex -EnableSetUid -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                    $out=Set-NcExportRule -Policy $PolicyName -Index $createdRuleIndex -EnableSetUid -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                     if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcExportRule failed [$ErrorVar]" }
                 } else {
-                    $out=Set-NcExportRule -Policy $PolicyName -Index $RuleIndex -DisableSetUi -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                    $out=Set-NcExportRule -Policy $PolicyName -Index $createdRuleIndex -DisableSetUi -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                     if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcExportRule failed [$ErrorVar]" }
                 }
                 if ( $IsAllowDevIsEnabled  -eq $True ) { 
-                    $out=Set-NcExportRule -Policy $PolicyName -Index $RuleIndex -EnableDev -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                    $out=Set-NcExportRule -Policy $PolicyName -Index $createdRuleIndex -EnableDev -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                     if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcExportRule failed [$ErrorVar]" }
                 } else {
-                    $out=Set-NcExportRule -Policy $PolicyName -Index $RuleIndex -DisableDev -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                    $out=Set-NcExportRule -Policy $PolicyName -Index $createdRuleIndex -DisableDev -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                     if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcExportRule failed [$ErrorVar]" }
                 }
             }
@@ -8610,8 +8615,10 @@ Try {
                         }
 
                         if(($Global:PSTKCall -eq "Rest") -and ($Global:OntapSecondaryVersion -ge 9.12)){
-                            $NewNcVolParameters.snapshot_locking_enabled=$PrimaryVolTamperProofSnapshot
-                            $checkComplianceClock=$True
+                            if($PrimaryVolTamperProofSnapshot -eq $True){
+                                $NewNcVolParameters.snapshot_locking_enabled=$PrimaryVolTamperProofSnapshot
+                                $checkComplianceClock=$True
+                            }
                         }
                         
                         if($Global:PSTKCall -eq "Rest"){
@@ -8689,7 +8696,13 @@ Try {
                             if($ForceRest){
                                 $bodyvol=$NewNcVolParameters | ConvertTo-Json
                                 Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck"
-                                $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck -ErrorVariable ErrorVar
+                                try{
+                                    $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $CredSecondary -Body $bodyvol -SkipCertificateCheck -ErrorVariable ErrorVar
+                                }catch{
+                                    $ErrorDetails = $_.ErrorDetails
+                                    Write-LogError "ERROR: Failed to create volume [$PrimaryVolName] Details [$ErrorDetails]"
+                                    clean_and_exit 1
+                                }
                                 if($? -ne $True){
                                     Write-LogError "ERROR: Unable to create volume [$PrimaryVolName] Reason [$ErrorVar]"
                                     Write-LogDebug "[$workOn]: end"
@@ -8772,9 +8785,9 @@ Try {
                                             if($null -eq (Get-NcSnaplockLogConfig -Vserver $mySecondaryVserver -Controller $mySecondaryController)){
                                                 #Need to check an initialize compliance clock on secondary because there is at least one snaplock volume or tamper proof snapshot
                                                 $Credential = get_local_cDotcred($mySecondaryController)
-                                                $url=$("https://"+$mySecondaryController.Name+"/api/storage/snaplock/compliance-clocks?fields=time&return_timeout=15&return_records=true")
-                                                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $Credential -SkipCertificateCheck"
-                                                $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
+                                                $urlComplianceClock=$("https://"+$mySecondaryController.Name+"/api/storage/snaplock/compliance-clocks?fields=time&return_timeout=15&return_records=true")
+                                                Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $urlComplianceClock -Credential $Credential -SkipCertificateCheck"
+                                                $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $urlComplianceClock -Credential $Credential -SkipCertificateCheck -ErrorVariable ErrorVar
                                                 if($? -ne $True){
                                                     Write-LogError "ERROR: Unable to get compliance clocks. Reason [$ErrorVar]" 
                                                 }else{
@@ -8787,9 +8800,9 @@ Try {
                                                                 "name"=$node
                                                             }
                                                             $bodyclock=$bodyclock | ConvertTo-Json
-                                                            $url=$("https://"+$mySecondaryController.Name+"/api/storage/snaplock/compliance-clocks")
-                                                            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method post -Uri $url -Credential $Credential -body $bodyclock -SkipCertificateCheck"
-                                                            $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $url -Credential $Credential -body $bodyclock -SkipCertificateCheck -ErrorVariable ErrorVar
+                                                            $urlComplianceClock=$("https://"+$mySecondaryController.Name+"/api/storage/snaplock/compliance-clocks")
+                                                            Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method post -Uri $urlComplianceClock -Credential $Credential -body $bodyclock -SkipCertificateCheck"
+                                                            $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'post' -Uri $urlComplianceClock -Credential $Credential -body $bodyclock -SkipCertificateCheck -ErrorVariable ErrorVar
                                                             if($? -ne $True){
                                                                 Write-LogError "ERROR: Unable to initialize compliance clock on node [$node]. Reason [$ErrorVar]"
                                                                 Write-LogDebug "[$workOn]: end"
@@ -12172,7 +12185,11 @@ Try {
         $myGateway=$null
         $PrimaryInterfaceName=$PrimaryInterface.InterfaceName
         $PrimaryAddress=$PrimaryInterface.Address
-        $PrimaryNetmask=$PrimaryInterface.Netmask
+        if($PrimaryInterface.Netmask.GetType().Name -eq "String"){
+            $PrimaryNetmask=$PrimaryInterface.Netmask
+        }else{
+            $PrimaryNetmask=$null   
+        }
         $PrimaryNetmaskLength=$PrimaryInterface.NetmaskLength
         $PrimaryCurrentPort=$PrimaryInterface.CurrentPort
         $PrimaryDataProtocols=$PrimaryInterface.DataProtocols
@@ -12298,6 +12315,7 @@ Try {
                     if ( $ANS1 -eq 'y' ) 
                     {
                         $forceAsk=$True
+                        $TempNonInteractive=$False
                         if($Restore -eq $False){
                             $BackupOfGateway=""
                             $APIPA_Mode=$False
@@ -12320,6 +12338,7 @@ Try {
                                 $Global:ForceNonInteractive=$True
                                 $Global:PreviousNonInteractiveMode=$Global:NonInteractive
                                 $Global:NonInteractive=$True
+                                $TempNonInteractive=$True
                             }
                             $Global:lifRestored+=$PrimaryInterfaceName
                         }
@@ -12333,14 +12352,22 @@ Try {
                             $myNetMask = $PrimaryNetMask
                             $myGateway = $PrimaryGateway
                         } #>
-                        if(($APIPA_Mode -eq $True) -or ($Global:ForceCloneOriginal.IsPresent) ){
-                            $myIpAddr = $PrimaryAddress  
-                            $myNetMask = $PrimaryNetMask
+                        if(($APIPA_Mode -eq $True) -or ($Global:ForceCloneOriginal.IsPresent) -or ($Global:ForceRestoreOriginal.IsPresent)){
+                            $myIpAddr = $PrimaryAddress 
+                            if($null -ne $PrimaryNetMask){
+                                $myNetMask = $PrimaryNetMask
+                            }else{
+                                $myNetMask = $PrimaryNetmaskLength
+                            }
                             $myGateway = $PrimaryGateway    
                         }else{
                             if($Global:Run_Mode -eq "Migrate"){
                                 $myIpAddr=$PrimaryAddress
-                                $myNetMask=$PrimaryNetMask
+                                if($null -ne $PrimaryNetMask){
+                                    $myNetMask = $PrimaryNetMask
+                                }else{
+                                    $myNetMask = $PrimaryNetmaskLength
+                                }
                                 $myGateway=$PrimaryGateway
                             }else{
                                 $myIpAddr=ask_IpAddr_from_cli -myIpAddr $PrimaryAddress -workOn $workOn -forceAsk $forceAsk
@@ -12415,71 +12442,96 @@ Try {
                                     # set gateway back to original, to add routes
                                     $myGateway = $BackupOfGateway
                                 }
-                                Write-LogDebug "Get ONTAP version for [$mySecondaryController]"
-                                Write-LogDebug "Get-NcSystemVersionInfo -Controller $mySecondaryController"
-                                $VersionTuple=(Get-NcSystemVersionInfo -Controller $mySecondaryController | Select-Object VersionTuple).VersionTuple
-                                if($VersionTuple.Generation -ge 9){
-                                    Write-LogDebug "[$mySecondaryController] run ONTAP 9.X"
-                                    Write-LogDebug "Get-NcNetRoute -Destination '0.0.0.0/0' -Vserver $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
-                                    $NetRoute=Get-NcNetRoute -Destination '0.0.0.0/0' -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
-                                    if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcNetRoute failed [$ErrorVar]" }
-                                    if(($NetRoute.count) -gt 0){
-                                        $Gateway=$NetRoute.Gateway
-                                        Write-LogDebug "Remove-NcNetRoute -Destination '0.0.0.0/0' -Gateway $Gateway -Vserver $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
-                                        $out=Remove-NcNetRoute -Destination '0.0.0.0/0' -Gateway $Gateway -Vserver $mySecondaryVserver -Confirm:$False -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
-                                        if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Remove-NcNetRoute failed [$ErrorVar]" ; }
-                                    }
-                                    if( ( $null -ne $myGateway ) -and ( $myGateway -ne "" ) ){
-                                        Write-LogDebug "New-NcNetRoute -Destination '0.0.0.0/0' -Metric 20 -Gateway $myGateway -Vserver $mySecondaryVserver -Controller $mySecondaryController"
-                                        $out=New-NcNetRoute -Destination '0.0.0.0/0' -Metric 20 -Gateway $myGateway -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                                        if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: New-NcNetRoute failed [$ErrorVar]" }
-                                    }
-                                }
-                                else{
-                                    Write-LogDebug "[$mySecondaryController] run ONTAP 8.X"
-                                    Write-LogDebug "Use RoutingGroup"
-                                    $SecondaryRoutingGroupName=$SecondaryInterface.RoutingGroupName
-                                    $SecondaryDefaultRoute=Get-NcNetRoutingGroupRoute -RoutingGroup $SecondaryRoutingGroupName -Destination '0.0.0.0/0' -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                                    if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcNetRoutingGroupRoute failed [$ErrorVar]" ; }
-                                    $SecondaryGateway=$SecondaryDefaultroute.GatewayAddress
-                                    if ( ( $null -eq $myGateway ) -or ( $myGateway -eq "" )  ) 
-                                    {
-                                        Write-Log "[$workOn] No default Gateway for lif [$PrimaryInterfaceName]"
-                                        if ( $null -ne $SecondaryGateway ) {
-                                            $ANS3 = Read-HostOptions -question "[$myPrimaryVserver] Do you want to to remove default route [$SecondaryGateway] from Vserver [$mySecondaryVserver] RoutingGroup [$SecondaryRoutingGroupName] ?" -options "y/n" -default "y"
-                                            if ( $ANS3 -eq 'y' ) 
-                                            {
-                                                $out=Remove-NcNetRoutingGroupRoute -RoutingGroup $SecondaryRoutingGroupName -Destination '0.0.0.0/0' -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -Confirm:$False
-                                                if ( $? -ne $True ) 
-                                                {
-                                                    Write-LogError "ERROR: Failed to remove default route" 
-                                                    $Return = $False
-                                                }	
-                                            }
-                                        }
-                                    } 
-                                    else 
-                                    {
-                                        if (  $myGateway -ne $SecondaryGateway ) 
-                                        {
-                                            if ( $null -ne $SecondaryGateway ) 
-                                            {
-                                                Write-LogDebug "Remove-NcNetRoutingGroupRoute -RoutingGroup $SecondaryRoutingGroupName -Destination '0.0.0.0/0' -Vserver $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False"
-                                                $out=Remove-NcNetRoutingGroupRoute -RoutingGroup $SecondaryRoutingGroupName -Destination '0.0.0.0/0' -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -Confirm:$False
-                                                if ( $? -ne $True ) 
-                                                {
-                                                    Write-LogError "ERROR: Failed to remove default route" 
-                                                    $Return = $False
-                                                }
-                                            }
-                                            if ( ( $null -ne $myGateway ) -and ( $myGateway -ne "" )  ) {
-                                                Write-LogDebug "New-NcNetRoutingGroupRoute -RoutingGroup $SecondaryRoutingGroupName -Destination '0.0.0.0/0' -Gateway $myGateway -Metric $PrimaryDefaultRoute.Metric -Vserver $mySecondaryVserver -Controller $mySecondaryController"
-                                                $out=New-NcNetRoutingGroupRoute -RoutingGroup $SecondaryRoutingGroupName -Destination '0.0.0.0/0' -Gateway $myGateway -Metric $PrimaryDefaultRoute.Metric -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                                                if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: New-NcNetRoutingGroupRoute failed [$ErrorVar]" ; }
-                                            }
-                                        }													
-                                    }
-                                }						
+                                # Write-LogDebug "Get ONTAP version for [$mySecondaryController]"
+                                # Write-LogDebug "Get-NcSystemVersionInfo -Controller $mySecondaryController"
+                                # $VersionTuple=(Get-NcSystemVersionInfo -Controller $mySecondaryController | Select-Object VersionTuple).VersionTuple
+                                # if($VersionTuple.Generation -ge 9){
+                                #     Write-LogDebug "[$mySecondaryController] run ONTAP 9.X"
+                                #     Write-LogDebug "Get-NcNetRoute -Destination '0.0.0.0/0' -Vserver $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
+                                #     $NetRoute=Get-NcNetRoute -Destination '0.0.0.0/0' -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
+                                #     if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcNetRoute failed [$ErrorVar]" }
+                                #     foreach($SecRoute in $NetRoute | Skip-Null){
+                                #         $Gateway=$SecRoute.Gateway
+                                #         $Destination=$SecRoute.Destination
+                                #         Write-LogDebug "Remove-NcNetRoute -Destination $Destination -Gateway $Gateway -Vserver $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
+                                #         $out=Remove-NcNetRoute -Destination $Destination -Gateway $Gateway -Vserver $mySecondaryVserver -Confirm:$False -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
+                                #         if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Remove-NcNetRoute failed [$ErrorVar]" ; }
+                                #     }
+                                #     Write-LogDebug "Get-NcNetRoute @{Destination=!0.0.0.0/0;Vserver=$mySecondaryVserver} -Controller $mySecondaryController -ONTAPI"
+                                #     $NetRoute=Get-NcNetRoute -Query @{Destination="!0.0.0.0/0";Vserver=$mySecondaryVserver} -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
+                                #     if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcNetRoute failed [$ErrorVar]" }
+                                #     foreach($SecRoute in $NetRoute | Skip-Null){
+                                #         $Gateway=$SecRoute.Gateway
+                                #         $Destination=$SecRoute.Destination
+                                #         Write-LogDebug "Remove-NcNetRoute -Destination $Destination -Gateway $Gateway -Vserver $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
+                                #         $out=Remove-NcNetRoute -Destination $Destination -Gateway $Gateway -Vserver $mySecondaryVserver -Confirm:$False -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
+                                #         if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Remove-NcNetRoute failed [$ErrorVar]" ; }
+                                #     }
+                                #     if( ( $null -ne $myGateway ) -and ( $myGateway -ne "" ) ){
+                                #         foreach($PrimRoute in $PrimaryDefaultRoute | Skip-Null){
+                                #             $Destination=$PrimRoute.Destination
+                                #             $Metric=$PrimRoute.Metric
+                                #             $Gateway=$PrimRoute.Gateway
+                                #             $Gateway=ask_gateway_from_cli -myGateway $Gateway -workOn $mySecondaryVserver -forceAsk $forceAsk 
+                                #             Write-LogDebug "New-NcNetRoute -Destination $Destination -Metric $Metric -Gateway $Gateway -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+                                #             $out=New-NcNetRoute -Destination $Destination -Metric $Metric -Gateway $Gateway -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                #             if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: New-NcNetRoute failed [$ErrorVar]" }
+                                #         }
+                                #     }
+                                #     foreach($PrimRoute in $PrimaryDefaultRouteOther | Skip-Null){
+                                #         $Destination=$PrimRoute.Destination
+                                #         $Metric=$PrimRoute.Metric
+                                #         $Gateway=$PrimRoute.Gateway
+                                #         $Gateway=ask_gateway_from_cli -myGateway $Gateway -workOn $mySecondaryVserver -forceAsk $forceAsk 
+                                #         Write-LogDebug "New-NcNetRoute -Destination $Destination -Metric $Metric -Gateway $Gateway -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+                                #         $out=New-NcNetRoute -Destination $Destination -Metric $Metric -Gateway $Gateway -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                #         if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: New-NcNetRoute failed [$ErrorVar]" }
+                                #     }
+                                # }else{
+                                #     Write-LogDebug "[$mySecondaryController] run ONTAP 8.X"
+                                #     Write-LogDebug "Use RoutingGroup"
+                                #     $SecondaryRoutingGroupName=$SecondaryInterface.RoutingGroupName
+                                #     $SecondaryDefaultRoute=Get-NcNetRoutingGroupRoute -RoutingGroup $SecondaryRoutingGroupName -Destination '0.0.0.0/0' -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                #     if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcNetRoutingGroupRoute failed [$ErrorVar]" ; }
+                                #     $SecondaryGateway=$SecondaryDefaultroute.GatewayAddress
+                                #     if ( ( $null -eq $myGateway ) -or ( $myGateway -eq "" )  ) 
+                                #     {
+                                #         Write-Log "[$workOn] No default Gateway for lif [$PrimaryInterfaceName]"
+                                #         if ( $null -ne $SecondaryGateway ) {
+                                #             $ANS3 = Read-HostOptions -question "[$myPrimaryVserver] Do you want to to remove default route [$SecondaryGateway] from Vserver [$mySecondaryVserver] RoutingGroup [$SecondaryRoutingGroupName] ?" -options "y/n" -default "y"
+                                #             if ( $ANS3 -eq 'y' ) 
+                                #             {
+                                #                 $out=Remove-NcNetRoutingGroupRoute -RoutingGroup $SecondaryRoutingGroupName -Destination '0.0.0.0/0' -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -Confirm:$False
+                                #                 if ( $? -ne $True ) 
+                                #                 {
+                                #                     Write-LogError "ERROR: Failed to remove default route" 
+                                #                     $Return = $False
+                                #                 }	
+                                #             }
+                                #         }
+                                #     } 
+                                #     else 
+                                #     {
+                                #         if (  $myGateway -ne $SecondaryGateway ) 
+                                #         {
+                                #             if ( $null -ne $SecondaryGateway ) 
+                                #             {
+                                #                 Write-LogDebug "Remove-NcNetRoutingGroupRoute -RoutingGroup $SecondaryRoutingGroupName -Destination '0.0.0.0/0' -Vserver $mySecondaryVserver -Controller $mySecondaryController -Confirm:$False"
+                                #                 $out=Remove-NcNetRoutingGroupRoute -RoutingGroup $SecondaryRoutingGroupName -Destination '0.0.0.0/0' -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -Confirm:$False
+                                #                 if ( $? -ne $True ) 
+                                #                 {
+                                #                     Write-LogError "ERROR: Failed to remove default route" 
+                                #                     $Return = $False
+                                #                 }
+                                #             }
+                                #             if ( ( $null -ne $myGateway ) -and ( $myGateway -ne "" )  ) {
+                                #                 Write-LogDebug "New-NcNetRoutingGroupRoute -RoutingGroup $SecondaryRoutingGroupName -Destination '0.0.0.0/0' -Gateway $myGateway -Metric $PrimaryDefaultRoute.Metric -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+                                #                 $out=New-NcNetRoutingGroupRoute -RoutingGroup $SecondaryRoutingGroupName -Destination '0.0.0.0/0' -Gateway $myGateway -Metric $PrimaryDefaultRoute.Metric -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                #                 if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: New-NcNetRoutingGroupRoute failed [$ErrorVar]" ; }
+                                #             }
+                                #         }													
+                                #     }
+                                # }						
                             }
                         }else{
                             Write-LogError "[$workOn] No suitable port found to create lif [$PrimaryInterfaceName]"
@@ -12567,82 +12619,116 @@ Try {
                     if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Set-NcNetInterface failed [$ErrorVar]" }
                 }
             }
-            # treats other network route
-            if($PrimaryDefaultRouteOther.count -ge 1){
-                if($VersionTuple.Generation -ge 9){
-                    foreach($OtherRoute in $PrimaryDefaultRouteOther){
-                        $PrimaryOtherDestination=$OtherRoute.Destination
-                        $PrimaryOtherGateway=$OtherRoute.Gateway
-                        $PrimaryOtherMetric=$OtherRoute.Metric
-                        $myGateway=""
-                        if($OtherRouteDone -contains $PrimaryOtherDestination){continue}
-                        Write-LogDebug "Get-NcNetRoute -Destination $PrimaryOtherDestination -Vserver $mySecondaryVserver -Controller $mySecondaryController"
-                        $SecondaryOther=Get-NcNetRoute -Destination $PrimaryOtherDestination -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
-                        if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Get-NcNetRoute failed [$ErrorVar]"; continue }
-                        if ( $null -ne $SecondaryOther ){
-                            $myGateway=$SecondaryOther.Gateway
-                            Write-LogDebug "Remove-NcNetRoute -Destination $PrimaryOtherDestination -Gateway $myGateway -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
-                            $ret=Remove-NcNetRoute -Destination $PrimaryOtherDestination -VserverContext $mySecondaryVserver -Gateway $myGateway -Controller $mySecondaryController -ErrorVariable ErroVar -Confirm:$false -ONTAPI
-                            if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Remove-NcNetRoute failed [$ErrorVar]"; continue }
-                        }
-                        if($myGateway.Length -eq 0){
-                            $myGateway=$PrimaryOtherGateway
-                        }
-                        foreach($Gateway in $myGateway){
-                            $Gateway=ask_gateway_from_cli -myGateway $Gateway -workOn $($workOn+" Destination "+$PrimaryOtherDestination)
-                            Write-Log "[$workOn] Add New Route Destination [$PrimaryOtherDestination] Gateway [$Gateway] Metric [$PrimaryOtherMetric]"
-                            Write-LogDebug "New-NcNetRoute -Destination $PrimaryOtherDestination -Gateway $Gateway -Metric $PrimaryOtherMetric -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                            $ret=New-NcNetRoute -Destination $PrimaryOtherDestination -Gateway $Gateway -Metric $PrimaryOtherMetric -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar -Confirm:$false
-                            if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: New-NcNetRoute failed [$ErrorVar]"; continue }
-                            $OtherRouteDone+=$PrimaryOtherDestination
-                        }
+            
+        }
+    }
+    # treats network route
+    Write-LogDebug "Get ONTAP version for [$mySecondaryController]"
+    Write-LogDebug "Get-NcSystemVersionInfo -Controller $mySecondaryController"
+    $VersionTuple=(Get-NcSystemVersionInfo -Controller $mySecondaryController | Select-Object VersionTuple).VersionTuple
+    if($VersionTuple.Generation -ge 9){
+        Write-LogDebug "[$mySecondaryController] run ONTAP 9.X"
+        Write-LogDebug "Get-NcNetRoute -Destination '0.0.0.0/0' -Vserver $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
+        $NetRoute=Get-NcNetRoute -Destination '0.0.0.0/0' -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
+        if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcNetRoute failed [$ErrorVar]" }
+        foreach($SecRoute in $NetRoute | Skip-Null){
+            $Gateway=$SecRoute.Gateway
+            $Destination=$SecRoute.Destination
+            Write-LogDebug "Remove-NcNetRoute -Destination $Destination -Gateway $Gateway -Vserver $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
+            $out=Remove-NcNetRoute -Destination $Destination -Gateway $Gateway -Vserver $mySecondaryVserver -Confirm:$False -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
+            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Remove-NcNetRoute failed [$ErrorVar]" ; }
+        }
+        
+        foreach($PrimRoute in $PrimaryDefaultRoute | Skip-Null){
+            $Destination=$PrimRoute.Destination
+            $Metric=$PrimRoute.Metric
+            $Gateway=$PrimRoute.Gateway
+            if((-not $Global:ForceCloneOriginal.IsPresent) -or ($Global:NonInteractive -eq $False) -or (-not $Global:ForceRestoreOriginal.IsPresent)){
+                $Gateway=ask_gateway_from_cli -myGateway $Gateway -workOn $($mySecondaryVserver +" Destination "+$Destination) -forceAsk $True 
+            }
+            Write-Log "[$mySecondaryVserver] Add New Route Destination [$Destination] Gateway [$Gateway] Metric [$Metric]"
+            Write-LogDebug "New-NcNetRoute -Destination $Destination -Metric $Metric -Gateway $Gateway -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+            $out=New-NcNetRoute -Destination $Destination -Metric $Metric -Gateway $Gateway -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: New-NcNetRoute failed [$ErrorVar]" }
+        }
+    
+    }
+    # treats other network route
+    if($PrimaryDefaultRouteOther.count -ge 1){
+        if($VersionTuple.Generation -ge 9){
+            foreach($OtherRoute in $PrimaryDefaultRouteOther){
+                $PrimaryOtherDestination=$OtherRoute.Destination
+                $PrimaryOtherGateway=$OtherRoute.Gateway
+                $PrimaryOtherMetric=$OtherRoute.Metric
+                $myGateway=""
+                if($OtherRouteDone -contains $PrimaryOtherDestination){continue}
+                Write-LogDebug "Get-NcNetRoute -Destination $PrimaryOtherDestination -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+                $SecondaryOther=Get-NcNetRoute -Destination $PrimaryOtherDestination -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Get-NcNetRoute failed [$ErrorVar]"; continue }
+                if ( $null -ne $SecondaryOther ){
+                    $myGateway=$SecondaryOther.Gateway
+                    Write-LogDebug "Remove-NcNetRoute -Destination $PrimaryOtherDestination -Gateway $myGateway -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
+                    $ret=Remove-NcNetRoute -Destination $PrimaryOtherDestination -VserverContext $mySecondaryVserver -Gateway $myGateway -Controller $mySecondaryController -ErrorVariable ErroVar -Confirm:$false -ONTAPI
+                    if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Remove-NcNetRoute failed [$ErrorVar]"; continue }
+                }
+                if($myGateway.Length -eq 0){
+                    $myGateway=$PrimaryOtherGateway
+                }
+                foreach($Gateway in $myGateway){
+                    if((-not $Global:ForceCloneOriginal.IsPresent) -or ($Global:NonInteractive -eq $False) -or (-not $Global:ForceRestoreOriginal.IsPresent)){
+                        $Gateway=ask_gateway_from_cli -myGateway $Gateway -workOn $($workOn+" Destination "+$PrimaryOtherDestination)
                     }
+                    Write-Log "[$workOn] Add New Route Destination [$PrimaryOtherDestination] Gateway [$Gateway] Metric [$PrimaryOtherMetric]"
+                    Write-LogDebug "New-NcNetRoute -Destination $PrimaryOtherDestination -Gateway $Gateway -Metric $PrimaryOtherMetric -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                    $ret=New-NcNetRoute -Destination $PrimaryOtherDestination -Gateway $Gateway -Metric $PrimaryOtherMetric -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar -Confirm:$false
+                    if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: New-NcNetRoute failed [$ErrorVar]"; continue }
+                    $OtherRouteDone+=$PrimaryOtherDestination
                 }
-                else{
-                    foreach($OtherRoute in $PrimaryDefaultRouteOther){
-                        $PrimaryOtherDestination=$OtherRoute.DestinationAddress
-                        $PrimaryOtherGateway=$OtherRoute.GatewayAddress
-                        $PrimaryOtherMetric=$OtherRoute.Metric
-                        $PrimaryOtherRouting=$OtherRoute.RoutingGroup
-                        $myGateway=""
-                        if($OtherRouteDone -contains $PrimaryOtherDestination){continue}
-                        Write-LogDebug "Get-NcNetRoutingGroupRoute -Destination $PrimaryOtherDestination -Vserver $mySecondaryVserver -Controller $mySecondaryController"
-                        $SecondaryOther=Get-NcNetRoutingGroupRoute -Destination $PrimaryOtherDestination -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
-                        if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Get-NcNetRoutingGroupRoute failed [$ErrorVar]"; continue }
-                        if ( $null -ne $SecondaryOther ){
-                            $myGateway=$SecondaryOther.GatewayAddress
-                            $SecondaryRoutingGroupName=$SecondaryOther.RoutingGroup
-                            Write-LogDebug "Remove-NcNetRoutingGroupRoute -RoutingGroup $SecondaryRoutingGroupName -Vserver $mySecondaryVserver -Controller $mySecondaryController"
-                            $ret=Remove-NcNetRoutingGroupRoute -RoutingGroup $SecondaryRoutingGroupName -Destination $PrimaryOtherDestination -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar -Confirm:$false
-                            if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Remove-NcNetRoutingGroupRoute failed [$ErrorVar]"; continue }
-                        }
-                        if($myGateway.Length -eq 0){
-                            $myGateway=$PrimaryOtherGateway
-                        }
-                        foreach($Gateway in $myGateway){
-                            $Gateway=ask_gateway_from_cli -myGateway $Gateway -workOn $($workOn+" Destination "+$PrimaryOtherDestination)
-                            Write-Log "[$workOn] Add New Route RoutingGroup [$PrimaryOtherRouting] Destination [$PrimaryOtherDestination] Gateway [$Gateway] Metric [$PrimaryOtherMetric]"
-                            Write-LogDebug "New-NcNetRoutingGroupRoute -RoutingGroup $PrimaryOtherRouting -Destination $PrimaryOtherDestination -Gateway $Gateway -Metric $PrimaryOtherMetric -Vserver $mySecondaryVserver -Controller $mySecondaryController"
-                            $ret=New-NcNetRoutingGroupRoute -RoutingGroup $PrimaryOtherRouting -Destination $PrimaryOtherDestination -Gateway $Gateway -Metric $PrimaryOtherMetric -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar -Confirm:$false
-                            if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: New-NcNetRoute failed [$ErrorVar]"; continue }
-                            $OtherRouteDone+=$PrimaryOtherDestination
-                        }
-                    }
-                }
-                <# $VersionTuple=(Get-NcSystemVersionInfo -Controller $mySecondaryController | Select-Object VersionTuple).VersionTuple
-                if($VersionTuple.Generation -ge 9){
-                    $SecondaryRoutes=Get-NcNetRoute -Query @{Destination="0.0.0.0/0";Vserver=$mySecondaryVserver} -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                    if ( $? -ne $True ){$Return = $False ; Clean_Throw "ERROR: Get-NcNetRoute failed [$ErrorVar]"}
-                }else{
-                    $SecondaryRoutes=Get-NcNetRoutingGroupRoute -Destination '0.0.0.0/0' -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                    if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcNetRoutingGroupRoute failed [$ErrorVar]" }
-                }
-                if ( ($ret=Save_Route_To_JSON -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryRoutes $PrimaryDefaultRouteOther -mySecondaryRoutes $SecondaryRoutes -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver) -eq $False){
-                    Write-Log "Failed to Backup Net Route details to JSON"
-                    return $False
-                } #>
             }
         }
+        else{
+            foreach($OtherRoute in $PrimaryDefaultRouteOther){
+                $PrimaryOtherDestination=$OtherRoute.DestinationAddress
+                $PrimaryOtherGateway=$OtherRoute.GatewayAddress
+                $PrimaryOtherMetric=$OtherRoute.Metric
+                $PrimaryOtherRouting=$OtherRoute.RoutingGroup
+                $myGateway=""
+                if($OtherRouteDone -contains $PrimaryOtherDestination){continue}
+                Write-LogDebug "Get-NcNetRoutingGroupRoute -Destination $PrimaryOtherDestination -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+                $SecondaryOther=Get-NcNetRoutingGroupRoute -Destination $PrimaryOtherDestination -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Get-NcNetRoutingGroupRoute failed [$ErrorVar]"; continue }
+                if ( $null -ne $SecondaryOther ){
+                    $myGateway=$SecondaryOther.GatewayAddress
+                    $SecondaryRoutingGroupName=$SecondaryOther.RoutingGroup
+                    Write-LogDebug "Remove-NcNetRoutingGroupRoute -RoutingGroup $SecondaryRoutingGroupName -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+                    $ret=Remove-NcNetRoutingGroupRoute -RoutingGroup $SecondaryRoutingGroupName -Destination $PrimaryOtherDestination -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar -Confirm:$false
+                    if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Remove-NcNetRoutingGroupRoute failed [$ErrorVar]"; continue }
+                }
+                if($myGateway.Length -eq 0){
+                    $myGateway=$PrimaryOtherGateway
+                }
+                foreach($Gateway in $myGateway){
+                    $Gateway=ask_gateway_from_cli -myGateway $Gateway -workOn $($workOn+" Destination "+$PrimaryOtherDestination)
+                    Write-Log "[$workOn] Add New Route RoutingGroup [$PrimaryOtherRouting] Destination [$PrimaryOtherDestination] Gateway [$Gateway] Metric [$PrimaryOtherMetric]"
+                    Write-LogDebug "New-NcNetRoutingGroupRoute -RoutingGroup $PrimaryOtherRouting -Destination $PrimaryOtherDestination -Gateway $Gateway -Metric $PrimaryOtherMetric -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+                    $ret=New-NcNetRoutingGroupRoute -RoutingGroup $PrimaryOtherRouting -Destination $PrimaryOtherDestination -Gateway $Gateway -Metric $PrimaryOtherMetric -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar -Confirm:$false
+                    if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: New-NcNetRoute failed [$ErrorVar]"; continue }
+                    $OtherRouteDone+=$PrimaryOtherDestination
+                }
+            }
+        }
+        <# $VersionTuple=(Get-NcSystemVersionInfo -Controller $mySecondaryController | Select-Object VersionTuple).VersionTuple
+        if($VersionTuple.Generation -ge 9){
+            $SecondaryRoutes=Get-NcNetRoute -Query @{Destination="0.0.0.0/0";Vserver=$mySecondaryVserver} -Controller $mySecondaryController  -ErrorVariable ErrorVar
+            if ( $? -ne $True ){$Return = $False ; Clean_Throw "ERROR: Get-NcNetRoute failed [$ErrorVar]"}
+        }else{
+            $SecondaryRoutes=Get-NcNetRoutingGroupRoute -Destination '0.0.0.0/0' -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcNetRoutingGroupRoute failed [$ErrorVar]" }
+        }
+        if ( ($ret=Save_Route_To_JSON -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryRoutes $PrimaryDefaultRouteOther -mySecondaryRoutes $SecondaryRoutes -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver) -eq $False){
+            Write-Log "Failed to Backup Net Route details to JSON"
+            return $False
+        } #>
     }
     if($Backup -eq $False -and $Restore -eq $False){
         if($Global:PSTKCall -ne "Rest"){
@@ -12659,6 +12745,10 @@ Try {
     }
     
     Write-LogDebug "end"
+    if ($TempNonInteractive -eq $True){
+        Write-LogDebug "Restore Global:NonInteractive to False"
+        $Global:NonInteractive=$False
+    }
     if($Restore -eq $True)
     {
         return $Return,$Global:lifRestored
@@ -17419,6 +17509,7 @@ Try {
     if ( ( $ret=create_update_firewallpolicy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all Firewall policy" ; $Return = $False }
     if ( ( $ret=create_update_servicepolicy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all Service policy" ; $Return = $False }
     if ( ( $ret=create_update_role_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all Role"}
+    $backupMode=$Global:NonInteractive
     $ret=create_lif_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore -ForClone -nodeMatchRegEx $nodeMatchRegEx
     if ($ret.count -gt 0){
         if ($ret[0] -ne $True){ Write-LogError "ERROR: Failed to create all LIF" ; $Return = $True }
@@ -17429,6 +17520,7 @@ Try {
         Write-LogDebug "Reset NonInteractive Mode to its previous mode [$Global:PreviousNonInteractiveMode]"
         $Global:NonInteractive=$Global:PreviousNonInteractiveMode
     }
+    $Global:NonInteractive=$backupMode
     if ( ( $ret=create_update_localuser_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all local user"}
     if ( ( $ret=create_update_localunixgroupanduser_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all Local Unix User and Group"}
     if ( ( $ret=create_update_usermapping_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create User Mapping"}
@@ -18120,6 +18212,7 @@ Try {
     #wait-debugger
     if ( ( $ret=create_update_servicepolicy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all Service policy" ; $Return = $False }
     if ( ( $ret=create_update_role_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all Role"}
+    $backupMode=$Global:NonInteractive
     $ret=create_lif_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore -nodeMatchRegEx $nodeMatchRegEx
     if ($ret.count -gt 0){
         if ($ret[0] -ne $True){ Write-LogError "ERROR: Failed to create all LIF" ; $Return = $True }
@@ -18130,6 +18223,7 @@ Try {
         Write-LogDebug "Reset NonInteractive Mode to its previous mode [$Global:PreviousNonInteractiveMode]"
         $Global:NonInteractive=$Global:PreviousNonInteractiveMode
     }
+    $Global:NonInteractive=$backupMode
     #if((-not $Global:NonInteractive) -or ($null -ne $Global:DefaultLocalUserCredentials)){
     if( $null -ne $Global:DefaultLocalUserCredentials -or $True -eq $runBackup ){
         if ( ( $ret=create_update_localuser_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all local user"}
@@ -19557,6 +19651,7 @@ try{
             # backup LIF ################################################################################################################################################################
             Write-Log "[$myPrimaryVserver] Backup LIF Object"
             Write-LogDebug "create_lif_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $myPrimaryVserver -Backup $True -Restore $False"
+            $backupMode=$Global:NonInteractive
             $ret=create_lif_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $myPrimaryVserver -Backup $True -Restore $False
             if ($ret.count -gt 0){
                 if ($ret[0] -ne $True){ Write-LogError "ERROR: Failed to backup all LIF" ; $Return = $True }
@@ -19567,6 +19662,7 @@ try{
                 Write-LogDebug "Reset NonInteractive Mode to its previous mode [$Global:PreviousNonInteractiveMode]"
                 $Global:NonInteractive=$Global:PreviousNonInteractiveMode
             }
+            $Global:NonInteractive=$backupMode
             # backup CIFS server ################################################################################################################################################################
             Write-Log "[$myPrimaryVserver] Backup CIFS Server Object"
             Write-LogDebug "create_update_CIFS_server_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $myPrimaryVserver -Backup $True -Restore $False"
@@ -19980,6 +20076,7 @@ try{
         # backup LIF ################################################################################################################################################################
         Write-Log "[$myPrimaryVserver] Backup LIF Object"
         Write-LogDebug "create_lif_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $myPrimaryVserver -Backup $True -Restore $False"
+        $backupMode=$Global:NonInteractive
         $ret=create_lif_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $myPrimaryVserver -Backup $True -Restore $False
         if ($ret.count -gt 0){
             if ($ret[0] -ne $True){ Write-LogError "ERROR: Failed to backup all LIF" ; $Return = $True }
@@ -19990,7 +20087,7 @@ try{
             Write-LogDebug "Reset NonInteractive Mode to its previous mode [$Global:PreviousNonInteractiveMode]"
             $Global:NonInteractive=$Global:PreviousNonInteractiveMode
         }
-
+        $Global:NonInteractive=$backupMode
         # backup CIFS server ################################################################################################################################################################
         Write-Log "[$myPrimaryVserver] Backup CIFS Server Object"
         Write-LogDebug "create_update_CIFS_server_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $myPrimaryVserver -Backup $True -Restore $False"
@@ -27236,11 +27333,13 @@ Try {
     }
     if("Lifs" -in $objects){
         Write-Log "[$mySecondaryVserver] Restore Object Lifs"
+        $backupMode=$Global:NonInteractive
         $ret,$lifrestored=create_lif_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $mySecondaryVserver  -Backup $False -Restore $True -nodeMatchRegEx $nodeMatchRegEx
         if ( $ret[0]  -ne $True )  {
             $Return=$False
             Write-LogError "ERROR: Failed to create all LIF on [$mySecondaryVserver]"
         }
+        $Global:NonInteractive=$backupMode
         if ( ( $out=set_all_lif -mySecondaryVserver $mySecondaryVserver -myPrimaryVserver $myPrimaryVserver -mySecondaryController $mySecondaryController  -myPrimaryController $myPrimaryController -workOn $mySecondaryVserver  -state up -Backup $False -Restore $True -lifRestored $lifrestored ) -ne $True ) {
             $Return=$False
             Write-LogError "ERROR: Failed to set all lif up on [$mySecondaryVserver]"
