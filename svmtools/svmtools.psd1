@@ -97,13 +97,14 @@
 #   1.6.2   Correct Fpolicy. Correct snaplock and add all current volume options
 #   1.6.3   Correct log4net exit
 #   1.6.4   Correct ExportPolicy create, Vol create, Fpolicy create
+#   1.6.5   Correct Vserver creation with null parameters
 @{
 
     # Script module or binary module file associated with this manifest.
     RootModule        = '.\svmtools.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.6.4'
+    ModuleVersion     = '1.6.5'
 
     # Supported PSEditions
     # CompatiblePSEditions = @()

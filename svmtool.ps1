@@ -1184,7 +1184,7 @@ $Global:MIN_MINOR = 14
 $Global:MIN_BUILD = 1
 $Global:MIN_REVISION = 2401
 #############################################################################################
-$Global:RELEASE = "0.7.6"
+$Global:RELEASE = "0.7.7"
 $Global:SCRIPT_RELEASE = "0.1.32"
 if($PSVersionTable.PSVersion.Major -lt 7){
     $Global:BASEDIR = 'C:\Scripts\SVMTOOL'      
