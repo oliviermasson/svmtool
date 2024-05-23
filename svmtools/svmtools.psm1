@@ -17897,26 +17897,26 @@ Try {
                 }
                 $bodysvm=@{}
                 if($RESTSecondaryVserver.max_volumes -ne $RESTPrimaryVserver.max_volumes){
-                    $bodysvm+=@{max_volumes=$RESTPrimaryVserver.max_volumes}
+                    if($null -ne $RESTPrimaryVserver.max_volumes){$bodysvm+=@{max_volumes=$RESTPrimaryVserver.max_volumes}}
                 } 
                 if($Global:OntapSecondaryVersion -ge 9.11){
-                    $bodysvm+=@{is_space_reporting_logical=$RESTPrimaryVserver.is_space_reporting_logical}
-                    $bodysvm+=@{is_space_enforcement_logical=$RESTPrimaryVserver.is_space_enforcement_logical}
+                    if($null -ne $RESTPrimaryVserver.is_space_reporting_logical){$bodysvm+=@{is_space_reporting_logical=$RESTPrimaryVserver.is_space_reporting_logical}}
+                    if($null -ne $RESTPrimaryVserver.is_space_enforcement_logical){$bodysvm+=@{is_space_enforcement_logical=$RESTPrimaryVserver.is_space_enforcement_logical}}
                 }
                 if($Global:OntapSecondaryVersion -ge 9.12){
-                    $bodysvm+=@{auto_enable_analytics=$RESTPrimaryVserver.auto_enable_analytics}
-                    $bodysvm+=@{auto_enable_activity_tracking=$RESTPrimaryVserver.auto_enable_activity_tracking}
+                    if($null -ne $RESTPrimaryVserver.auto_enable_analytics){$bodysvm+=@{auto_enable_analytics=$RESTPrimaryVserver.auto_enable_analytics}}
+                    if($null -ne $RESTPrimaryVserver.auto_enable_activity_tracking){$bodysvm+=@{auto_enable_activity_tracking=$RESTPrimaryVserver.auto_enable_activity_tracking}}
                 }
                 if($Global:OntapSecondaryVersion -ge 9.13){
-                    $bodysvm+=@{anti_ransomware_auto_switch_from_learning_to_enabled=$RESTPrimaryVserver.anti_ransomware_auto_switch_from_learning_to_enabled}
-                    $bodysvm+=@{anti_ransomware_auto_switch_minimum_incoming_data_percent=$RESTPrimaryVserver.anti_ransomware_auto_switch_minimum_incoming_data_percent}
-                    $bodysvm+=@{anti_ransomware_auto_switch_duration_without_new_file_extension=$RESTPrimaryVserver.anti_ransomware_auto_switch_duration_without_new_file_extension}
-                    $bodysvm+=@{anti_ransomware_auto_switch_minimum_learning_period=$RESTPrimaryVserver.anti_ransomware_auto_switch_minimum_learning_period}
-                    $bodysvm+=@{anti_ransomware_auto_switch_minimum_file_count=$RESTPrimaryVserver.anti_ransomware_auto_switch_minimum_file_count}
-                    $bodysvm+=@{anti_ransomware_auto_switch_minimum_file_extension=$RESTPrimaryVserver.anti_ransomware_auto_switch_minimum_file_extension}
+                    if($null -ne $RESTPrimaryVserver.anti_ransomware_auto_switch_from_learning_to_enabled){$bodysvm+=@{anti_ransomware_auto_switch_from_learning_to_enabled=$RESTPrimaryVserver.anti_ransomware_auto_switch_from_learning_to_enabled}}
+                    if($null -ne $RESTPrimaryVserver.anti_ransomware_auto_switch_minimum_incoming_data_percent){$bodysvm+=@{anti_ransomware_auto_switch_minimum_incoming_data_percent=$RESTPrimaryVserver.anti_ransomware_auto_switch_minimum_incoming_data_percent}}
+                    if($null -ne $RESTPrimaryVserver.anti_ransomware_auto_switch_duration_without_new_file_extension){$bodysvm+=@{anti_ransomware_auto_switch_duration_without_new_file_extension=$RESTPrimaryVserver.anti_ransomware_auto_switch_duration_without_new_file_extension}}
+                    if($null -ne $RESTPrimaryVserver.anti_ransomware_auto_switch_minimum_learning_period){$bodysvm+=@{anti_ransomware_auto_switch_minimum_learning_period=$RESTPrimaryVserver.anti_ransomware_auto_switch_minimum_learning_period}}
+                    if($null -ne $RESTPrimaryVserver.anti_ransomware_auto_switch_minimum_file_count){$bodysvm+=@{anti_ransomware_auto_switch_minimum_file_count=$RESTPrimaryVserver.anti_ransomware_auto_switch_minimum_file_count}}
+                    if($null -ne $RESTPrimaryVserver.anti_ransomware_auto_switch_minimum_file_extension){$bodysvm+=@{anti_ransomware_auto_switch_minimum_file_extension=$RESTPrimaryVserver.anti_ransomware_auto_switch_minimum_file_extension}}
                 }
                 if($Global:OntapSecondaryVersion -ge 9.14){
-                    $bodysvm+=@{anti_ransomware=$RESTPrimaryVserver.anti_ransomware}
+                    if($null -ne $RESTPrimaryVserver.anti_ransomware){$bodysvm+=@{anti_ransomware=$RESTPrimaryVserver.anti_ransomware}}
                 }
                 $bodysvm=$bodysvm | convertTo-Json
                 $url=$("https://"+$mySecondaryController.Name+"/api/svm/svms/"+$SecondaryVserver.Uuid)
