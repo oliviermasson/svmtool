@@ -1698,7 +1698,11 @@ if ( $Backup ) {
     }else{
         $doubleseparator=','
     }
-    $Global:OntapPrimaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $myPrimaryController)[0].VersionTuple.Generation)+$doubleseparator+[string]((Get-NcSystemVersionInfo -Controller $myPrimaryController)[0].VersionTuple.Major)))
+    if((Get-NcSystemVersionInfo -Controller $myPrimaryController)[0].VersionTuple.Major -lt 10){
+        $Global:OntapPrimaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $myPrimaryController)[0].VersionTuple.Generation)+$doubleseparator+"0"+[string]((Get-NcSystemVersionInfo -Controller $myPrimaryController)[0].VersionTuple.Major)))
+    }else{
+        $Global:OntapPrimaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $myPrimaryController)[0].VersionTuple.Generation)+$doubleseparator+[string]((Get-NcSystemVersionInfo -Controller $myPrimaryController)[0].VersionTuple.Major)))
+    }
     $PrimaryVersion=(Get-NcSystemVersionInfo -Controller $myPrimaryController)[0].VersionTuple | Join-String
     Write-LogDebug "ONTAP Version       [$PrimaryVersion]"  
 
@@ -2171,6 +2175,8 @@ if ( $Restore ) {
     $Global:Run_Mode = "Restore"
     $Global:RESTORE_SRC_CLUSTER = $Restore
     $Global:RESTORE_DST_CLUSTER = $Destination
+    $Global:SRC_CLUSTER=$Restore
+    $Global:DST_CLUSTER=$Destination
     if(-not $ForceRestoreOriginal.IsPresent){
         if ($Global:RESTORE_SRC_CLUSTER -eq $Global:RESTORE_DST_CLUSTER) {
         $Global:RESTORE_ORIGINAL = $True
@@ -2225,7 +2231,11 @@ if ( $Restore ) {
     }else{
         $doubleseparator=','
     }
-    $Global:OntapSecondaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $DestinationController -ONTAPI)[0].VersionTuple.Generation)+$doubleseparator+[string]((Get-NcSystemVersionInfo -Controller $DestinationController -ONTAPI)[0].VersionTuple.Major)))
+    if((Get-NcSystemVersionInfo -Controller $DestinationController)[0].VersionTuple.Major -lt 10){
+        $Global:OntapSecondaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $DestinationController -ONTAPI)[0].VersionTuple.Generation)+$doubleseparator+"0"+[string]((Get-NcSystemVersionInfo -Controller $DestinationController -ONTAPI)[0].VersionTuple.Major)))
+    }else{
+        $Global:OntapSecondaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $DestinationController -ONTAPI)[0].VersionTuple.Generation)+$doubleseparator+[string]((Get-NcSystemVersionInfo -Controller $DestinationController -ONTAPI)[0].VersionTuple.Major))) 
+    }
     $SecondaryVersion=(Get-NcSystemVersionInfo -Controller $DestinationController -ONTAPI)[0].VersionTuple | Join-String
     Write-LogDebug "ONTAP Version       [$SecondaryVersion]"
 
@@ -2934,7 +2944,11 @@ if ( $RestoreObject ){
     }else{
         $doubleseparator=','
     }
-    $Global:OntapPrimaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $NcPrimaryCtrl)[0].VersionTuple.Generation)+$doubleseparator+[string]((Get-NcSystemVersionInfo -Controller $NcPrimaryCtrl)[0].VersionTuple.Major)))
+    if((Get-NcSystemVersionInfo -Controller $NcPrimaryCtrl)[0].VersionTuple.Major -lt 10){
+        $Global:OntapPrimaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $NcPrimaryCtrl)[0].VersionTuple.Generation)+$doubleseparator+"0"+[string]((Get-NcSystemVersionInfo -Controller $NcPrimaryCtrl)[0].VersionTuple.Major)))
+    }else{
+        $Global:OntapPrimaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $NcPrimaryCtrl)[0].VersionTuple.Generation)+$doubleseparator+[string]((Get-NcSystemVersionInfo -Controller $NcPrimaryCtrl)[0].VersionTuple.Major)))
+    }
     $PrimaryVersion=(Get-NcSystemVersionInfo -Controller $NcPrimaryCtrl)[0].VersionTuple | Join-String
 
     $myCred = get_local_cDotcred ($RESTORE_DST_CLUSTER) 
@@ -2948,7 +2962,11 @@ if ( $RestoreObject ){
     }else{
         $doubleseparator=','
     }
-    $Global:OntapSecondaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Generation)+$doubleseparator+[string]((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Major)))
+    if((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Major -lt 10){
+        $Global:OntapSecondaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Generation)+$doubleseparator+"0"+[string]((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Major)))
+    }else{
+        $Global:OntapSecondaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Generation)+$doubleseparator+[string]((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Major)))
+    }
     $SecondaryVersion=(Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple | Join-String
     
 
@@ -3125,7 +3143,11 @@ if ( ( $NcPrimaryCtrl = connect_cluster -myController $PRIMARY_CLUSTER -myCred $
     }else{
         $doubleseparator=','
     }
-    $Global:OntapPrimaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $myPrimaryCtrl)[0].VersionTuple.Generation)+$doubleseparator+[string]((Get-NcSystemVersionInfo -Controller $myPrimaryCtrl)[0].VersionTuple.Major)))
+    if((Get-NcSystemVersionInfo -Controller $myPrimaryCtrl)[0].VersionTuple.Major -lt 10){
+        $Global:OntapPrimaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $myPrimaryCtrl)[0].VersionTuple.Generation)+$doubleseparator+"0"+[string]((Get-NcSystemVersionInfo -Controller $myPrimaryCtrl)[0].VersionTuple.Major)))
+    }else{
+        $Global:OntapPrimaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $myPrimaryCtrl)[0].VersionTuple.Generation)+$doubleseparator+[string]((Get-NcSystemVersionInfo -Controller $myPrimaryCtrl)[0].VersionTuple.Major)))
+    }
     $PrimaryVersion=(Get-NcSystemVersionInfo -Controller $myPrimaryCtrl)[0].VersionTuple | Join-String
 }
 
@@ -3141,7 +3163,11 @@ if ( ( $NcSecondaryCtrl = connect_cluster -myController $SECONDARY_CLUSTER -myCr
     }else{
         $doubleseparator=','
     }
-    $Global:OntapSecondaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Generation)+$doubleseparator+[string]((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Major)))
+    if((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Major -lt 10){
+        $Global:OntapSecondaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Generation)+$doubleseparator+"0"+[string]((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Major)))
+    }else{
+        $Global:OntapSecondaryVersion=[double]::parse($([string]((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Generation)+$doubleseparator+[string]((Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple.Major)))
+    }
     $SecondaryVersion=(Get-NcSystemVersionInfo -Controller $NcSecondaryCtrl)[0].VersionTuple | Join-String
 }
 
