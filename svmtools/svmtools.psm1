@@ -4541,7 +4541,7 @@ Function create_update_qospolicy_dr(
                         }else{
                             $VolListRest="*"
                         }
-                        $url=$("https://"+$myPrimaryController.Name+"/api/storage/volumes?svm.name="+$myPrimaryVserver+"&name="+$VolListRest+"&qos.policy.name=!-&fields=qos.policy.*")
+                        $url=$("https://"+$myPrimaryController.Name+"/api/storage/volumes?svm.name="+$myPrimaryVserver+"&name="+$VolListRest+"&qos.policy.name=!-&fields=qos.policy")
                         Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck"
                         $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $PrimaryCredential -SkipCertificateCheck -ErrorVariable ErrorVar
                         if($? -ne $True){
@@ -9686,8 +9686,19 @@ Try {
     # }
 	if ($null -eq $RootVolumeName ) { Write-LogDebug "analyse_junction_path()|root volume not found for $myVserver" }			
 
+    $myVersion=Get-NcSystemVersionInfo -controller $myController
+    if($PSCulture -eq "en-US"){
+        $doubleseparator='.'
+    }else{
+        $doubleseparator=','
+    }
+    if($myVersion[0].VersionTuple.Major -lt 10){
+        $myVersion=[double]::parse($([string]($myVersion[0].VersionTuple.Generation)+$doubleseparator+"0"+[string]($myVersion[0].VersionTuple.Major)))
+    }else{
+        $myVersion=[double]::parse($([string]($myVersion[0].VersionTuple.Generation)+$doubleseparator+[string]($myVersion[0].VersionTuple.Major)))
+    }
     # Get volumes mounted under the root (/) of the vserver namespace. So volume with JunctionParentName = RootVolumeName
-    if($Global:PSTKCall -eq "Zapi"){
+    if($Global:PSTKCall -eq "Zapi" -or $myVersion -lt 9.10){
         Write-LogDebug "Get-NcVol -VserverContext $myVserver -Query @{VolumeIdAttributes=@{JunctionParentName=""$RootVolumeName"";StyleExtended=""flexvol|flexgroup""};Vserver=""$myVserver"";VolumeStateAttributes=@{State=online;IsVserverRoot=false}} -Controller $myController"
         $VolListNotNested= Get-NcVol -VserverContext $myVserver -Query @{VolumeIdAttributes=@{JunctionParentName="$RootVolumeName";StyleExtended="flexvol|flexgroup"};Vserver=$myVserver;VolumeStateAttributes=@{State="online";IsVserverRoot=$false}} -Controller $myController -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get NotNested Volumes failed [$ErrorVar]" }
@@ -9711,7 +9722,7 @@ Try {
         $vol_detail = "" | Select-Object Name, JunctionPath, JunctionParent, Child, Permission, IsNested, Level, ParentPath, IsFlexgroup #create customobject
         $vol_detail.Name=$vol.Name
         $vol_detail.JunctionParent=$RootVolumeName
-        if($Global:PSTKCall -ne "Rest"){
+        if($Global:PSTKCall -ne "Rest" -or $myVersion -lt 9.10){
             $vol_detail.JunctionPath=$vol.VolumeIdAttributes.JunctionPath
             $volExtendStyle=$vol.VolumeIdAttributes.StyleExtended
         }else{
@@ -9739,7 +9750,7 @@ Try {
         }else{
             $vol_detail.IsFlexgroup=$False
         }
-        if($Global:PSTKCall -ne "Rest"){
+        if($Global:PSTKCall -ne "Rest" -or $myVersion -lt 9.10){
             $vol_detail.Level=($vol.VolumeIdAttributes.JunctionPath.split("/")).count
         }else{
             $vol_detail.Level=($vol.nas.path.split("/")).count
@@ -9751,13 +9762,13 @@ Try {
                 $dir=($vol.nas.path).split("/")[1]
             }
         }else{
-            if($Global:PSTKCall -ne "Rest"){
+            if($Global:PSTKCall -ne "Rest" -or $myVersion -lt 9.10){
                 $dir=$vol.VolumeIdAttributes.JunctionPath -replace "/",""
             }else{
                 $dir=$vol.nas.path -replace "/",""
             }
         }
-        if($Global:PSTKCall -ne "Rest"){
+        if($Global:PSTKCall -ne "Rest" -or $myVersion -lt 9.10){
             $vol_detail.Permission=(Read-NcDirectory -Controller $myController -VserverContext $myVserver -Path $("/vol/"+$RootVolumeName) | Where-Object {$_.Name -match $dir} | Select-Object Perm).Perm
         }else{
             $vol_detail.Permission=$vol.nas.unix_permissions
@@ -9776,7 +9787,7 @@ Try {
         }
     }
     # Get volume mounted but not under the SVM rootvolume, under / : the root of vserver namespace
-    if($Global:PSTKCall -eq "Zapi"){
+    if($Global:PSTKCall -eq "Zapi" -or $myVersion -lt 9.10){
         Write-LogDebug "Get-NcVol -VserverContext $myVserver -Query @{VolumeStateAttributes=@{IsVserverRoot=$false;State=""online""};VolumeIdAttributes=@{JunctionParentName=""!$RootVolumeName"";JunctionPath=""!-,!/""};StyleExtended=""flexvol|flexgroup""} -Controller $myController"
         $VolListNested= Get-NcVol -VserverContext $myVserver -Query @{VolumeIdAttributes=@{JunctionParentName="!$RootVolumeName";JunctionPath="!-,!/";StyleExtended="flexvol|flexgroup"};Vserver=$myVserver;VolumeStateAttributes=@{IsVserverRoot=$false;State="online"}} -Controller $myController -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get Nested Volumes failed [$ErrorVar]" }
@@ -9800,7 +9811,7 @@ Try {
         $vol_detail.Name=$vol.Name
         $vol_detail.IsNested=$True
         $vol_detail.ParentPath=""
-        if($Global:PSTKCall -ne "Rest"){
+        if($Global:PSTKCall -ne "Rest" -or $myVersion -lt 9.10){
             $volExtendStyle=$vol.VolumeIdAttributes.StyleExtended
             $vol_detail.JunctionParent=$vol.VolumeIdAttributes.JunctionParentName
             $vol_detail.JunctionPath=$vol.VolumeIdAttributes.JunctionPath
@@ -9829,7 +9840,7 @@ Try {
         }else{
             $vol_detail.IsFlexgroup=$False
         }
-        if($Global:PSTKCall -ne "Rest"){
+        if($Global:PSTKCall -ne "Rest" -or $myVersion -lt 9.10){
             $vol_detail.Level=($vol.VolumeIdAttributes.JunctionPath.split("/")).count
             $dir=(@(($vol.VolumeIdAttributes.JunctionPath).split("/")))[-1]
         }else{
@@ -9837,7 +9848,7 @@ Try {
             $dir=(@($vol.nas.path).split("/"))[1]
         }
         $RootName=$vol_detail.JunctionParent
-        if($Global:PSTKCall -eq "Zapi"){
+        if($Global:PSTKCall -eq "Zapi" -or $myVersion -lt 9.10){
             $vol_detail.Permission=(Read-NcDirectory -Controller $myController -VserverContext $myVserver -Path $("/vol/"+$RootName) | Where-Object {$_.Name -match $dir} | Select-Object Perm).Perm
         }elseif($Global:PSTKCall -eq "ZapiEnforced"){
             $vol_detail.Permission=(Read-NcDirectory -Controller $myController -VserverContext $myVserver -Path $("/vol/"+$RootName) -ONTAPI | Where-Object {$_.Name -match $dir} | Select-Object Perm).Perm
@@ -12668,113 +12679,117 @@ Try {
             
         }
     }
-    # treats network route
-    Write-LogDebug "Get ONTAP version for [$mySecondaryController]"
-    Write-LogDebug "Get-NcSystemVersionInfo -Controller $mySecondaryController"
-    $VersionTuple=(Get-NcSystemVersionInfo -Controller $mySecondaryController | Select-Object VersionTuple).VersionTuple
-    if($VersionTuple.Generation -ge 9){
-        Write-LogDebug "[$mySecondaryController] run ONTAP 9.X"
-        Write-LogDebug "Get-NcNetRoute -Destination '0.0.0.0/0' -Vserver $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
-        $NetRoute=Get-NcNetRoute -Destination '0.0.0.0/0' -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
-        if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcNetRoute failed [$ErrorVar]" }
-        foreach($SecRoute in $NetRoute | Skip-Null){
-            $Gateway=$SecRoute.Gateway
-            $Destination=$SecRoute.Destination
-            Write-LogDebug "Remove-NcNetRoute -Destination $Destination -Gateway $Gateway -Vserver $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
-            $out=Remove-NcNetRoute -Destination $Destination -Gateway $Gateway -Vserver $mySecondaryVserver -Confirm:$False -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
-            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Remove-NcNetRoute failed [$ErrorVar]" ; }
-        }
+    if($Backup -eq $False){
+        # treats network route
+        Write-LogDebug "Get ONTAP version for [$mySecondaryController]"
+        Write-LogDebug "Get-NcSystemVersionInfo -Controller $mySecondaryController"
+        $VersionTuple=(Get-NcSystemVersionInfo -Controller $mySecondaryController | Select-Object VersionTuple).VersionTuple
+        if($VersionTuple.Generation -ge 9){
+            Write-LogDebug "[$mySecondaryController] run ONTAP 9.X"
+            Write-LogDebug "Get-NcNetRoute -Destination '0.0.0.0/0' -Vserver $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
+            $NetRoute=Get-NcNetRoute -Destination '0.0.0.0/0' -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
+            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcNetRoute failed [$ErrorVar]" }
+            foreach($SecRoute in $NetRoute | Skip-Null){
+                $Gateway=$SecRoute.Gateway
+                $Destination=$SecRoute.Destination
+                Write-LogDebug "Remove-NcNetRoute -Destination $Destination -Gateway $Gateway -Vserver $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
+                $out=Remove-NcNetRoute -Destination $Destination -Gateway $Gateway -Vserver $mySecondaryVserver -Confirm:$False -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
+                if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Remove-NcNetRoute failed [$ErrorVar]" ; }
+            }
+            
+            foreach($PrimRoute in $PrimaryDefaultRoute | Skip-Null){
+                $Destination=$PrimRoute.Destination
+                $Metric=$PrimRoute.Metric
+                $Gateway=$PrimRoute.Gateway
+                if((-not $Global:ForceCloneOriginal.IsPresent) -or ($Global:NonInteractive -eq $False) -or (-not $Global:ForceRestoreOriginal.IsPresent)){
+                    $Gateway=ask_gateway_from_cli -myGateway $Gateway -workOn $($mySecondaryVserver +" Destination "+$Destination) -forceAsk $True 
+                }
+                Write-Log "[$mySecondaryVserver] Add New Route Destination [$Destination] Gateway [$Gateway] Metric [$Metric]"
+                Write-LogDebug "New-NcNetRoute -Destination $Destination -Metric $Metric -Gateway $Gateway -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+                $out=New-NcNetRoute -Destination $Destination -Metric $Metric -Gateway $Gateway -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: New-NcNetRoute failed [$ErrorVar]" }
+            }
         
-        foreach($PrimRoute in $PrimaryDefaultRoute | Skip-Null){
-            $Destination=$PrimRoute.Destination
-            $Metric=$PrimRoute.Metric
-            $Gateway=$PrimRoute.Gateway
-            if((-not $Global:ForceCloneOriginal.IsPresent) -or ($Global:NonInteractive -eq $False) -or (-not $Global:ForceRestoreOriginal.IsPresent)){
-                $Gateway=ask_gateway_from_cli -myGateway $Gateway -workOn $($mySecondaryVserver +" Destination "+$Destination) -forceAsk $True 
-            }
-            Write-Log "[$mySecondaryVserver] Add New Route Destination [$Destination] Gateway [$Gateway] Metric [$Metric]"
-            Write-LogDebug "New-NcNetRoute -Destination $Destination -Metric $Metric -Gateway $Gateway -Vserver $mySecondaryVserver -Controller $mySecondaryController"
-            $out=New-NcNetRoute -Destination $Destination -Metric $Metric -Gateway $Gateway -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
-            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: New-NcNetRoute failed [$ErrorVar]" }
-        }
-    
+        }                                   
     }
-    # treats other network route
-    if($PrimaryDefaultRouteOther.count -ge 1){
-        if($VersionTuple.Generation -ge 9){
-            foreach($OtherRoute in $PrimaryDefaultRouteOther){
-                $PrimaryOtherDestination=$OtherRoute.Destination
-                $PrimaryOtherGateway=$OtherRoute.Gateway
-                $PrimaryOtherMetric=$OtherRoute.Metric
-                $myGateway=""
-                if($OtherRouteDone -contains $PrimaryOtherDestination){continue}
-                Write-LogDebug "Get-NcNetRoute -Destination $PrimaryOtherDestination -Vserver $mySecondaryVserver -Controller $mySecondaryController"
-                $SecondaryOther=Get-NcNetRoute -Destination $PrimaryOtherDestination -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
-                if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Get-NcNetRoute failed [$ErrorVar]"; continue }
-                if ( $null -ne $SecondaryOther ){
-                    $myGateway=$SecondaryOther.Gateway
-                    Write-LogDebug "Remove-NcNetRoute -Destination $PrimaryOtherDestination -Gateway $myGateway -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
-                    $ret=Remove-NcNetRoute -Destination $PrimaryOtherDestination -VserverContext $mySecondaryVserver -Gateway $myGateway -Controller $mySecondaryController -ErrorVariable ErroVar -Confirm:$false -ONTAPI
-                    if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Remove-NcNetRoute failed [$ErrorVar]"; continue }
-                }
-                if($myGateway.Length -eq 0){
-                    $myGateway=$PrimaryOtherGateway
-                }
-                foreach($Gateway in $myGateway){
-                    if((-not $Global:ForceCloneOriginal.IsPresent) -or ($Global:NonInteractive -eq $False) -or (-not $Global:ForceRestoreOriginal.IsPresent)){
-                        $Gateway=ask_gateway_from_cli -myGateway $Gateway -workOn $($workOn+" Destination "+$PrimaryOtherDestination)
+    if($Backup -eq $False){
+        # treats other network route
+        if($PrimaryDefaultRouteOther.count -ge 1){
+            if($VersionTuple.Generation -ge 9){
+                foreach($OtherRoute in $PrimaryDefaultRouteOther){
+                    $PrimaryOtherDestination=$OtherRoute.Destination
+                    $PrimaryOtherGateway=$OtherRoute.Gateway
+                    $PrimaryOtherMetric=$OtherRoute.Metric
+                    $myGateway=""
+                    if($OtherRouteDone -contains $PrimaryOtherDestination){continue}
+                    Write-LogDebug "Get-NcNetRoute -Destination $PrimaryOtherDestination -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+                    $SecondaryOther=Get-NcNetRoute -Destination $PrimaryOtherDestination -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Get-NcNetRoute failed [$ErrorVar]"; continue }
+                    if ( $null -ne $SecondaryOther ){
+                        $myGateway=$SecondaryOther.Gateway
+                        Write-LogDebug "Remove-NcNetRoute -Destination $PrimaryOtherDestination -Gateway $myGateway -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
+                        $ret=Remove-NcNetRoute -Destination $PrimaryOtherDestination -VserverContext $mySecondaryVserver -Gateway $myGateway -Controller $mySecondaryController -ErrorVariable ErroVar -Confirm:$false -ONTAPI
+                        if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Remove-NcNetRoute failed [$ErrorVar]"; continue }
                     }
-                    Write-Log "[$workOn] Add New Route Destination [$PrimaryOtherDestination] Gateway [$Gateway] Metric [$PrimaryOtherMetric]"
-                    Write-LogDebug "New-NcNetRoute -Destination $PrimaryOtherDestination -Gateway $Gateway -Metric $PrimaryOtherMetric -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                    $ret=New-NcNetRoute -Destination $PrimaryOtherDestination -Gateway $Gateway -Metric $PrimaryOtherMetric -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar -Confirm:$false
-                    if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: New-NcNetRoute failed [$ErrorVar]"; continue }
-                    $OtherRouteDone+=$PrimaryOtherDestination
+                    if($myGateway.Length -eq 0){
+                        $myGateway=$PrimaryOtherGateway
+                    }
+                    foreach($Gateway in $myGateway){
+                        if((-not $Global:ForceCloneOriginal.IsPresent) -or ($Global:NonInteractive -eq $False) -or (-not $Global:ForceRestoreOriginal.IsPresent)){
+                            $Gateway=ask_gateway_from_cli -myGateway $Gateway -workOn $($workOn+" Destination "+$PrimaryOtherDestination)
+                        }
+                        Write-Log "[$workOn] Add New Route Destination [$PrimaryOtherDestination] Gateway [$Gateway] Metric [$PrimaryOtherMetric]"
+                        Write-LogDebug "New-NcNetRoute -Destination $PrimaryOtherDestination -Gateway $Gateway -Metric $PrimaryOtherMetric -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                        $ret=New-NcNetRoute -Destination $PrimaryOtherDestination -Gateway $Gateway -Metric $PrimaryOtherMetric -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar -Confirm:$false
+                        if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: New-NcNetRoute failed [$ErrorVar]"; continue }
+                        $OtherRouteDone+=$PrimaryOtherDestination
+                    }
                 }
             }
-        }
-        else{
-            foreach($OtherRoute in $PrimaryDefaultRouteOther){
-                $PrimaryOtherDestination=$OtherRoute.DestinationAddress
-                $PrimaryOtherGateway=$OtherRoute.GatewayAddress
-                $PrimaryOtherMetric=$OtherRoute.Metric
-                $PrimaryOtherRouting=$OtherRoute.RoutingGroup
-                $myGateway=""
-                if($OtherRouteDone -contains $PrimaryOtherDestination){continue}
-                Write-LogDebug "Get-NcNetRoutingGroupRoute -Destination $PrimaryOtherDestination -Vserver $mySecondaryVserver -Controller $mySecondaryController"
-                $SecondaryOther=Get-NcNetRoutingGroupRoute -Destination $PrimaryOtherDestination -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
-                if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Get-NcNetRoutingGroupRoute failed [$ErrorVar]"; continue }
-                if ( $null -ne $SecondaryOther ){
-                    $myGateway=$SecondaryOther.GatewayAddress
-                    $SecondaryRoutingGroupName=$SecondaryOther.RoutingGroup
-                    Write-LogDebug "Remove-NcNetRoutingGroupRoute -RoutingGroup $SecondaryRoutingGroupName -Vserver $mySecondaryVserver -Controller $mySecondaryController"
-                    $ret=Remove-NcNetRoutingGroupRoute -RoutingGroup $SecondaryRoutingGroupName -Destination $PrimaryOtherDestination -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar -Confirm:$false
-                    if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Remove-NcNetRoutingGroupRoute failed [$ErrorVar]"; continue }
-                }
-                if($myGateway.Length -eq 0){
-                    $myGateway=$PrimaryOtherGateway
-                }
-                foreach($Gateway in $myGateway){
-                    $Gateway=ask_gateway_from_cli -myGateway $Gateway -workOn $($workOn+" Destination "+$PrimaryOtherDestination)
-                    Write-Log "[$workOn] Add New Route RoutingGroup [$PrimaryOtherRouting] Destination [$PrimaryOtherDestination] Gateway [$Gateway] Metric [$PrimaryOtherMetric]"
-                    Write-LogDebug "New-NcNetRoutingGroupRoute -RoutingGroup $PrimaryOtherRouting -Destination $PrimaryOtherDestination -Gateway $Gateway -Metric $PrimaryOtherMetric -Vserver $mySecondaryVserver -Controller $mySecondaryController"
-                    $ret=New-NcNetRoutingGroupRoute -RoutingGroup $PrimaryOtherRouting -Destination $PrimaryOtherDestination -Gateway $Gateway -Metric $PrimaryOtherMetric -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar -Confirm:$false
-                    if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: New-NcNetRoute failed [$ErrorVar]"; continue }
-                    $OtherRouteDone+=$PrimaryOtherDestination
+            else{
+                foreach($OtherRoute in $PrimaryDefaultRouteOther){
+                    $PrimaryOtherDestination=$OtherRoute.DestinationAddress
+                    $PrimaryOtherGateway=$OtherRoute.GatewayAddress
+                    $PrimaryOtherMetric=$OtherRoute.Metric
+                    $PrimaryOtherRouting=$OtherRoute.RoutingGroup
+                    $myGateway=""
+                    if($OtherRouteDone -contains $PrimaryOtherDestination){continue}
+                    Write-LogDebug "Get-NcNetRoutingGroupRoute -Destination $PrimaryOtherDestination -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+                    $SecondaryOther=Get-NcNetRoutingGroupRoute -Destination $PrimaryOtherDestination -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Get-NcNetRoutingGroupRoute failed [$ErrorVar]"; continue }
+                    if ( $null -ne $SecondaryOther ){
+                        $myGateway=$SecondaryOther.GatewayAddress
+                        $SecondaryRoutingGroupName=$SecondaryOther.RoutingGroup
+                        Write-LogDebug "Remove-NcNetRoutingGroupRoute -RoutingGroup $SecondaryRoutingGroupName -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+                        $ret=Remove-NcNetRoutingGroupRoute -RoutingGroup $SecondaryRoutingGroupName -Destination $PrimaryOtherDestination -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar -Confirm:$false
+                        if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Remove-NcNetRoutingGroupRoute failed [$ErrorVar]"; continue }
+                    }
+                    if($myGateway.Length -eq 0){
+                        $myGateway=$PrimaryOtherGateway
+                    }
+                    foreach($Gateway in $myGateway){
+                        $Gateway=ask_gateway_from_cli -myGateway $Gateway -workOn $($workOn+" Destination "+$PrimaryOtherDestination)
+                        Write-Log "[$workOn] Add New Route RoutingGroup [$PrimaryOtherRouting] Destination [$PrimaryOtherDestination] Gateway [$Gateway] Metric [$PrimaryOtherMetric]"
+                        Write-LogDebug "New-NcNetRoutingGroupRoute -RoutingGroup $PrimaryOtherRouting -Destination $PrimaryOtherDestination -Gateway $Gateway -Metric $PrimaryOtherMetric -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+                        $ret=New-NcNetRoutingGroupRoute -RoutingGroup $PrimaryOtherRouting -Destination $PrimaryOtherDestination -Gateway $Gateway -Metric $PrimaryOtherMetric -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar -Confirm:$false
+                        if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: New-NcNetRoute failed [$ErrorVar]"; continue }
+                        $OtherRouteDone+=$PrimaryOtherDestination
+                    }
                 }
             }
+            <# $VersionTuple=(Get-NcSystemVersionInfo -Controller $mySecondaryController | Select-Object VersionTuple).VersionTuple
+            if($VersionTuple.Generation -ge 9){
+                $SecondaryRoutes=Get-NcNetRoute -Query @{Destination="0.0.0.0/0";Vserver=$mySecondaryVserver} -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                if ( $? -ne $True ){$Return = $False ; Clean_Throw "ERROR: Get-NcNetRoute failed [$ErrorVar]"}
+            }else{
+                $SecondaryRoutes=Get-NcNetRoutingGroupRoute -Destination '0.0.0.0/0' -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcNetRoutingGroupRoute failed [$ErrorVar]" }
+            }
+            if ( ($ret=Save_Route_To_JSON -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryRoutes $PrimaryDefaultRouteOther -mySecondaryRoutes $SecondaryRoutes -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver) -eq $False){
+                Write-Log "Failed to Backup Net Route details to JSON"
+                return $False
+            } #>
         }
-        <# $VersionTuple=(Get-NcSystemVersionInfo -Controller $mySecondaryController | Select-Object VersionTuple).VersionTuple
-        if($VersionTuple.Generation -ge 9){
-            $SecondaryRoutes=Get-NcNetRoute -Query @{Destination="0.0.0.0/0";Vserver=$mySecondaryVserver} -Controller $mySecondaryController  -ErrorVariable ErrorVar
-            if ( $? -ne $True ){$Return = $False ; Clean_Throw "ERROR: Get-NcNetRoute failed [$ErrorVar]"}
-        }else{
-            $SecondaryRoutes=Get-NcNetRoutingGroupRoute -Destination '0.0.0.0/0' -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
-            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcNetRoutingGroupRoute failed [$ErrorVar]" }
-        }
-        if ( ($ret=Save_Route_To_JSON -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryRoutes $PrimaryDefaultRouteOther -mySecondaryRoutes $SecondaryRoutes -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver) -eq $False){
-            Write-Log "Failed to Backup Net Route details to JSON"
-            return $False
-        } #>
     }
     if($Backup -eq $False -and $Restore -eq $False){
         if($Global:PSTKCall -ne "Rest"){
@@ -13525,7 +13540,12 @@ Try {
             $myCred=get_local_cDotcred($myPrimaryController)
             $myVserver=Get-NcVserver -Name $myPrimaryVserver -Controller $myPrimaryController
             $myVserverUUID=$myVserver.Uuid
-            $url=$("https://"+$myPrimaryController.Name+"/api/protocols/cifs/services/"+$myVserverUUID+"?fields=security,options,ad_domain")
+            if($Global:OntapPrimaryVersion -ge 9.10){
+                $parameters="security,options,ad_domain"
+            }else{
+                $parameters="security,ad_domain"
+            }
+            $url=$("https://"+$myPrimaryController.Name+"/api/protocols/cifs/services/"+$myVserverUUID+"?fields="+$parameters)
             Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method get -Uri $url -Credential $myCred -SkipCertificateCheck"
             $ret=Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $myCred -SkipCertificateCheck -ErrorVariable ErrorVar
             if($? -ne $True){
@@ -13533,7 +13553,13 @@ Try {
                 Write-LogDebug "[$workOn]: end"
                 return $False
             }
-            $primaryOptions=$ret.options
+            if($Global:OntapPrimaryVersion -ge 9.10){
+                $primaryOptions=$ret.options
+            }else{
+                Write-LogDebug "Get-NcCifsOption -VserverContext $myPrimaryVserver -controller $myPrimaryController -ONTAPI"
+                $primaryOptions=Get-NcCifsOption -VserverContext $myPrimaryVserver -controller $myPrimaryController -ONTAPI -ErrorVariable ErrorVar
+                if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcCifsOption failed [$ErrorVar]" }
+            }
             $PrimaryCIFSsecurity=$ret.security
             $PrimaryADDomain=$ret.ad_domain.fqdn
         }
@@ -16288,6 +16314,9 @@ $request=@"
                                 $DestinationShareDetails=$PrimaryShareDetails | Select-Object -ExcludeProperty svm,volume,browsable,show_previous_versions
                                 if($Global:OntapSecondaryVersion -lt 9.14){$DestinationShareDetails=$DestinationShareDetails | Select-Object -ExcludeProperty attribute_cache,max_connections_per_share}
                                 if($Global:OntapSecondaryVersion -lt 9.13){$DestinationShareDetails=$DestinationShareDetails | Select-Object -ExcludeProperty browsable,show_previous_versions}
+                                if($Global:OntapSecondaryVersion -lt 9.11){$DestinationShareDetails=$DestinationShareDetails | Select-Object -ExcludeProperty allow_unencrypted_access}
+                                if($Global:OntapSecondaryVersion -lt 9.10){$DestinationShareDetails=$DestinationShareDetails | Select-Object -ExcludeProperty continuously_available,file_umask,dir_umask,namespace_caching,offline_files,show_snapshot,vscan_profile}
+                                if($Global:OntapSecondaryVersion -lt 9.09){$DestinationShareDetails=$DestinationShareDetails | Select-Object -ExcludeProperty no_strict_security}
                                 $DestinationShareDetails | Add-Member -MemberType NoteProperty -name "svm" -value @{"name"=$mySecondaryVserver}
                                 #$DestinationShareDetails=$DestinationShareDetails | Select-Object -Property * -ExcludeProperty browsable,show_previous_version
                                 $bodyshare=$DestinationShareDetails | ConvertTo-Json
@@ -26136,7 +26165,8 @@ Function restore_quota (
                     $Query.Vserver = $Vserver
                     $Query.QuotaType= 'tree'  
                     $Query.Policy=$myPolicy
-                    $QuotaList=Get-NcQuota -Controller $myController -Query $Query
+                    $QuotaList=Get-NcQuota -Controller $myController -Query $Query -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) { Write-LogError "ERROR: Get-NcQuota failed [$ErrorVar]" }
                     foreach ( $Quota in ( $QuotaList | Skip-Null ) ) {
                         if ( ( $Query.QuotaTarget -eq $Quota.QuotaTarget ) ) 
                         {
@@ -26223,7 +26253,7 @@ Function restore_quota (
                     $Query.QuotaType= 'user'
                     $Query.Policy=$myPolicy
                     $QuotaList=Get-NcQuota -Controller $myController -Query $Query  -ErrorVariable ErrorVar
-                    if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcQuota failed [$ErrorVar]" }
+                    if ( $? -ne $True ) { Write-LogError "ERROR: Get-NcQuota failed [$ErrorVar]" }
                     foreach ( $Quota in ( $QuotaList | Skip-Null ) ) {
                         if ( ( $Query.QuotaTarget -eq $Quota.QuotaTarget ) -and ( $Query.Qtree -eq $Quota.Qtree ) ) 
                         {
@@ -26317,7 +26347,7 @@ Function restore_quota (
                     $Query.Policy=$myPolicy
 
                     $QuotaList=Get-NcQuota -Controller $myController -Query $Query  -ErrorVariable ErrorVar
-                    if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcQuota failed [$ErrorVar]" }
+                    if ( $? -ne $True ) { Write-LogError "ERROR: Get-NcQuota failed [$ErrorVar]" }
                     foreach ( $Quota in ( $QuotaList | Skip-Null ) ) {
                         if ( ( $Query.QuotaTarget -eq $Quota.QuotaTarget ) ) 
                         {
@@ -27623,7 +27653,15 @@ Function create_update_servicepolicy_dr(
         Write-Log "[$workOn] Check SVM Service Policy"
         Write-LogDebug "[$myPrimaryVserver]: start"
         if($Backup -eq $True){Write-LogDebug "run in Backup mode [$myPrimaryVserver]"}
-        if($Restore -eq $True){Write-LogDebug "run in Restore mode [$myPrimaryVserver]"}
+        if($Restore -eq $True){
+            Write-LogDebug "run in Restore mode [$myPrimaryVserver]"
+            if($Global:OntapSecondaryVersion -lt 10){
+                Write-LogWarn "Your ctrl must at least run ONTAP version 9.10.1 to support Service Policy"
+                $Return=$True
+                Write-LogDebug "[$myPrimaryVserver]: end"
+                return $Return
+            }
+        }
 
 
         if($Restore -eq $False -and $Backup -eq $False){
@@ -27649,12 +27687,7 @@ Function create_update_servicepolicy_dr(
             $VersionSecondary=$Global:OntapSecondaryVersion
              
         }
-        if($Global:OntapSecondaryVersion -lt 10){
-            Write-LogWarn "Your ctrl must at least run ONTAP version 9.10.1 to support Service Policy"
-            $Return=$True
-            Write-LogDebug "[$myPrimaryVserver]: end"
-            return $Return
-        }
+        
         if($Global:PSTKCall -eq "Zapi"){
             Write-LogWarn "You must use PSTK core with REST call to support Service Policy"
             $Return=$True
@@ -27668,7 +27701,7 @@ Function create_update_servicepolicy_dr(
         }
         if($Restore -eq $False){
             $PrimaryServicePolicies=Get-NcNetServicePolicy -Controller $myPrimaryController -Vserver $myPrimaryVserver  -ErrorVariable ErrorVar
-            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcNetServicePolicy failed [$ErrorVar]" }
+            if ( $? -ne $True ) { Write-LogError "ERROR: Get-NcNetServicePolicy failed [$ErrorVar]" }
             <# $Cred=get_local_cDotcred($mySecondaryController)
             $url=$("https://"+$myPrimaryController.Name+"/api/private/cli/network/interface/service-policy?vserver="+$myPrimaryVserver+"&fields=service_allowed_addresses,policy,vserver,services,is_built_in")
             Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method 'get' -Uri $url -Credential $Cred -SkipCertificateCheck"
@@ -27958,6 +27991,11 @@ Function create_update_servicepolicy_dr(
     catch
     {
         Error_Handling $_ $workOn -donotcleanlog4net
-	    return $false        
+        if($Backup -eq $True){
+            return $True
+        }
+        else{
+	        return $false        
+        }
     }
 }
