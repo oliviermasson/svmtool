@@ -5,7 +5,7 @@
     This module contains several functions to manage SVMDR, Backup and Restore Configuration...
 .NOTES
     Authors  : Olivier Masson, Jerome Blanchet, Mirko Van Colen
-    Release  : May 23th 2024
+    Release  : February 26th 2025
 
 #>
 
@@ -16,6 +16,14 @@ filter Skip-Null { $_|Where-Object{ $_ -ne $null } }
 $Global:MOUNT_RETRY_COUNT = 100
 $WarningPreference="SilentlyContinue"
 
+
+function getClusterVersion {
+    param(
+        [NetApp.Ontapi.Filer.C.NcController]$NcController
+    )
+    $version = [double]::parse($([string]((Get-NcSystemVersionInfo -Controller $NcController -ONTAPI)[0].VersionTuple.Generation)+$doubleseparator+[string]((Get-NcSystemVersionInfo -Controller $NcController -ONTAPI)[0].VersionTuple.Major)))
+    return $version
+}
 #############################################################################################
 function init_log4net{
     write-verbose "Loading log4net from path $PSScriptRoot\log4net.dll"
@@ -2667,12 +2675,12 @@ Function create_update_localunixgroupanduser_dr(
                 $SecondaryGroup=Get-NcNameMappingUnixGroup -Query $template -Controller $mySecondaryController  -ErrorVariable ErrorVar
                 if($? -ne $True){$Return = $False; Clean_Throw "ERROR : Get-NcNameMappingUnixGroup [$ErrorVar]"}
                 if($SecondaryGroup.count -eq 0){
-                    Write-Log "[$workOn] Create Local Unix Group [$GroupName] [$GroupId] [$GroupUser_string] on [$mySecondaryVserver]"
+                    Write-Log "[$workOn] Create Local Unix Group [$GroupName] [$GroupId] [$GroupUser_string]"
                     $out=New-NcNameMappingUnixGroup -Name $GroupName -GroupId $GroupId -SkipNameValidation -Confirm:$false -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                     if($? -ne $True){$Return = $False; Clean_Throw "ERROR : New-NcNameMappingUnixGroup [$ErrorVar]"} 
                     foreach($usertoadd in $GroupUsers){
                         $UserName=$usertoadd.UserName
-                        Write-Log "[$workOn] Add User [$UserName] into Group [$GroupName] on [$mySecondaryVserver]"
+                        Write-Log "[$workOn] Add User [$UserName] into Group [$GroupName]"
                         Write-LogDebug "Add-NcNameMappingUnixGroupUser -Name $GroupName -UserName $UserName -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
                         $out=Add-NcNameMappingUnixGroupUser -Name $GroupName -UserName $UserName -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                         if($? -ne $True){$Return = $False; Clean_Throw "ERROR : Add-NcNameMappingUnixGroupUser [$ErrorVar]"} 
@@ -2684,14 +2692,14 @@ Function create_update_localunixgroupanduser_dr(
                         foreach($Diff in $Differences){
                             if($Diff.SideIndicator -eq "=>"){
                                 $UserToRemove=$Diff.UserName
-                                Write-Log "[$workOn] Remove User [$UserToRemove] from Group [$GroupName] on [$mySecondaryVserver]"
+                                Write-Log "[$workOn] Remove User [$UserToRemove] from Group [$GroupName]"
                                 Write-LogDebug "Remove-NcNameMappingUnixGroupUser -Name $GroupName -UserName $UserToRemove -VserverContext $mySecondaryVserver -Confirm:$false -Controller $mySecondaryController"
                                 $out=Remove-NcNameMappingUnixGroupUser -Name $GroupName -UserName $UserToRemove -VserverContext $mySecondaryVserver -Confirm:$false -Controller $mySecondaryController  -ErrorVariable ErrorVar 
                                 if($? -ne $True){$Return = $False; Clean_Throw "ERROR : Remove-NcNameMappingUnixGroupUser [$ErrorVar]"}   
                             }
                             if($Diff.SideIndicator -eq "<="){
                                 $UserName=$Diff.UserName
-                                Write-Log "[$workOn] Add User [$UserName] into Group [$GroupName] on [$mySecondaryVserver]"
+                                Write-Log "[$workOn] Add User [$UserName] into Group [$GroupName]"
                                 Write-LogDebug "Add-NcNameMappingUnixGroupUser -Name $GroupName -UserName $UserName -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
                                 $out=Add-NcNameMappingUnixGroupUser -Name $GroupName -UserName $UserName -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                                 if($? -ne $True){$Return = $False; Clean_Throw "ERROR : Add-NcNameMappingUnixGroupUser [$ErrorVar]"} 
@@ -2701,7 +2709,7 @@ Function create_update_localunixgroupanduser_dr(
                     if(($GroupUsers.count -gt 0) -and ($SecondaryGroupUsers.count -eq 0)){
                         foreach($UserInGroup in $GroupUsers){
                             $UserName=$UserInGroup.UserName
-                            Write-Log "[$workOn] Add User [$UserName] into Group [$GroupName] on [$mySecondaryVserver]"
+                            Write-Log "[$workOn] Add User [$UserName] into Group [$GroupName]"
                             Write-LogDebug "Add-NcNameMappingUnixGroupUser -Name $GroupName -UserName $UserName -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
                             $out=Add-NcNameMappingUnixGroupUser -Name $GroupName -UserName $UserName -VserverContext $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                             if($? -ne $True){$Return = $False; Clean_Throw "ERROR : Add-NcNameMappingUnixGroupUser [$ErrorVar]"}
@@ -5083,6 +5091,8 @@ Try {
                             $Return=$False
                         }
                     }
+                    $cron_text=$cron | Format-List | out-string
+                    Write-LogDebug "cron [$cron_text]"
                     $PrimaryJobScheduleDescription = if($null -eq $cron.JobScheduleDescription){""}else{$cron.JobScheduleDescription}
                     $PrimaryJobScheduleCronMonth = if($null -eq $cron.JobScheduleCronMonth){"";$PrimaryJobScheduleCronMonth_string=""}else{$cron.JobScheduleCronMonth;$PrimaryJobScheduleCronMonth_string=$cron.JobScheduleCronMonth | out-string}
                     $PrimaryJobScheduleCronDayOfWeek = if($null -eq $cron.JobScheduleCronDayOfWeek){"";$PrimaryJobScheduleCronDayOfWeek_string=""}else{$cron.JobScheduleCronDayOfWeek;$PrimaryJobScheduleCronDayOfWeek_string=$cron.JobScheduleCronDayOfWeek | out-string}
@@ -5311,6 +5321,8 @@ Try {
                                 $Return=$False
                             }
                         }
+                        $cron_text=$cron | Format-List | out-string
+                        Write-LogDebug "cron [$cron_text]"
                         $PrimaryJobScheduleDescription = if($null -eq $cron.JobScheduleDescription){""}else{$cron.JobScheduleDescription}
                         $PrimaryJobScheduleCronMonth = if($null -eq $cron.JobScheduleCronMonth){"";$PrimaryJobScheduleCronMonth_string=""}else{$cron.JobScheduleCronMonth;$PrimaryJobScheduleCronMonth_string=$cron.JobScheduleCronMonth | out-string}
                         $PrimaryJobScheduleCronDayOfWeek = if($null -eq $cron.JobScheduleCronDayOfWeek){"";$PrimaryJobScheduleCronDayOfWeek_string=""}else{$cron.JobScheduleCronDayOfWeek;$PrimaryJobScheduleCronDayOfWeek_string=$cron.JobScheduleCronDayOfWeek | out-string}
@@ -7634,7 +7646,7 @@ Try {
         foreach ( $PrimaryVol in ( $PrimaryVolList | Skip-Null ) ) {
             $PrimaryVolName=$PrimaryVol.Name
             Write-LogDebug "PrimaryVol [$PrimaryVolName]"
-            # check if volume properties are obtained from pure REST or from cmdlet get-ncvol
+            # check if volume properties are obtained from pure REST API or from cmdlet get-ncvol
             if(($PrimaryVol | Get-Member -MemberType Property -Name VolumeIdAttributes).count -ge 1) {
                 $PrimaryVolStyle=$PrimaryVol.VolumeSecurityAttributes.Style
                 $PrimaryVolExportPolicy=$PrimaryVol.VolumeExportAttributes.Policy
@@ -7719,10 +7731,10 @@ Try {
                 if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcVol failed [$ErrorVar]" } 
                 if ( $null -eq $SecondaryVol )  
                 {
-                    Write-LogDebug "volume $PrimaryVol doesnt' exist" 
-                    Write-LogError "ERROR: check_update_voldr: volume $PrimaryVolName do not exist vserver $mySecondaryVserver" 
-                    Write-LogError "ERROR: please use DataAggr and/or AggrMatchRegex option or run ConfigureDR to create missing volumes" 
-                    $Return = $False
+                    Write-LogWarn "WARNING: volume $PrimaryVolName doesnt' exist" 
+                    Write-LogWarn "WARNING: check_update_voldr: volume $PrimaryVolName do not exist vserver $mySecondaryVserver" 
+                    Write-LogWarn "WARNING: please use DataAggr and/or AggrMatchRegex option or run ConfigureDR to create missing volumes" 
+                    #$Return = $False
                 } 
                 else 
                 {
@@ -8773,7 +8785,9 @@ Try {
                                         #$NewNcVolParameters+=@{access_time_enabled=$PrimaryVol.access_time_enabled}  Error cannot be set during POST
                                         $NewNcVolParameters+=@{cloud_retrieval_policy=$PrimaryVol.cloud_retrieval_policy}
                                         if($PrimaryVol.efficiency.application_io_size -match "8k|auto"){   # only 8k and auto supported during POST
-                                            $NewNcVolParameters+=@{efficiency=@{application_io_size=$PrimaryVol.efficiency.application_io_size}}
+                                            if((Get-NcClusterNode -Controller $mySecondaryController).Model -match "AFF|ASA"){
+                                                $NewNcVolParameters+=@{efficiency=@{application_io_size=$PrimaryVol.efficiency.application_io_size}}
+                                            }
                                         }
                                         try{
                                             $NewNcVolParameters+=@{snaplock=@{type=$PrimaryVol.snaplock.type}}
@@ -8867,7 +8881,9 @@ Try {
                                                 $NewNcVolParameters.anti_ransomware_state=$PrimaryVol.anti_ransomware_state   
                                             }
                                         }
-                                        $NewNcVolParameters.efficiency=@{storage_efficiency_mode=$PrimaryVol.efficiency.storage_efficiency_mode}
+                                        if((Get-NcClusterNode -Controller $mySecondaryController).Model -match "AFF|ASA"){
+                                            $NewNcVolParameters.efficiency=@{storage_efficiency_mode=$PrimaryVol.efficiency.storage_efficiency_mode}
+                                        }
                                     }
                                     if($Global:OntapSecondaryVersion -ge 9.11){
                                         try{
@@ -8886,11 +8902,12 @@ Try {
                                             $NewNcVolParameters+=@{_tags=$PrimaryVol._tags}
                                         }
                                         $NewNcVolParameters+=@{aggressive_readahead_mode=$PrimaryVol.aggressive_readahead_mode}
-                                        try{
+                                        # following option available since 9.13.1 but in 9.13.1 for fsx and CVO volume only
+                                        <# try{
                                             $NewNcVolParameters+=@{cloud_write_enabled=$PrimaryVol.cloud_write_enabled}
                                         }catch{
                                             $NewNcVolParameters.cloud_write_enabled=$PrimaryVol.cloud_write_enabled  
-                                        }
+                                        } #>
                                         try{
                                             $NewNcVolParameters+=@{snapshot_directory_access_enabled=$PrimaryVol.snapshot_directory_access_enabled}
                                         }catch{
@@ -8903,6 +8920,12 @@ Try {
                                         }
                                         if($null -ne $PrimaryVol.anti_ransoware.event_log.is_enabled_on_snapshot_copy_creation){
                                             $NewNcVolParameters.anti_ransomware.event_log+=@{is_enabled_on_snapshot_copy_creation=$PrimaryVol.anti_ransoware.event_log.is_enabled_on_snapshot_copy_creation} 
+                                        }
+                                        # following option available since 9.13.1 but in 9.13.1 for fsx and CVO volume only
+                                        try{
+                                            $NewNcVolParameters+=@{cloud_write_enabled=$PrimaryVol.cloud_write_enabled}
+                                        }catch{
+                                            $NewNcVolParameters.cloud_write_enabled=$PrimaryVol.cloud_write_enabled  
                                         }
                                     }
                                     $bodyvol=$NewNcVolParameters | ConvertTo-Json
@@ -12036,7 +12059,7 @@ Try {
                     $RelationshipStatus=$SnapmirrorRelationshipStatus.records[0].status
                 }
             }
-			Write-Log "[$mySecondaryVserver] remove snapmirror relation for volume [$SourceLocation] --> [$DestinationLocation]"
+			Write-Log "[$mySecondaryVserver] remove snapmirror relationship for volume [$SourceLocation] --> [$DestinationLocation]"
 			if ( $MirrorState -eq 'snapmirrored' ) {
                 Write-LogDebug "Invoke-NcSnapmirrorQuiesce -DestinationCluster $mySecondaryCluster -DestinationVserver $mySecondaryVserver -DestinationVolume  $DestinationVolume -SourceCluster $myPrimaryCluster -SourceVserver $myPrimaryVserver  -SourceVolume $SourceVolume  -Controller  $mySecondaryController -Confirm:$False"
 				$out= Invoke-NcSnapmirrorQuiesce -DestinationCluster $mySecondaryCluster -DestinationVserver $mySecondaryVserver -DestinationVolume  $DestinationVolume -SourceCluster $myPrimaryCluster -SourceVserver $myPrimaryVserver  -SourceVolume $SourceVolume  -Controller  $mySecondaryController  -ErrorVariable ErrorVar -Confirm:$False
@@ -12622,113 +12645,115 @@ Try {
             
         }
     }
+    if($Backup -eq $False){
     # treats network route
-    Write-LogDebug "Get ONTAP version for [$mySecondaryController]"
-    Write-LogDebug "Get-NcSystemVersionInfo -Controller $mySecondaryController"
-    $VersionTuple=(Get-NcSystemVersionInfo -Controller $mySecondaryController | Select-Object VersionTuple).VersionTuple
-    if($VersionTuple.Generation -ge 9){
-        Write-LogDebug "[$mySecondaryController] run ONTAP 9.X"
-        Write-LogDebug "Get-NcNetRoute -Destination '0.0.0.0/0' -Vserver $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
-        $NetRoute=Get-NcNetRoute -Destination '0.0.0.0/0' -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
-        if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcNetRoute failed [$ErrorVar]" }
-        foreach($SecRoute in $NetRoute | Skip-Null){
-            $Gateway=$SecRoute.Gateway
-            $Destination=$SecRoute.Destination
-            Write-LogDebug "Remove-NcNetRoute -Destination $Destination -Gateway $Gateway -Vserver $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
-            $out=Remove-NcNetRoute -Destination $Destination -Gateway $Gateway -Vserver $mySecondaryVserver -Confirm:$False -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
-            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Remove-NcNetRoute failed [$ErrorVar]" ; }
-        }
+        Write-LogDebug "Get ONTAP version for [$mySecondaryController]"
+        Write-LogDebug "Get-NcSystemVersionInfo -Controller $mySecondaryController"
+        $VersionTuple=(Get-NcSystemVersionInfo -Controller $mySecondaryController | Select-Object VersionTuple).VersionTuple
+        if($VersionTuple.Generation -ge 9){
+            Write-LogDebug "[$mySecondaryController] run ONTAP 9.X"
+            Write-LogDebug "Get-NcNetRoute -Destination '0.0.0.0/0' -Vserver $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
+            $NetRoute=Get-NcNetRoute -Destination '0.0.0.0/0' -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
+            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcNetRoute failed [$ErrorVar]" }
+            foreach($SecRoute in $NetRoute | Skip-Null){
+                $Gateway=$SecRoute.Gateway
+                $Destination=$SecRoute.Destination
+                Write-LogDebug "Remove-NcNetRoute -Destination $Destination -Gateway $Gateway -Vserver $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
+                $out=Remove-NcNetRoute -Destination $Destination -Gateway $Gateway -Vserver $mySecondaryVserver -Confirm:$False -Controller $mySecondaryController  -ErrorVariable ErrorVar -ONTAPI
+                if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Remove-NcNetRoute failed [$ErrorVar]" ; }
+            }
+            
+            foreach($PrimRoute in $PrimaryDefaultRoute | Skip-Null){
+                $Destination=$PrimRoute.Destination
+                $Metric=$PrimRoute.Metric
+                $Gateway=$PrimRoute.Gateway
+                if((-not $Global:ForceCloneOriginal.IsPresent) -or ($Global:NonInteractive -eq $False) -or (-not $Global:ForceRestoreOriginal.IsPresent)){
+                    $Gateway=ask_gateway_from_cli -myGateway $Gateway -workOn $($mySecondaryVserver +" Destination "+$Destination) -forceAsk $True 
+                }
+                Write-Log "[$mySecondaryVserver] Add New Route Destination [$Destination] Gateway [$Gateway] Metric [$Metric]"
+                Write-LogDebug "New-NcNetRoute -Destination $Destination -Metric $Metric -Gateway $Gateway -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+                $out=New-NcNetRoute -Destination $Destination -Metric $Metric -Gateway $Gateway -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: New-NcNetRoute failed [$ErrorVar]" }
+            }
         
-        foreach($PrimRoute in $PrimaryDefaultRoute | Skip-Null){
-            $Destination=$PrimRoute.Destination
-            $Metric=$PrimRoute.Metric
-            $Gateway=$PrimRoute.Gateway
-            if((-not $Global:ForceCloneOriginal.IsPresent) -or ($Global:NonInteractive -eq $False) -or (-not $Global:ForceRestoreOriginal.IsPresent)){
-                $Gateway=ask_gateway_from_cli -myGateway $Gateway -workOn $($mySecondaryVserver +" Destination "+$Destination) -forceAsk $True 
-            }
-            Write-Log "[$mySecondaryVserver] Add New Route Destination [$Destination] Gateway [$Gateway] Metric [$Metric]"
-            Write-LogDebug "New-NcNetRoute -Destination $Destination -Metric $Metric -Gateway $Gateway -Vserver $mySecondaryVserver -Controller $mySecondaryController"
-            $out=New-NcNetRoute -Destination $Destination -Metric $Metric -Gateway $Gateway -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
-            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: New-NcNetRoute failed [$ErrorVar]" }
         }
-    
-    }
-    # treats other network route
-    if($PrimaryDefaultRouteOther.count -ge 1){
-        if($VersionTuple.Generation -ge 9){
-            foreach($OtherRoute in $PrimaryDefaultRouteOther){
-                $PrimaryOtherDestination=$OtherRoute.Destination
-                $PrimaryOtherGateway=$OtherRoute.Gateway
-                $PrimaryOtherMetric=$OtherRoute.Metric
-                $myGateway=""
-                if($OtherRouteDone -contains $PrimaryOtherDestination){continue}
-                Write-LogDebug "Get-NcNetRoute -Destination $PrimaryOtherDestination -Vserver $mySecondaryVserver -Controller $mySecondaryController"
-                $SecondaryOther=Get-NcNetRoute -Destination $PrimaryOtherDestination -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
-                if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Get-NcNetRoute failed [$ErrorVar]"; continue }
-                if ( $null -ne $SecondaryOther ){
-                    $myGateway=$SecondaryOther.Gateway
-                    Write-LogDebug "Remove-NcNetRoute -Destination $PrimaryOtherDestination -Gateway $myGateway -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
-                    $ret=Remove-NcNetRoute -Destination $PrimaryOtherDestination -VserverContext $mySecondaryVserver -Gateway $myGateway -Controller $mySecondaryController -ErrorVariable ErroVar -Confirm:$false -ONTAPI
-                    if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Remove-NcNetRoute failed [$ErrorVar]"; continue }
-                }
-                if($myGateway.Length -eq 0){
-                    $myGateway=$PrimaryOtherGateway
-                }
-                foreach($Gateway in $myGateway){
-                    if((-not $Global:ForceCloneOriginal.IsPresent) -or ($Global:NonInteractive -eq $False) -or (-not $Global:ForceRestoreOriginal.IsPresent)){
-                        $Gateway=ask_gateway_from_cli -myGateway $Gateway -workOn $($workOn+" Destination "+$PrimaryOtherDestination)
+        # treats other network route
+        if($PrimaryDefaultRouteOther.count -ge 1){
+            if($VersionTuple.Generation -ge 9){
+                foreach($OtherRoute in $PrimaryDefaultRouteOther){
+                    $PrimaryOtherDestination=$OtherRoute.Destination
+                    $PrimaryOtherGateway=$OtherRoute.Gateway
+                    $PrimaryOtherMetric=$OtherRoute.Metric
+                    $myGateway=""
+                    if($OtherRouteDone -contains $PrimaryOtherDestination){continue}
+                    Write-LogDebug "Get-NcNetRoute -Destination $PrimaryOtherDestination -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+                    $SecondaryOther=Get-NcNetRoute -Destination $PrimaryOtherDestination -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Get-NcNetRoute failed [$ErrorVar]"; continue }
+                    if ( $null -ne $SecondaryOther ){
+                        $myGateway=$SecondaryOther.Gateway
+                        Write-LogDebug "Remove-NcNetRoute -Destination $PrimaryOtherDestination -Gateway $myGateway -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
+                        $ret=Remove-NcNetRoute -Destination $PrimaryOtherDestination -VserverContext $mySecondaryVserver -Gateway $myGateway -Controller $mySecondaryController -ErrorVariable ErroVar -Confirm:$false -ONTAPI
+                        if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Remove-NcNetRoute failed [$ErrorVar]"; continue }
                     }
-                    Write-Log "[$workOn] Add New Route Destination [$PrimaryOtherDestination] Gateway [$Gateway] Metric [$PrimaryOtherMetric]"
-                    Write-LogDebug "New-NcNetRoute -Destination $PrimaryOtherDestination -Gateway $Gateway -Metric $PrimaryOtherMetric -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
-                    $ret=New-NcNetRoute -Destination $PrimaryOtherDestination -Gateway $Gateway -Metric $PrimaryOtherMetric -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar -Confirm:$false
-                    if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: New-NcNetRoute failed [$ErrorVar]"; continue }
-                    $OtherRouteDone+=$PrimaryOtherDestination
+                    if($myGateway.Length -eq 0){
+                        $myGateway=$PrimaryOtherGateway
+                    }
+                    foreach($Gateway in $myGateway){
+                        if((-not $Global:ForceCloneOriginal.IsPresent) -or ($Global:NonInteractive -eq $False) -or (-not $Global:ForceRestoreOriginal.IsPresent)){
+                            $Gateway=ask_gateway_from_cli -myGateway $Gateway -workOn $($workOn+" Destination "+$PrimaryOtherDestination)
+                        }
+                        Write-Log "[$workOn] Add New Route Destination [$PrimaryOtherDestination] Gateway [$Gateway] Metric [$PrimaryOtherMetric]"
+                        Write-LogDebug "New-NcNetRoute -Destination $PrimaryOtherDestination -Gateway $Gateway -Metric $PrimaryOtherMetric -VserverContext $mySecondaryVserver -Controller $mySecondaryController"
+                        $ret=New-NcNetRoute -Destination $PrimaryOtherDestination -Gateway $Gateway -Metric $PrimaryOtherMetric -VserverContext $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar -Confirm:$false
+                        if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: New-NcNetRoute failed [$ErrorVar]"; continue }
+                        $OtherRouteDone+=$PrimaryOtherDestination
+                    }
                 }
             }
-        }
-        else{
-            foreach($OtherRoute in $PrimaryDefaultRouteOther){
-                $PrimaryOtherDestination=$OtherRoute.DestinationAddress
-                $PrimaryOtherGateway=$OtherRoute.GatewayAddress
-                $PrimaryOtherMetric=$OtherRoute.Metric
-                $PrimaryOtherRouting=$OtherRoute.RoutingGroup
-                $myGateway=""
-                if($OtherRouteDone -contains $PrimaryOtherDestination){continue}
-                Write-LogDebug "Get-NcNetRoutingGroupRoute -Destination $PrimaryOtherDestination -Vserver $mySecondaryVserver -Controller $mySecondaryController"
-                $SecondaryOther=Get-NcNetRoutingGroupRoute -Destination $PrimaryOtherDestination -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
-                if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Get-NcNetRoutingGroupRoute failed [$ErrorVar]"; continue }
-                if ( $null -ne $SecondaryOther ){
-                    $myGateway=$SecondaryOther.GatewayAddress
-                    $SecondaryRoutingGroupName=$SecondaryOther.RoutingGroup
-                    Write-LogDebug "Remove-NcNetRoutingGroupRoute -RoutingGroup $SecondaryRoutingGroupName -Vserver $mySecondaryVserver -Controller $mySecondaryController"
-                    $ret=Remove-NcNetRoutingGroupRoute -RoutingGroup $SecondaryRoutingGroupName -Destination $PrimaryOtherDestination -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar -Confirm:$false
-                    if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Remove-NcNetRoutingGroupRoute failed [$ErrorVar]"; continue }
-                }
-                if($myGateway.Length -eq 0){
-                    $myGateway=$PrimaryOtherGateway
-                }
-                foreach($Gateway in $myGateway){
-                    $Gateway=ask_gateway_from_cli -myGateway $Gateway -workOn $($workOn+" Destination "+$PrimaryOtherDestination)
-                    Write-Log "[$workOn] Add New Route RoutingGroup [$PrimaryOtherRouting] Destination [$PrimaryOtherDestination] Gateway [$Gateway] Metric [$PrimaryOtherMetric]"
-                    Write-LogDebug "New-NcNetRoutingGroupRoute -RoutingGroup $PrimaryOtherRouting -Destination $PrimaryOtherDestination -Gateway $Gateway -Metric $PrimaryOtherMetric -Vserver $mySecondaryVserver -Controller $mySecondaryController"
-                    $ret=New-NcNetRoutingGroupRoute -RoutingGroup $PrimaryOtherRouting -Destination $PrimaryOtherDestination -Gateway $Gateway -Metric $PrimaryOtherMetric -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar -Confirm:$false
-                    if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: New-NcNetRoute failed [$ErrorVar]"; continue }
-                    $OtherRouteDone+=$PrimaryOtherDestination
+            else{
+                foreach($OtherRoute in $PrimaryDefaultRouteOther){
+                    $PrimaryOtherDestination=$OtherRoute.DestinationAddress
+                    $PrimaryOtherGateway=$OtherRoute.GatewayAddress
+                    $PrimaryOtherMetric=$OtherRoute.Metric
+                    $PrimaryOtherRouting=$OtherRoute.RoutingGroup
+                    $myGateway=""
+                    if($OtherRouteDone -contains $PrimaryOtherDestination){continue}
+                    Write-LogDebug "Get-NcNetRoutingGroupRoute -Destination $PrimaryOtherDestination -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+                    $SecondaryOther=Get-NcNetRoutingGroupRoute -Destination $PrimaryOtherDestination -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Get-NcNetRoutingGroupRoute failed [$ErrorVar]"; continue }
+                    if ( $null -ne $SecondaryOther ){
+                        $myGateway=$SecondaryOther.GatewayAddress
+                        $SecondaryRoutingGroupName=$SecondaryOther.RoutingGroup
+                        Write-LogDebug "Remove-NcNetRoutingGroupRoute -RoutingGroup $SecondaryRoutingGroupName -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+                        $ret=Remove-NcNetRoutingGroupRoute -RoutingGroup $SecondaryRoutingGroupName -Destination $PrimaryOtherDestination -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar -Confirm:$false
+                        if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: Remove-NcNetRoutingGroupRoute failed [$ErrorVar]"; continue }
+                    }
+                    if($myGateway.Length -eq 0){
+                        $myGateway=$PrimaryOtherGateway
+                    }
+                    foreach($Gateway in $myGateway){
+                        $Gateway=ask_gateway_from_cli -myGateway $Gateway -workOn $($workOn+" Destination "+$PrimaryOtherDestination)
+                        Write-Log "[$workOn] Add New Route RoutingGroup [$PrimaryOtherRouting] Destination [$PrimaryOtherDestination] Gateway [$Gateway] Metric [$PrimaryOtherMetric]"
+                        Write-LogDebug "New-NcNetRoutingGroupRoute -RoutingGroup $PrimaryOtherRouting -Destination $PrimaryOtherDestination -Gateway $Gateway -Metric $PrimaryOtherMetric -Vserver $mySecondaryVserver -Controller $mySecondaryController"
+                        $ret=New-NcNetRoutingGroupRoute -RoutingGroup $PrimaryOtherRouting -Destination $PrimaryOtherDestination -Gateway $Gateway -Metric $PrimaryOtherMetric -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar -Confirm:$false
+                        if ( $? -ne $True ) { $Return = $False ; Write-LogError "ERROR: New-NcNetRoute failed [$ErrorVar]"; continue }
+                        $OtherRouteDone+=$PrimaryOtherDestination
+                    }
                 }
             }
+            <# $VersionTuple=(Get-NcSystemVersionInfo -Controller $mySecondaryController | Select-Object VersionTuple).VersionTuple
+            if($VersionTuple.Generation -ge 9){
+                $SecondaryRoutes=Get-NcNetRoute -Query @{Destination="0.0.0.0/0";Vserver=$mySecondaryVserver} -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                if ( $? -ne $True ){$Return = $False ; Clean_Throw "ERROR: Get-NcNetRoute failed [$ErrorVar]"}
+            }else{
+                $SecondaryRoutes=Get-NcNetRoutingGroupRoute -Destination '0.0.0.0/0' -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcNetRoutingGroupRoute failed [$ErrorVar]" }
+            }
+            if ( ($ret=Save_Route_To_JSON -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryRoutes $PrimaryDefaultRouteOther -mySecondaryRoutes $SecondaryRoutes -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver) -eq $False){
+                Write-Log "Failed to Backup Net Route details to JSON"
+                return $False
+            } #>
         }
-        <# $VersionTuple=(Get-NcSystemVersionInfo -Controller $mySecondaryController | Select-Object VersionTuple).VersionTuple
-        if($VersionTuple.Generation -ge 9){
-            $SecondaryRoutes=Get-NcNetRoute -Query @{Destination="0.0.0.0/0";Vserver=$mySecondaryVserver} -Controller $mySecondaryController  -ErrorVariable ErrorVar
-            if ( $? -ne $True ){$Return = $False ; Clean_Throw "ERROR: Get-NcNetRoute failed [$ErrorVar]"}
-        }else{
-            $SecondaryRoutes=Get-NcNetRoutingGroupRoute -Destination '0.0.0.0/0' -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
-            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcNetRoutingGroupRoute failed [$ErrorVar]" }
-        }
-        if ( ($ret=Save_Route_To_JSON -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryRoutes $PrimaryDefaultRouteOther -mySecondaryRoutes $SecondaryRoutes -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver) -eq $False){
-            Write-Log "Failed to Backup Net Route details to JSON"
-            return $False
-        } #>
     }
     if($Backup -eq $False -and $Restore -eq $False){
         if($Global:PSTKCall -ne "Rest"){
@@ -13374,7 +13399,7 @@ Function check_update_CIFS_server_dr (
 	    $Return=$false
 
         # first check existance of CIFS server
-        Write-Log "[$workOn] check & update CIFS server"
+        Write-Log "[$workOn] Check & Update CIFS server"
         Write-LogDebug "[$workOn]: start"
         if($Restore -ne $True){
             $PrimaryCifsServerInfos = Get-NcCifsServer  -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
@@ -13653,9 +13678,14 @@ Try {
                     password=[Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($ADCred.Password))
                     user=$ADCred.UserName
                 }
-            } 
-            $bodycifs.options.psobject.Properties.Remove("export_policy_enabled")
+            }
+            if (getClusterVersion -NcController $mySecondaryController -lt 9.13){
+                $bodycifs.options.psobject.Properties.Remove("export_policy_enabled")
+            }
             $bodycifs.security.psobject.Properties.Remove("kdc_encryption")
+            if (getClusterVersion -NcController $mySecondaryController -lt 9.15){
+                $bodycifs.options.psobject.Properties.Remove("backup_symlink_enabled")
+            }
             [System.Collections.Hashtable]$cleanbody=$bodycifs
             $bodycifs = $bodycifs | ConvertTo-Json
             $cleanbody.ad_domain.password="xxxxxxxxxxxxxx"
@@ -16269,7 +16299,7 @@ $request=@"
                         # modify existing share c$ or admin$ or ipc$
                         # for that kind of non-data share share-properties and symlinkProperties are not modifiable
                         # so exclude them from the Set-NcCifsShare
-                        if($PrimaryShareName -match "ipc$|ONTAP_ADMIN$"){
+                        if($PrimaryShareName -match "ipc\$|ONTAP_ADMIN\$|c\$"){
                             Write-LogDebug "[$workOn] Ignoring modification on CIFS share [$PrimaryShareName]"
                             continue
                         }
@@ -18161,7 +18191,9 @@ Try {
                     $bodysvm+=@{anti_ransomware_auto_switch_minimum_file_extension=$RESTPrimaryVserver.anti_ransomware_auto_switch_minimum_file_extension}
                 }
                 if($Global:OntapSecondaryVersion -ge 9.14){
-                    $bodysvm+=@{anti_ransomware=$RESTPrimaryVserver.anti_ransomware}
+                    if($null -ne $RESTPrimaryVserver.anti_ransomware){
+                        $bodysvm+=@{anti_ransomware=$RESTPrimaryVserver.anti_ransomware}
+                    }
                 }
                 $bodysvm=$bodysvm | convertTo-Json
                 $url=$("https://"+$mySecondaryController.Name+"/api/svm/svms/"+$SecondaryVserver.Uuid)
@@ -19918,7 +19950,7 @@ try{
         # * backup_CIFSsymlink
         # before changing CIFS server name, we need to backup & remove all cifs symlink
         #Write-LogDebug "ActivateDR in CIFS Modify mode with PreserveIdentity"
-        Write-LogDebug "Backup all CIFS Symlink from current passive Vserver [$myPrimaryVserver]"
+        Write-LogDebug "Backup all CIFS Symlink from Vserver [$myPrimaryVserver]"
         if ( ($ret=Save_Cifs_Symlink_To_JSON -myController $myPrimaryController -myVserver $myPrimaryVserver ) -eq $False){
             Clean_Throw "ERROR: Failed to backup CIFS Symlink"    
         }
@@ -21398,12 +21430,12 @@ Function activate_vserver_dr (
         # * backup_CIFSsymlink_on_src
         # before changing CIFS server name, we need to backup & remove all cifs symlink
         Write-LogDebug "ActivateDR in CIFS Modify mode with PreserveIdentity"
-        Write-LogDebug "Backup all CIFS Symlink from current passive Vserver [$currentActiveVserver]"
+        Write-LogDebug "Backup all CIFS Symlink from Vserver [$currentActiveVserver]"
         if ( ($ret=Save_Cifs_Symlink_To_JSON -myController $NcCurrentActiveCtrl -myVserver $currentActiveVserver ) -eq $False){
             Clean_Throw "ERROR: Failed to backup CIFS Symlink"    
         }
         # * remove_CIFSsymlink_on_src
-        Write-LogDebug "Remove all CIFS Symlink on current passive Vserver [$currentActiveVserver]"
+        Write-LogDebug "Remove all CIFS Symlink on Vserver [$currentActiveVserver]"
         Write-LogDebug "Get-NcCifsSymlink -VserverContext $currentActiveVserver -Controller $NcCurrentActiveCtrl | Remove-NcCifsSymlink -Controller $NcCurrentActiveCtrl -VserverContext $currentActiveVserver"
         Get-NcCifsSymlink -VserverContext $currentActiveVserver -Controller $NcCurrentActiveCtrl | Remove-NcCifsSymlink -Controller $NcCurrentActiveCtrl -VserverContext $currentActiveVserver -Confirm:$False
 
@@ -21532,12 +21564,12 @@ Function activate_vserver_dr (
         Write-LogDebug "Work with CIFS delete method"
         # * backup_CIFSsymlink_on_src
         # before changing CIFS server name, we need to backup & remove all cifs symlink
-        Write-LogDebug "Backup all CIFS Symlink from current passive Vserver [$currentActiveVserver]"
+        Write-LogDebug "Backup all CIFS Symlink from Vserver [$currentActiveVserver]"
         if ( ($ret=Save_Cifs_Symlink_To_JSON -myController $NcCurrentActiveCtrl -myVserver $currentActiveVserver ) -eq $False){
             Clean_Throw "ERROR: Failed to backup CIFS Symlink"    
         }
         # * remove_CIFSsymlink_on_src
-        Write-LogDebug "Remove all CIFS Symlink on current passive Vserver [$currentActiveVserver]"
+        Write-LogDebug "Remove all CIFS Symlink on Vserver [$currentActiveVserver]"
         Write-LogDebug "Get-NcCifsSymlink -VserverContext $currentActiveVserver -Controller $NcCurrentActiveCtrl | Remove-NcCifsSymlink -Controller $NcCurrentActiveCtrl -VserverContext $currentActiveVserver"
         Get-NcCifsSymlink -VserverContext $currentActiveVserver -Controller $NcCurrentActiveCtrl | Remove-NcCifsSymlink -Controller $NcCurrentActiveCtrl -VserverContext $currentActiveVserver -Confirm:$False
 
@@ -22948,7 +22980,7 @@ Try {
             $DestinationVserver=$relation.DestinationLocation.split(":")[0]
             $MirrorState=$relation.state
         }
-            Write-Log "[$mySecondaryVserver] Remove snapmirror relation for volume [$SourceLocation] --> [$DestinationLocation]"
+            Write-Log "[$mySecondaryVserver] Remove snapmirror relationship for volume [$SourceLocation] --> [$DestinationLocation]"
             if ( $MirrorState -eq 'snapmirrored' ) {
                 Write-LogDebug "Invoke-NcSnapmirrorQuiesce -DestinationVserver $mySecondaryVserver -DestinationVolume $DestinationVolume -SourceVserver $myPrimaryVserver -SourceVolume $SourceVolume -Controller $mySecondaryController"
                 $ret=Invoke-NcSnapmirrorQuiesce -DestinationVserver $mySecondaryVserver -DestinationVolume $DestinationVolume -SourceVserver $myPrimaryVserver -SourceVolume $SourceVolume -Controller $mySecondaryController -ErrorVariable ErrorVar -Confirm:$False
@@ -24155,12 +24187,12 @@ Function Set_CIFS_from_JSON (
             }
 
             # before changing CIFS server name, we need to backup & remove all cifs symlink
-            Write-LogDebug "Backup all CIFS Symlink from current passive Vserver [$ToVserver]"
+            Write-LogDebug "Backup all CIFS Symlink from Vserver [$ToVserver]"
             if ( ($ret=Save_Cifs_Symlink_To_JSON -myController $ToNcController -myVserver $ToVserver ) -eq $False){
                 Write-LogError "ERROR: Failed to backup CIFS Symlink" 
                 clean_and_exit 1  
             }
-            Write-LogDebug "Remove all CIFS Symlink on current passive Vserver [$ToVserver]"
+            Write-LogDebug "Remove all CIFS Symlink on Vserver [$ToVserver]"
             Write-LogDebug "Get-NcCifsSymlink -VserverContext $ToVserver -Controller $ToNcController | Remove-NcCifsSymlink -Controller $ToNcController -VserverContext $ToVserver"
             Get-NcCifsSymlink -VserverContext $ToVserver -Controller $ToNcController | Remove-NcCifsSymlink -Controller $ToNcController -VserverContext $ToVserver -Confirm:$False
 
@@ -24890,6 +24922,7 @@ Function save_vol_options_to_voldb (
             $DestinationVolume = $DestinationLocation.split(':')[-1]
             $DestinationVserver = $DestinationLocation.split(':')[0]
             $RelationshipType = $relation.RelationshipType
+            Write-Log "[$myVserver] Work on source volume [$SourceVolume]"
             if (  ( $SourceVserver -ne $DestinationVserver  )  ){
                 Write-LogDebug "Get-NcVol -Name $SourceVolume -Controller $myController -VserverContext $myVserver"
                 $PrimaryVol = Get-NcVol -Name $SourceVolume -Controller $myController -VserverContext $myVserver  -ErrorVariable ErrorVar
@@ -24934,17 +24967,27 @@ Function save_vol_options_to_voldb (
                         Write-LogDebug "file [$VOL_DB_DST_FILE]"
                         write-Output "${DestinationVolume}:${PrimaryVolSnapshotPolicy}:${PrimarySisPolicy}:${PrimarySisSchedule}:${PrimarySisState}:${PrimaryStorageEfficiencyMode}" | Out-File -FilePath $VOL_DB_DST_FILE -Append
                     } #>
-                    $query=@{vserver=$myVserver;volume=$SourceVolume} | ConvertTo-Json
+                    $queryHashTable = @{vserver=$myVserver;volume=$SourceVolume}
+                    $query = $queryHashTable | ConvertTo-Json
                     Write-LogDebug "Invoke-NcCli -Command volume efficiency show -Query $query -Controller $myController -Fields storage-efficiency-mode,compression-algorithm"
                     $SISdetails=Invoke-NcCli -Command "volume efficiency show" -Query $query -Controller $myController -Fields "storage-efficiency-mode,compression-algorithm"
                     if($? -ne $True){Write-LogError "Failed to get volume infos"}
-                    $SISdetails=$SISdetails.Value | ConvertFrom-Json
-                    $PrimaryStorageEfficiencyMode=$SISdetails.storage_efficiency_mode
-                    $PrimaryCompressionAlgorithm=$SISdetails.compression_algorithm
-                    Write-LogDebug "file [$VOL_DB_SRC_FILE]"
-                    write-Output "${PrimaryVolName}:${PrimaryVolSnapshotPolicy}:${PrimarySisPolicy}:${PrimarySisSchedule}:${PrimarySisState}:${PrimaryStorageEfficiencyMode}:${PrimaryCompressionAlgorithm}" | Out-File -FilePath $VOL_DB_SRC_FILE -Append
-                    Write-LogDebug "file [$VOL_DB_DST_FILE]"
-                    write-Output "${DestinationVolume}:${PrimaryVolSnapshotPolicy}:${PrimarySisPolicy}:${PrimarySisSchedule}:${PrimarySisState}:${PrimaryStorageEfficiencyMode}:${PrimaryCompressionAlgorithm}" | Out-File -FilePath $VOL_DB_DST_FILE -Append
+                    if($null -ne $SISdetails){
+                        $SISdetails=$SISdetails.Value | ConvertFrom-Json
+                        $PrimaryStorageEfficiencyMode=$SISdetails.storage_efficiency_mode
+                        $PrimaryCompressionAlgorithm=$SISdetails.compression_algorithm
+                        Write-LogDebug "file [$VOL_DB_SRC_FILE]"
+                        write-Output "${PrimaryVolName}:${PrimaryVolSnapshotPolicy}:${PrimarySisPolicy}:${PrimarySisSchedule}:${PrimarySisState}:${PrimaryStorageEfficiencyMode}:${PrimaryCompressionAlgorithm}" | Out-File -FilePath $VOL_DB_SRC_FILE -Append
+                        Write-LogDebug "file [$VOL_DB_DST_FILE]"
+                        write-Output "${DestinationVolume}:${PrimaryVolSnapshotPolicy}:${PrimarySisPolicy}:${PrimarySisSchedule}:${PrimarySisState}:${PrimaryStorageEfficiencyMode}:${PrimaryCompressionAlgorithm}" | Out-File -FilePath $VOL_DB_DST_FILE -Append
+                    }else{
+                        $PrimaryStorageEfficiencyMode=""
+                        $PrimaryCompressionAlgorithm=""
+                        Write-LogDebug "file [$VOL_DB_SRC_FILE]"
+                        write-Output "${PrimaryVolName}:${PrimaryVolSnapshotPolicy}:${PrimarySisPolicy}:${PrimarySisSchedule}:${PrimarySisState}:${PrimaryStorageEfficiencyMode}:${PrimaryCompressionAlgorithm}" | Out-File -FilePath $VOL_DB_SRC_FILE -Append
+                        Write-LogDebug "file [$VOL_DB_DST_FILE]"
+                        write-Output "${DestinationVolume}:${PrimaryVolSnapshotPolicy}:${PrimarySisPolicy}:${PrimarySisSchedule}:${PrimarySisState}:${PrimaryStorageEfficiencyMode}:${PrimaryCompressionAlgorithm}" | Out-File -FilePath $VOL_DB_DST_FILE -Append
+                    }
                 }else{ 
                     Write-LogDebug "file [$VOL_DB_SRC_FILE]"
                     write-Output "${PrimaryVolName}:${PrimaryVolSnapshotPolicy}:${PrimarySisPolicy}:${PrimarySisSchedule}:${PrimarySisState}" | Out-File -FilePath $VOL_DB_SRC_FILE -Append
@@ -25303,11 +25346,16 @@ Function set_vol_options_from_voldb (
                                             Write-LogDebug "Invoke-NcCli -Command volume efficiency show -Query $query -Controller $myController -Fields storage-efficiency-mode,compression-algorithm"
                                             $SISdetails=Invoke-NcCli -Command "volume efficiency show" -Query $query -Controller $myController -Fields "storage-efficiency-mode,compression-algorithm"
                                             if($? -ne $True){Write-LogError "Failed to get volume infos"}
-                                            $mySISdetails=$SISdetails.Value | ConvertFrom-Json
-                                            $myPrimaryStorageEfficiencyMode=$mySISdetails.storage_efficiency_mode
-                                            $myPrimaryCompressionAlgorithm=$mySISdetails.compression_algorithm
+                                            if($null -ne $mySISdetails){
+                                                $mySISdetails=$SISdetails.Value | ConvertFrom-Json
+                                                $myPrimaryStorageEfficiencyMode=$mySISdetails.storage_efficiency_mode
+                                                $myPrimaryCompressionAlgorithm=$mySISdetails.compression_algorithm
+                                            }else{
+                                                $myPrimaryStorageEfficiencyMode=""
+                                                $myPrimaryCompressionAlgorithm=""
+                                            }
                                             if($myPrimaryStorageEfficiencyMode -ne $VolSisEfficiencyMode -or $myPrimaryCompressionAlgorithm -ne $VolSisCompressionAlgorithm){
-                                                Write-Log "[$CloneDR] volume [$VolName] need to change Storage Efficiency mode with [$VolSisEfficiencyMode] and Compression Algotrithm with [$VolSisCompressionAlgorithm]"
+                                                Write-Log "[$CloneDR] volume [$VolName] need to change Storage Efficiency mode with [$VolSisEfficiencyMode] and Compression Algorithm with [$VolSisCompressionAlgorithm]"
                                                 $bodyeff=@{"storage-efficiency-mode"=$VolSisEfficiencyMode} | ConvertTo-Json    
                                                 Write-LogDebug "Invoke-NcCli -Command vol efficiency modify -query $query -body $bodyeff -Controller $myController"
                                                 $ret=Invoke-NcCli -Command "vol efficiency modify" -query $query -body $bodyeff -Controller $myController -ErrorVariable ErrorVar
@@ -25528,15 +25576,27 @@ Function set_vol_options_from_voldb (
                                             Write-LogDebug "Invoke-NcCli -Command volume efficiency show -Query $query -Controller $myController -Fields storage-efficiency-mode,compression-algorithm"
                                             $SISdetails=Invoke-NcCli -Command "volume efficiency show" -Query $query -Controller $myController -Fields "storage-efficiency-mode,compression-algorithm"
                                             if($? -ne $True){Write-LogError "Failed to get volume infos"}
-                                            $mySISdetails=$SISdetails.Value | ConvertFrom-Json
-                                            $myPrimaryStorageEfficiencyMode=$mySISdetails.storage_efficiency_mode
-                                            $myPrimaryCompressionAlgorithm=$mySISdetails.compression_algorithm
-                                            if($myPrimaryStorageEfficiencyMode -ne $VolSisEfficiencyMode){
-                                                Write-Log "[$myVserver] volume [$VolName] need to change Storage Efficiency mode with [$VolSisEfficiencyMode] and Compression Algotrithm with [$VolSisCompressionAlgorithm]"
+                                            if($null -ne $mySISdetails){
+                                                $mySISdetails=$SISdetails.Value | ConvertFrom-Json
+                                                $myPrimaryStorageEfficiencyMode=$mySISdetails.storage_efficiency_mode
+                                                $myPrimaryCompressionAlgorithm=$mySISdetails.compression_algorithm
+                                            }else{
+                                                $myPrimaryStorageEfficiencyMode=""
+                                                $myPrimaryCompressionAlgorithm=""
+                                            }
+                                            if($myPrimaryStorageEfficiencyMode -ne $VolSisEfficiencyMode -and $VolSisEfficiencyMode -ne ""){
+                                                Write-Log "[$myVserver] volume [$VolName] need to change Storage Efficiency mode with [$VolSisEfficiencyMode] and Compression Algorithm with [$VolSisCompressionAlgorithm]"
                                                 $bodyeff=@{"storage-efficiency-mode"=$VolSisEfficiencyMode} | ConvertTo-Json
                                                 Write-LogDebug "Invoke-NcCli -Command vol efficiency modify -query $query -body $bodyeff -Controller $myController"
                                                 $ret=Invoke-NcCli -Command "vol efficiency modify" -query $query -body $bodyeff -Controller $myController -ErrorVariable ErrorVar
                                                 if($? -ne $True){Write-LogError "Failed to modify storage efficiency mode on volume [$VolName] reason [$ErrorVar]"}
+                                            }
+                                            if($myPrimaryCompressionAlgorithm -ne $VolSisCompressionAlgorithm -and $VolSisCompressionAlgorithm -ne ""){
+                                                Write-Log "[$myVserver] volume [$VolName] need to change Compression Algorithm with [$VolSisCompressionAlgorithm]"
+                                                $bodycomp=@{"compression-algorithm"=$VolSisCompressionAlgorithm} | ConvertTo-Json
+                                                Write-LogDebug "Invoke-NcCli -Command vol efficiency modify -query $query -body $bodycomp -Controller $myController"
+                                                $ret=Invoke-NcCli -Command "vol efficiency modify" -query $query -body $bodycomp -Controller $myController -ErrorVariable ErrorVar
+                                                if($? -ne $True){Write-LogError "Failed to modify compression algorithm on volume [$VolName] reason [$ErrorVar]"}
                                             }
                                         }
                                     }

@@ -574,6 +574,7 @@
         - 0.7.4     Correct Fpolicy, Correct snaplock and add current vol options
         - 0.7.5     Correct exit behavior with log4net
         - 0.7.6     Correct ExportPolicy create, Vol create, Fpolicy create
+        - 0.7.7     Several bugfixes
 
 #>
 [CmdletBinding(HelpURI = "https://github.com/oliviermasson/svmtool", DefaultParameterSetName = "ListInstance")]
@@ -1184,7 +1185,7 @@ $Global:MIN_MINOR = 14
 $Global:MIN_BUILD = 1
 $Global:MIN_REVISION = 2401
 #############################################################################################
-$Global:RELEASE = "0.7.7"
+$Global:RELEASE = "0.7.8"
 $Global:SCRIPT_RELEASE = "0.1.32"
 if($PSVersionTable.PSVersion.Major -lt 7){
     $Global:BASEDIR = 'C:\Scripts\SVMTOOL'      

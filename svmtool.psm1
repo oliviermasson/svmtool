@@ -959,7 +959,7 @@ function Update-SvmDr {
     Remove-SvmDr -Instance Default -Vserver cifs
 
     Do you really want to delete SVM-DR [cifs-dr] from secondary cluster  [c3po] ? [y/n] : y
-    remove snapmirror relation for volume [cifs:vol1] [cifs-dr:vol1]
+    remove snapmirror relationship for volume [cifs:vol1] [cifs-dr:vol1]
     Release Relation [cifs:vol1] [cifs-dr:vol1]
     Remove volume [vol1] from [cifs-dr]
     Remove root volume [svm_root]
@@ -1504,7 +1504,7 @@ function Update-SvmDrReverse {
     [cifs] No ISCSI services in vserver
     [cifs] No NFS services in vserver
     Resync relationship [cifs:vol1] [cifs-dr:vol1]
-    remove snapmirror relation for volume [cifs-dr:vol1] [cifs:vol1]
+    remove snapmirror relationship for volume [cifs-dr:vol1] [cifs:vol1]
     Release Relation [cifs-dr:vol1] [cifs:vol1]
     Set volumes options for vserver [cifs] from SVMTOOL_DB [c:\jumpstart\svmtool]
     Create Quota policy rules from SVMTOOL_DB [c:\jumpstart\svmtool]
@@ -1915,16 +1915,16 @@ function Set-SvmDrScheduleReverse {
     [cifs-dr] Break relation [cifs:vol7] [cifs-dr:vol7]
     [cifs-dr] Break relation [cifs:vol8] [cifs-dr:vol8]
     [cifs-dr] Break relation [cifs:vol9] [cifs-dr:vol9]
-    remove snapmirror relation for volume [cifs:vol1] [cifs-dr:vol1]
-    remove snapmirror relation for volume [cifs:vol10] [cifs-dr:vol10]
-    remove snapmirror relation for volume [cifs:vol2] [cifs-dr:vol2]
-    remove snapmirror relation for volume [cifs:vol3] [cifs-dr:vol3]
-    remove snapmirror relation for volume [cifs:vol4] [cifs-dr:vol4]
-    remove snapmirror relation for volume [cifs:vol5] [cifs-dr:vol5]
-    remove snapmirror relation for volume [cifs:vol6] [cifs-dr:vol6]
-    remove snapmirror relation for volume [cifs:vol7] [cifs-dr:vol7]
-    remove snapmirror relation for volume [cifs:vol8] [cifs-dr:vol8]
-    remove snapmirror relation for volume [cifs:vol9] [cifs-dr:vol9]
+    remove snapmirror relationship for volume [cifs:vol1] [cifs-dr:vol1]
+    remove snapmirror relationship for volume [cifs:vol10] [cifs-dr:vol10]
+    remove snapmirror relationship for volume [cifs:vol2] [cifs-dr:vol2]
+    remove snapmirror relationship for volume [cifs:vol3] [cifs-dr:vol3]
+    remove snapmirror relationship for volume [cifs:vol4] [cifs-dr:vol4]
+    remove snapmirror relationship for volume [cifs:vol5] [cifs-dr:vol5]
+    remove snapmirror relationship for volume [cifs:vol6] [cifs-dr:vol6]
+    remove snapmirror relationship for volume [cifs:vol7] [cifs-dr:vol7]
+    remove snapmirror relationship for volume [cifs:vol8] [cifs-dr:vol8]
+    remove snapmirror relationship for volume [cifs:vol9] [cifs-dr:vol9]
     IP and Services will switch now for [cifs]. Ready to go ? [y/n] : -> y
     [cifs-dr] Set [cifs] down on [cifs]
     [cifs-dr] Set [cifs] up with address [172.16.0.178] and netmask [255.255.0.0] on [cifs-dr]
