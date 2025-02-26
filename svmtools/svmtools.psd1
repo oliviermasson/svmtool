@@ -6,7 +6,7 @@
 # Generated on: 2018-06-07
 #
 # Update by : Olivier MASSON
-# Updated on : 2024-03-15
+# Updated on : 2025-02-24
 #
 # Version Control :
 #   1.0.4 : Initial version
@@ -94,13 +94,18 @@
 #   1.5.0   Complete rewrite of Migrate, ActivateDR and ReActivateDR
 #   1.6.0   REST Transition
 #   1.6.1   Add compliance-clock, snaplock and tamperproof snapshot support
+#   1.6.2   Correct Fpolicy. Correct snaplock and add all current volume options
+#   1.6.3   Correct log4net exit
+#   1.6.4   Correct ExportPolicy create, Vol create, Fpolicy create
+#   1.6.5   Correct Vserver creation with null parameters
+#   1.6.6   Several bugfixes
 @{
 
     # Script module or binary module file associated with this manifest.
     RootModule        = '.\svmtools.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.6.1'
+    ModuleVersion     = '1.6.6'
 
     # Supported PSEditions
     # CompatiblePSEditions = @()
