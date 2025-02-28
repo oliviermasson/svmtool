@@ -2816,7 +2816,7 @@ function Restore-ObjectSvmDr {
 
         # Object to restore
         [Parameter(Mandatory = $true)]
-        [ValidateSet("Lifs", "Volumes", "Exports", "CifsServer", "NetBios", "Shares", "Symlinks", "Quotas", "Users")]
+        [ValidateSet("Lifs", "Volumes", "Exports", "CifsServer", "NetBios", "Shares", "Symlinks", "Quotas", "Users", "S3")]
         [string[]]$Objects=@(""),
 
         # The name of the destination cluster, if not provided, will restore on source cluster

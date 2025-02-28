@@ -2827,6 +2827,8 @@ if ( $RestoreMultiSVM ) {
     Write-Log $("Finished - Script ran for {0}" -f $stopwatch.Elapsed.toString())
     clean_and_exit 0
 } #End Restore
+
+
 ########################################################################################################
 # RestoreObject  : Restore from JSON Backup specific objects into an SVM
 

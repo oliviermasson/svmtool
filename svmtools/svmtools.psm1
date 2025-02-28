@@ -6297,6 +6297,191 @@ Catch {
 }
 
 #############################################################################################
+# create_update_ontaps3
+
+Function create_update_ontaps3(
+	[NetApp.Ontapi.Filer.C.NcController] $myPrimaryController,
+	[NetApp.Ontapi.Filer.C.NcController] $mySecondaryController,
+	[string] $myPrimaryVserver,
+    [string] $mySecondaryVserver,
+    [string]$workOn=$mySecondaryVserver,
+    [bool]$Backup,
+    [bool]$Restore) {
+
+Try {
+    $Return = $True
+    Write-Log "[$workOn] Check SVM ontapS3 configuration"
+    Write-LogDebug "[$myPrimaryVserver]: start"
+    if($Backup -eq $True){Write-LogDebug "run in Backup mode [$myPrimaryVserver]"}
+    if($Restore -eq $True){Write-LogDebug "run in Restore mode [$myPrimaryVserver]"}
+
+    if($Restore -eq $False){
+        $PrimaryOntaps3Services = Get-NcProtocolS3Services -Vserver $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
+        if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcProtocolS3Services failed [$ErrorVar]" }
+        $PrimaryOntaps3Bucket = Get-NcProtocolS3Bucket -Vserver $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
+        if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcProtocolS3Bucket failed [$ErrorVar]" }
+        $PrimaryOntaps3ServicesBucket = Get-NcProtocolS3ServicesBucket -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
+        if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcProtocolS3ServicesBucket failed [$ErrorVar]" }
+        $PrimaryOntaps3ServicesGroups = Get-NcProtocolS3ServicesGroups -SvmName $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
+        if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcProtocolS3ServicesGroups failed [$ErrorVar]" }
+        $PrimaryOntaps3ServicesUsers = Get-NcProtocolS3ServicesUsers -SvmName $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
+        if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcProtocolS3ServicesUsers failed [$ErrorVar]" }
+        $PrimaryOntaps3ServicesPolicy = Get-NcProtocolS3ServicesPolicy -SvmName $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
+        if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcProtocolS3ServicesPolicy failed [$ErrorVar]" }
+    }else{
+        if(Test-Path $($Global:JsonPath+"Get-NcProtocolS3Services.json")){
+            $PrimaryOntaps3Services=Get-Content $($Global:JsonPath+"Get-NcProtocolS3Services.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcProtocolS3Services.json") successfully imported"
+        }else{
+            $Return=$False
+            $filepath=$($Global:JsonPath+"Get-NcProtocolS3Services.json")
+            Clean_Throw "ERROR: failed to read $filepath"
+        }
+        if(Test-Path $($Global:JsonPath+"Get-NcProtocolS3Bucket.json")){
+            $PrimaryOntaps3Bucket=Get-Content $($Global:JsonPath+"Get-NcProtocolS3Bucket.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcProtocolS3Bucket.json") successfully imported"
+        }else{
+            $Return=$False
+            $filepath=$($Global:JsonPath+"Get-NcProtocolS3Bucket.json")
+            Clean_Throw "ERROR: failed to read $filepath"
+        }
+        if(Test-Path $($Global:JsonPath+"Get-NcProtocolS3Bucket.json")){
+            $PrimaryOntaps3Bucket=Get-Content $($Global:JsonPath+"Get-NcProtocolS3Bucket.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcProtocolS3Bucket.json") successfully imported"
+        }else{
+            $Return=$False
+            $filepath=$($Global:JsonPath+"Get-NcProtocolS3Bucket.json")
+            Clean_Throw "ERROR: failed to read $filepath"
+        }
+        if(Test-Path $($Global:JsonPath+"Get-NcProtocolS3ServicesBucket.json")){
+            $PrimaryOntaps3ServicesBucket=Get-Content $($Global:JsonPath+"Get-NcProtocolS3ServicesBucket.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcProtocolS3ServicesBucket.json") successfully imported"
+        }else{
+            $Return=$False
+            $filepath=$($Global:JsonPath+"Get-NcProtocolS3ServicesBucket.json")
+            Clean_Throw "ERROR: failed to read $filepath"
+        }
+        if(Test-Path $($Global:JsonPath+"Get-NcProtocolS3ServicesGroups.json")){
+            $PrimaryOntaps3ServicesGroups=Get-Content $($Global:JsonPath+"Get-NcProtocolS3ServicesGroups.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcProtocolS3ServicesGroups.json") successfully imported"
+        }else{
+            $Return=$False
+            $filepath=$($Global:JsonPath+"Get-NcProtocolS3ServicesGroups.json")
+            Clean_Throw "ERROR: failed to read $filepath"
+        }
+        if(Test-Path $($Global:JsonPath+"Get-NcProtocolS3ServicesUsers.json")){
+            $PrimaryOntaps3ServicesUsers=Get-Content $($Global:JsonPath+"Get-NcProtocolS3ServicesUsers.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcProtocolS3ServicesUsers.json") successfully imported"
+        }else{
+            $Return=$False
+            $filepath=$($Global:JsonPath+"Get-NcProtocolS3ServicesUsers.json")
+            Clean_Throw "ERROR: failed to read $filepath"
+        }
+        if(Test-Path $($Global:JsonPath+"Get-NcProtocolS3ServicesPolicy.json")){
+            $PrimaryOntaps3ServicesPolicy=Get-Content $($Global:JsonPath+"Get-NcProtocolS3ServicesPolicy.json") -Raw | ConvertFrom-Json
+            Write-LogDebug "$($Global:JsonPath+"Get-NcProtocolS3ServicesPolicy.json") successfully imported"
+        }else{
+            $Return=$False
+            $filepath=$($Global:JsonPath+"Get-NcProtocolS3ServicesPolicy.json")
+            Clean_Throw "ERROR: failed to read $filepath"
+        }
+    }
+    if($Backup -eq $True){
+        $PrimaryOntaps3Services | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcProtocolS3Services.json") -Encoding ASCII -Width 65535
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcProtocolS3Services.json") -ErrorAction SilentlyContinue) ){
+            Write-LogDebug "$($Global:JsonPath+"Get-NcProtocolS3Services.json") saved successfully"
+        }else{
+            Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcProtocolS3Services.json")"
+            $Return=$False
+        }
+        $PrimaryOntaps3Bucket | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcProtocolS3Bucket.json") -Encoding ASCII -Width 65535
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcProtocolS3Bucket.json") -ErrorAction SilentlyContinue) ){
+            Write-LogDebug "$($Global:JsonPath+"Get-NcProtocolS3Bucket.json") saved successfully"
+        }else{
+            Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcProtocolS3Bucket.json")"
+            $Return=$False
+        }
+        $PrimaryOntaps3ServicesBucket | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcProtocolS3ServicesBucket.json") -Encoding ASCII -Width 65535
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcProtocolS3ServicesBucket.json") -ErrorAction SilentlyContinue) ){
+            Write-LogDebug "$($Global:JsonPath+"Get-NcProtocolS3ServicesBucket.json") saved successfully"
+        }else{
+            Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcProtocolS3ServicesBucket.json")"
+            $Return=$False
+        }
+        $PrimaryOntaps3ServicesGroups | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcProtocolS3ServicesGroups.json") -Encoding ASCII -Width 65535
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcProtocolS3ServicesGroups.json") -ErrorAction SilentlyContinue) ){
+            Write-LogDebug "$($Global:JsonPath+"Get-NcProtocolS3ServicesGroups.json") saved successfully"
+        }else{
+            Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcProtocolS3ServicesGroups.json")"
+            $Return=$False
+        }
+        $PrimaryOntaps3ServicesUsers | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcProtocolS3ServicesUsers.json") -Encoding ASCII -Width 65535
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcProtocolS3ServicesUsers.json") -ErrorAction SilentlyContinue) ){
+            Write-LogDebug "$($Global:JsonPath+"Get-NcProtocolS3ServicesUsers.json") saved successfully"
+        }else{
+            Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcProtocolS3ServicesUsers.json")"
+            $Return=$False
+        }
+        $PrimaryOntaps3ServicesPolicy | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcProtocolS3ServicesPolicy.json") -Encoding ASCII -Width 65535
+        if( $null -ne ($ret=get-item $($Global:JsonPath+"Get-NcProtocolS3ServicesPolicy.json") -ErrorAction SilentlyContinue) ){
+            Write-LogDebug "$($Global:JsonPath+"Get-NcProtocolS3ServicesPolicy.json") saved successfully"
+        }else{
+            Write-LogError "ERROR: Failed to saved $($Global:JsonPath+"Get-NcProtocolS3ServicesPolicy.json")"
+            $Return=$False
+        }
+    }
+    if($Backup -eq $False){
+        if($null -ne $PrimaryOntaps3Services){
+            Write-Log "[$workOn] Ontap S3 Service exists. Checks secondary"
+            $SecondaryOntaps3Services = Get-NcProtocolS3Services -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcProtocolS3Services failed [$ErrorVar]" }
+            
+            $PrimaryComment=$PrimaryOntaps3Services.Comment
+            $PrimaryBucketName=$PrimaryOntaps3Services.BucketName
+            $IsPrimaryEnabled=$PrimaryOntaps3Services.Enabled
+            $IsPrimaryHTTPenabled=$PrimaryOntaps3Services.IsHTTPEnabled
+            $IsPrimaryHTTPSenabled=$PrimaryOntaps3Services.IsHTTPSEnabled
+            $PrimaryName=$PrimaryOntaps3Services.Name
+            $PrimaryPort=$PrimaryOntaps3Services.Port
+            $PrimarySecurePort=$PrimaryOntaps3Services.SecurePort
+            $PrimaryCertificateName=$PrimaryOntaps3Services.CertificateName
+            $PrimaryUsers=$PrimaryOntaps3Services.Users
+            $PrimaryBuckets=$PrimaryOntaps3Services.Buckets
+
+            if($null -ne $SecondaryOntaps3Services){
+                Write-LogDebug "[$mySecondaryVserver] Ontap S3 Service already exists"
+                $SecondaryComment=$SecondaryOntaps3Services.Comment
+                $SecondaryBucketName=$SecondaryOntaps3Services.BucketName
+                $IsSecondaryEnabled=$PrimaryOntaps3Services.Enabled
+                $IsSecondaryHTTPenabled=$SecondaryOntaps3Services.IsHTTPEnabled
+                $IsSecondaryHTTPSenabled=$SecondaryOntaps3Services.IsHTTPSEnabled
+                $SecondaryName=$SecondaryOntaps3Services.Name
+                $SecondaryPort=$SecondaryOntaps3Services.Port
+                $SecondarySecurePort=$SecondaryOntaps3Services.SecurePort
+                $SecondaryCertificateName=$SecondaryOntaps3Services.CertificateName
+                $SecondaryUsers=$SecondaryOntaps3Services.Users
+                $SecondaryBuckets=$SecondaryOntaps3Services.Buckets
+            }else{
+                Write-Log "[$workOn] Ontap S3 Service not found. Create it"
+                Write-LogDebug "New-NcProtocolS3Services -Vserver $mySecondaryVserver -Controller $mySecondaryController -Comment $PrimaryComment -Enabled $IsPrimaryEnabled `
+                -Buckets $PrimaryBuckets -CertificateName $PrimaryCertificateName -IsHttpEnabled $IsPrimaryHTTPEnabled `
+                -IsHttpsEnabled $PrimaryHTTPSEnabled -Name $PrimaryName -Port $PrimaryPort -SecurePort $PrimarySecurePort"
+                $out=New-NcProtocolS3Services -Vserver $mySecondaryVserver -Controller $mySecondaryController -Comment $PrimaryComment -Enabled $IsPrimaryEnabled `
+                -Buckets $PrimaryBuckets -CertificateName $PrimaryCertificateName -IsHttpEnabled $IsPrimaryHTTPEnabled `
+                -IsHttpsEnabled $PrimaryHTTPSEnabled -Name $PrimaryName -Port $PrimaryPort -SecurePort $PrimarySecurePort -ErrorVariable ErrorVar 
+                if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: New-NcProtocolS3Services failed [$ErrorVar]" }
+            }
+        }
+    }
+}
+Catch {
+    Error_Handling $_ $workOn -donotcleanlog4net
+    return $Return
+}
+}
+
+
+#############################################################################################
 # create_update_igroupdr
 Function create_update_igroupdr(
 	[NetApp.Ontapi.Filer.C.NcController] $myPrimaryController,
@@ -6981,7 +7166,10 @@ Try {
                     Write-LogError "ERROR: Unable to get svm protocols [$mySecondaryVserver] from [$mySecondaryController]"
                     return $False
                 } #>
-                $ProtocolsWithoutS3=$PrimaryAllowedProtocols | Where-Object {$_ -ne "s3"}
+                #? Have to check why S3 protocol is excluded here?
+                #$ProtocolsWithoutS3=$PrimaryAllowedProtocols | Where-Object {$_ -ne "s3"}
+                #? Reintroduce S3 protocol at SVM level to see the impact and allow create_update_ontapS3 to works
+                $ProtocolsWithoutS3=$PrimaryAllowedProtocols
                 Write-LogDebug "Set-NcVserver -AllowedProtocols $ProtocolsWithoutS3 -Name $mySecondaryVserver -Controller $mySecondaryController "
                 $out=Set-NcVserver -AllowedProtocols $ProtocolsWithoutS3 -Name $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcVserver failed [$ErrorVar]" }
@@ -9315,6 +9503,9 @@ Try {
                                     $TieringPolicy="auto"
                                 }
                             }
+                            #! attention au cas de creation d'une relation snapmirror protect pour copier une flexgroup à la destination
+                            #! si ce flexgroup est en fait un bucket S3 il faut utiliser une policy continuous poru faire du snapmirror S3 
+                            #! et non du snapmirror classic
                             REST_create_snapmirror -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -PrimaryVol $PrimaryFlexgroupMasterName -SecondaryVol $SecondaryFlexgroupMasterName -Group_type "flexgroup" -Policy $Policy -Policy_type $Policy_type -Schedule $Global:MirrorSchedule -workOn $mySecondaryVserver -TieringPolicy $TieringPolicy
                         }
                             
@@ -9326,17 +9517,19 @@ Try {
             }else{
                 #Write-LogWarn "Warning: Ignore Flexgroup [$PrimaryVolName] verification in Restore Mode. If missing, currently you must recreate Flexgroup manualy"
                 Write-Log "[$workon] Process a Flexgroup volume [$PrimaryVolName]"
-                # check this volume Name on secondary SVM
-                Write-LogDebug "Check if [$PrimaryVolName] volume exists on destination"
-                Write-LogDebug "Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $PrimaryVolName"
-                $SecondaryFlexgroup = Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $PrimaryVolName  -ErrorVariable ErrorVar 
-                if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcVol failed [$ErrorVar]" }
-                if ( $null -eq $SecondaryFlexgroup ) {
-                    if( ($ret=create_flexgroup -myController $mySecondaryController -myVserver $mySecondaryVserver -myFlexgroup $PrimaryVol) -ne $True) {Write-LogError "ERROR: Fail to create flexgroup [$PrimaryVolName]"; $Return=$False}
-                    #clean_and_exit 0
-                }elseif($PrimaryVolName -notin $ListFlexgroup){
-                    Write-Log "[$workOn] Flexgroup [$PrimaryVolName] already exists" 
-                    $ListFlexgroup+=$PrimaryVolName
+                if($Backup -eq $False){
+                    # check this volume Name on secondary SVM
+                    Write-LogDebug "Check if [$PrimaryVolName] volume exists on destination"
+                    Write-LogDebug "Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $PrimaryVolName"
+                    $SecondaryFlexgroup = Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $PrimaryVolName  -ErrorVariable ErrorVar 
+                    if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+                    if ( $null -eq $SecondaryFlexgroup ) {
+                        if( ($ret=create_flexgroup -myController $mySecondaryController -myVserver $mySecondaryVserver -myFlexgroup $PrimaryVol) -ne $True) {Write-LogError "ERROR: Fail to create flexgroup [$PrimaryVolName]"; $Return=$False}
+                        #clean_and_exit 0
+                    }elseif($PrimaryVolName -notin $ListFlexgroup){
+                        Write-Log "[$workOn] Flexgroup [$PrimaryVolName] already exists" 
+                        $ListFlexgroup+=$PrimaryVolName
+                    }
                 }
             }
         }else {
@@ -18398,6 +18591,9 @@ Try {
 	if ( ( $ret=create_snapmirror_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn -DDR $DDR -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all snapmirror relations " ; $Return = $False }
     if ( ( $ret=create_update_snap_policy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) {Write-LogError "ERROR: create_update_snap_policy_dr"}
     if ( ( $ret=map_lundr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to map all LUNs " ; $Return = $False }
+    if ( ( $ret=create_update_ontaps3 -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: create_update_ontaps3" ; $Return = $False }
+    #* Replication S3snapmirror = snapmirror avec policy continuous sur laquelle on peut regler rpo et throttle
+    #* Ajout/Création de create_update_CG
     if ( ( $ret = resync_vserver_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -Backup $runBackup -Restore $runRestore) -ne $True ) {
         Write-LogError "ERROR: Resync error"
         clean_and_exit 1
@@ -27507,17 +27703,17 @@ Function restore_object (
     [string]$SecondaryCifsLifMaster,
     [string]$SecondaryCifsLifCustomVlan,
     [string]$ActiveDirectoryCustomOU,
-    [ValidateSet("Lifs", "Volumes", "Exports", "CifsServer", "NetBios", "Shares", "Symlinks", "Quotas","Users")]
+    [ValidateSet("Lifs", "Volumes", "Exports", "CifsServer", "NetBios", "Shares", "Symlinks", "Quotas", "Users", "S3")]
     [string[]]$objects=@("")
     ) {
 Try {
 	$Return = $true
     Write-LogDebug "start"
 
-
+    
     if("Users" -in $objects){
         Write-Log "[$mySecondaryVserver] Restore Object Users"
-        if ( ( $ret=create_update_role_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $False -Restore $True) -ne $True ) { Write-LogError "ERROR: Failed to restore all Role"}
+        if ( ( $ret=create_update_ontaps3 -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $False -Restore $True) -ne $True ) { Write-LogError "ERROR: Failed to restore all Role"}
         #if( $null -ne $Global:DefaultLocalUserCredentials ){
             if ( ( $ret=create_update_localuser_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $False -Restore $True) -ne $True ) { Write-LogError "ERROR: Failed to restore all local user"}
         #}else{
@@ -27636,6 +27832,10 @@ Try {
             Write-LogDebug "restore_quota Error check log [$ret]"
             $Return = $False
         }
+    }
+    if("S3" -in $objects){
+        Write-Log "[$mySecondaryVserver] Restore Object S3 (Ontap S3 server)"
+        if ( ( $ret=create_update_ontaps3 -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $False -Restore $True) -ne $True ) { Write-LogError "ERROR: Failed to restore ontap S3"}
     }
 
     Write-LogDebug "end"

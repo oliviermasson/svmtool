@@ -6,7 +6,7 @@
 # Generated on: 2018-10-09
 #
 # Updated by : Olivier Masson
-# Updated on : 2022-11-07
+# Updated on : 2025-02-28
 #
 # Version Control :
 #   1.0.0 : Initial version
@@ -30,6 +30,7 @@
 #   1.1.7 : Change/Add some synopsis informations
 #   1.1.8 : Add new parameters for UpdateReverse
 #   1.1.9 : Add parametes for resync and resyncreverse to modify snapmirror policy and schedule
+#   1.1.10 : Add new parameters for restore-objectsmvdr to restore ontap S3 configuration
 #           
 @{
 
@@ -37,7 +38,7 @@
     RootModule        = '.\svmtool.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.1.9'
+    ModuleVersion     = '1.1.10'
 
     # Supported PSEditions
     # CompatiblePSEditions = @()
