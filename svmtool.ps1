@@ -709,7 +709,7 @@ Param (
     [string]$Vserver,
 
     [Parameter(Mandatory = $true, ParameterSetName = 'RestoreObject')]
-    [ValidateSet("Lifs", "Volumes", "Exports", "CifsServer", "NetBios", "Shares", "Symlinks", "Quotas","Users")]
+    [ValidateSet("Lifs", "Volumes", "Exports", "CifsServer", "NetBios", "Shares", "Symlinks", "Quotas","Users","S3")]
     [string[]]$Objects=@(""),
 
     [Parameter(Mandatory = $false, ParameterSetName = 'RestoreObject')]
@@ -2897,7 +2897,15 @@ if ( $RestoreObject ){
                         $numFiles = (Get-ChildItem $($SVMTOOL_DB + "/" + $Vserver + "/" + $date + "/") | Measure-Object).Count    
                     }
                     $datetime = [datetime]::parseexact($date, "yyyyMMddHHmmss", $null)
-                    Format-ColorBrackets "`t[$i] : [$datetime] [$date] [$numFiles Files]" -FirstIsSpecial
+                    $path=$($SVMTOOL_DB + "\" + $Vserver + "\" + $date + "\")
+                    $versionfile=$path+"Get-NcSystemVersionInfo.json"
+                    Try{
+                        $versiondetail=get-content $versionfile -Raw | ConvertFrom-Json
+                        $versionstring=$([string]$versiondetail[0].VersionTuple.Generation+"."+[string]$versiondetail[0].VersionTuple.Major+"."+[string]$versiondetail[0].VersionTuple.Minor)
+                    }catch{
+                        $versionstring="Unknown version"
+                    }
+                    Format-ColorBrackets "`t[$i] : [$datetime] [$date] [$versionstring] [$numFiles Files]" -FirstIsSpecial
                     $i++
                 }
                 $Query = "Please select Backup from (1.." + $listBackupAvailable.count + ")"
@@ -2987,7 +2995,10 @@ if ( $RestoreObject ){
     
     if ( ( $ret=create_vserver_dr_envelope -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $DestinationSVM -workOn $DestinationSVM -aggrMatchRegEx $aggrMatchRegEx -nodeMatchRegEx $nodeMatchRegEx -myDataAggr $myDataAggr -RootAggr $RootAggr) -ne $True ) { Write-LogError "ERROR: Failed create vserver envelope"; clean_and_exit 1 }
     if ( ( $ret=check_update_vserver -myPrimaryController $NcPrimaryCtrl -mySecondaryController $NcSecondaryCtrl -myPrimaryVserver $Vserver -mySecondaryVserver $DestinationSVM -workOn $DestinationSVM -Backup $False -Restore $True) -ne $True ) { Write-LogError "ERROR: Failed check update vserver" ; $Return = $False }
-
+    if ($Global:VOLUME_TYPE -eq "dp" -and $Objects.contains('S3')){
+        Write-LogError "ERROR: S3 object restore is not supported for DP volumes"
+        clean_and_exit 1
+    }
     if ( ( $ret= restore_object -myPrimaryController $NcPrimaryCtrl `
     -mySecondaryController $NcSecondaryCtrl `
     -myPrimaryVserver $Vserver `

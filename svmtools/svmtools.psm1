@@ -452,6 +452,7 @@ function Write-Log ([string]$mess, $color,[switch]$colorvalues=$true,[switch]$fi
         }
     }
 }
+
 #############################################################################################
 function Write-LogOnly ([string]$mess, $type) {
     if($mess){
@@ -466,7 +467,6 @@ function Write-LogOnly ([string]$mess, $type) {
         #$Global:ConsoleLog.Info($mess)
     }
 }
-
 
 #############################################################################################
 function Read-HostDefault{
@@ -591,6 +591,76 @@ Function create_config_file_cli ([string]$primaryCluster,[string]$secondaryClust
             Write-LogDebug "Detected SINGLE_CLUSTER Configuration"
         }
 	}
+}
+
+#############################################################################################
+Function RestRequest(
+    [NetApp.Ontapi.Filer.C.NcController]$Controller,
+    [string]$method,
+    [string]$uri,
+    [string]$workOn,
+    [System.Object]$bodymethod
+)
+{
+    Write-Log "[$workOn] Invoke REST request"
+    Write-LogDebug "[$workOn]: start"
+    if($method -match "patch|post|delete"){
+        $bodyjson=$bodymethod | ConvertTo-Json -Depth 100
+    }
+    $myCred=get_local_cDotcred($Controller)
+    if($method -match "patch|post|delete"){
+        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method $method -Uri $uri -Credential $myCred -body $bodyjson -SkipCertificateCheck"
+        $ret=Invoke-RestMethod -ContentType 'application/json' -Method $method -Uri $uri -Credential $myCred -body $bodyjson -SkipCertificateCheck -ErrorVariable ErrorVar
+    }else{
+        Write-LogDebug "Invoke-RestMethod -ContentType 'application/json' -Method $method -Uri $uri -Credential $myCred -SkipCertificateCheck"
+        $ret=Invoke-RestMethod -ContentType 'application/json' -Method $method -Uri $uri -Credential $myCred -SkipCertificateCheck -ErrorVariable ErrorVar
+    }
+    #? check the case where body contains password information that should not be displayed
+    <# [System.Collections.Hashtable]$cleanbody=$bodycifs
+    $bodycifs = $bodycifs | ConvertTo-Json
+    $cleanbody.ad_domain.password="xxxxxxxxxxxxxx"
+    [string]$cleanbody=$cleanbody | ConvertTo-Json #>
+    if($? -ne $True){
+        Write-LogError "ERROR: Error with method [$method] with uri [$uri] with body [$bodymethod]. Reason [$ErrorVar]"
+        Write-LogDebug "[$workOn]: end"
+        return $False
+    }
+    if($null -ne $ret -and $ret.count -gt 1){
+        if($ret.contains("job.Uuid")){
+            $JobUuid=$ret.job.Uuid
+            Write-LogDebug "Check $method job status [$JobUuid]"
+            $StartTime=Get-Date
+            $JobDone=$False
+            $Timeout=$False
+            While(($JobDone -eq $False) -and ($Timeout -eq $False)){
+                $JobDetail=Get-RESTJob -Cred $myCred -url $("https://"+$Controller.Name+$ret.job._links.self.href)
+                if($JobDetail.state -eq "success"){
+                    $JobDone=$True
+                    break
+                }else{
+                    $JobStatus=$JobDetail.state
+                    Write-LogDebug "[$workOn] $method job status [$JobStatus]"
+                    if($JobStatus -eq "failure"){
+                        $JobCompletion=$JobDetail.message
+                        Write-LogError "[$workOn] $method job status [$JobCompletion]"
+                        break
+                    }
+                }
+                $CurrentTime=Get-date
+                $TimeSpend=($CurrentTime - $StartTime).TotalSeconds
+                if($TimeSpend -gt $Global:STOP_TIMEOUT){
+                    Write-LogWarn "[$workOn] Check job uuid status [$JobUuid] in Ontap"
+                    Write-LogDebug "[$workOn]: end"
+                    return $False
+                }
+                Start-Sleep 5
+            }
+        }else{
+            Write-LogDebug "Invoke-RestMethod return [$ret]"
+        }
+    }
+    Write-LogDebug "[$workOn]: end"
+    return $True
 }
 
 #############################################################################################
@@ -6310,22 +6380,28 @@ Function create_update_ontaps3(
 
 Try {
     $Return = $True
-    Write-Log "[$workOn] Check SVM ontapS3 configuration"
+    Write-Log "[$workOn] Check SVM Ontap S3 configuration"
     Write-LogDebug "[$myPrimaryVserver]: start"
     if($Backup -eq $True){Write-LogDebug "run in Backup mode [$myPrimaryVserver]"}
     if($Restore -eq $True){Write-LogDebug "run in Restore mode [$myPrimaryVserver]"}
 
     if($Restore -eq $False){
+        Write-LogDebug "Get-NcProtocolS3Services -Vserver $myPrimaryVserver -Controller $myPrimaryController"
         $PrimaryOntaps3Services = Get-NcProtocolS3Services -Vserver $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcProtocolS3Services failed [$ErrorVar]" }
-        $PrimaryOntaps3Bucket = Get-NcProtocolS3Bucket -Vserver $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
+        Write-LogDebug "Get-NcProtocolS3Bucket -Vserver $myPrimaryVserver -Controller $myPrimaryController -Name $($PrimaryOntaps3Services.Buckets.Name)"
+        $PrimaryOntaps3Bucket = Get-NcProtocolS3Bucket -Vserver $myPrimaryVserver -Controller $myPrimaryController -Name $PrimaryOntaps3Services.Buckets.Name -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcProtocolS3Bucket failed [$ErrorVar]" }
-        $PrimaryOntaps3ServicesBucket = Get-NcProtocolS3ServicesBucket -VserverContext $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
+        Write-LogDebug "Get-NcProtocolS3ServicesBucket -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Name $($PrimaryOntaps3Services.Buckets.Name)"
+        $PrimaryOntaps3ServicesBucket = Get-NcProtocolS3ServicesBucket -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Name $PrimaryOntaps3Services.Buckets.Name -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcProtocolS3ServicesBucket failed [$ErrorVar]" }
+        Write-LogDebug "Get-NcProtocolS3ServicesGroups -SvmName $myPrimaryVserver -Controller $myPrimaryController"
         $PrimaryOntaps3ServicesGroups = Get-NcProtocolS3ServicesGroups -SvmName $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcProtocolS3ServicesGroups failed [$ErrorVar]" }
+        Write-LogDebug "Get-NcProtocolS3ServicesUsers -SvmName $myPrimaryVserver -Controller $myPrimaryController"
         $PrimaryOntaps3ServicesUsers = Get-NcProtocolS3ServicesUsers -SvmName $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcProtocolS3ServicesUsers failed [$ErrorVar]" }
+        Write-LogDebug "Get-NcProtocolS3ServicesPolicy -SvmName $myPrimaryVserver -Controller $myPrimaryController"
         $PrimaryOntaps3ServicesPolicy = Get-NcProtocolS3ServicesPolicy -SvmName $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcProtocolS3ServicesPolicy failed [$ErrorVar]" }
     }else{
@@ -6335,14 +6411,6 @@ Try {
         }else{
             $Return=$False
             $filepath=$($Global:JsonPath+"Get-NcProtocolS3Services.json")
-            Clean_Throw "ERROR: failed to read $filepath"
-        }
-        if(Test-Path $($Global:JsonPath+"Get-NcProtocolS3Bucket.json")){
-            $PrimaryOntaps3Bucket=Get-Content $($Global:JsonPath+"Get-NcProtocolS3Bucket.json") -Raw | ConvertFrom-Json
-            Write-LogDebug "$($Global:JsonPath+"Get-NcProtocolS3Bucket.json") successfully imported"
-        }else{
-            $Return=$False
-            $filepath=$($Global:JsonPath+"Get-NcProtocolS3Bucket.json")
             Clean_Throw "ERROR: failed to read $filepath"
         }
         if(Test-Path $($Global:JsonPath+"Get-NcProtocolS3Bucket.json")){
@@ -6432,12 +6500,12 @@ Try {
     }
     if($Backup -eq $False){
         if($null -ne $PrimaryOntaps3Services){
-            Write-Log "[$workOn] Ontap S3 Service exists. Checks secondary"
+            Write-Log "[$myPrimaryVserver] Ontap S3 Service exists. Checks secondary"
             $SecondaryOntaps3Services = Get-NcProtocolS3Services -Vserver $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
             if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcProtocolS3Services failed [$ErrorVar]" }
             
             $PrimaryComment=$PrimaryOntaps3Services.Comment
-            $PrimaryBucketName=$PrimaryOntaps3Services.BucketName
+            #$PrimaryBuckets=$PrimaryOntaps3Services.Buckets
             $IsPrimaryEnabled=$PrimaryOntaps3Services.Enabled
             $IsPrimaryHTTPenabled=$PrimaryOntaps3Services.IsHTTPEnabled
             $IsPrimaryHTTPSenabled=$PrimaryOntaps3Services.IsHTTPSEnabled
@@ -6449,9 +6517,9 @@ Try {
             $PrimaryBuckets=$PrimaryOntaps3Services.Buckets
 
             if($null -ne $SecondaryOntaps3Services){
-                Write-LogDebug "[$mySecondaryVserver] Ontap S3 Service already exists"
-                $SecondaryComment=$SecondaryOntaps3Services.Comment
-                $SecondaryBucketName=$SecondaryOntaps3Services.BucketName
+                Write-Log "[$mySecondaryVserver] Ontap S3 Service already exists"
+                <# $SecondaryComment=$SecondaryOntaps3Services.Comment
+                #$SecondaryBuckets=$SecondaryOntaps3Services.Buckets
                 $IsSecondaryEnabled=$PrimaryOntaps3Services.Enabled
                 $IsSecondaryHTTPenabled=$SecondaryOntaps3Services.IsHTTPEnabled
                 $IsSecondaryHTTPSenabled=$SecondaryOntaps3Services.IsHTTPSEnabled
@@ -6460,19 +6528,236 @@ Try {
                 $SecondarySecurePort=$SecondaryOntaps3Services.SecurePort
                 $SecondaryCertificateName=$SecondaryOntaps3Services.CertificateName
                 $SecondaryUsers=$SecondaryOntaps3Services.Users
-                $SecondaryBuckets=$SecondaryOntaps3Services.Buckets
+                $SecondaryBuckets=$SecondaryOntaps3Services.Buckets #>
             }else{
                 Write-Log "[$workOn] Ontap S3 Service not found. Create it"
-                Write-LogDebug "New-NcProtocolS3Services -Vserver $mySecondaryVserver -Controller $mySecondaryController -Comment $PrimaryComment -Enabled $IsPrimaryEnabled `
-                -Buckets $PrimaryBuckets -CertificateName $PrimaryCertificateName -IsHttpEnabled $IsPrimaryHTTPEnabled `
-                -IsHttpsEnabled $PrimaryHTTPSEnabled -Name $PrimaryName -Port $PrimaryPort -SecurePort $PrimarySecurePort"
-                $out=New-NcProtocolS3Services -Vserver $mySecondaryVserver -Controller $mySecondaryController -Comment $PrimaryComment -Enabled $IsPrimaryEnabled `
-                -Buckets $PrimaryBuckets -CertificateName $PrimaryCertificateName -IsHttpEnabled $IsPrimaryHTTPEnabled `
-                -IsHttpsEnabled $PrimaryHTTPSEnabled -Name $PrimaryName -Port $PrimaryPort -SecurePort $PrimarySecurePort -ErrorVariable ErrorVar 
-                if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: New-NcProtocolS3Services failed [$ErrorVar]" }
+                Write-LogDebug "Get-NcProtocolS3Bucket -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $($PrimaryBuckets[0].Name)"
+                $SecondaryBucket=Get-NcProtocolS3Bucket -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $PrimaryBuckets[0].Name -ErrorVariable ErrorVar
+                if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcProtocolS3Bucket failed [$ErrorVar]" }
+                if($null -ne $SecondaryBucket){
+                    Write-Log "[$mySecondaryVserver] Ontap S3 Bucket [$($PrimaryBuckets[0].Name)] already exists"
+                    <# $SecondaryBucketName=$SecondaryBucket.Name
+                    $SecondaryBucketSize=$SecondaryBucket.Size
+                    $SecondaryBucketType=$SecondaryBucket.Type
+                    $SecondaryBucketVersioningState=$SecondaryBucket.VersioningState #>
+                }else{
+                    Write-LogDebug "New-NcProtocolS3Bucket -Name $($PrimaryBuckets[0].Name) -Vserver $mySecondaryVserver -Controller $mySecondaryController -Size $($PrimaryBuckets[0].Size) -Type $($PrimaryBuckets[0].Type) -VersioningState $($PrimaryBuckets[0].VersioningState)"
+                    $SecondaryBucket=New-NcProtocolS3Bucket `
+                    -Name $PrimaryBuckets[0].Name `
+                    -Vserver $mySecondaryVserver `
+                    -Controller $mySecondaryController `
+                    -Size $PrimaryBuckets[0].Size `
+                    -Type $PrimaryBuckets[0].Type `
+                    -VersioningState $PrimaryBuckets[0].VersioningState `
+                    -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: New-NcProtocolS3Bucket failed [$ErrorVar]" }
+                }
+                if($null -ne ($PrimaryOntaps3ServicesUsers | Where-Object {$_.Name -ne "root"})){
+                    Write-Log "[$mySecondaryVserver] Check S3 Users existence on secondary"
+                    $SecondaryUsers=Get-NcProtocolS3ServicesUsers -SvmName $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar | Where-Object {$_.Name -ne "root"}
+                    if($null -ne $SecondaryUsers){
+                        Write-Log "[$mySecondaryVserver] Users already exists"
+                        foreach($User in $PrimaryOntaps3ServicesUsers | Where-Object {$_.Name -ne "root"}){
+                            $selectedSecondaryUser=$SecondaryUsers | Where-Object {$_.Name -eq $User.Name}
+                            if($null -ne $selectedSecondaryUser){
+                                Write-Log "[$mySecondaryVserver] User [$($User.Name)] already exists"
+                            }else{
+                                Write-LogDebug "User $($User.Name) does not exists on secondary"
+                                Write-LogDebug "New-NcProtocolS3ServicesUsers -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Name $($User.Name) -Comment $($User.Comment)"
+                                $out=New-NcProtocolS3ServicesUsers -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Name $User.Name -Comment $User.Comment -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: New-NcProtocolS3ServicesUsers failed [$ErrorVar]" }
+                                Write-log "[$mySecondaryVserver] User [$($User.Name)] Created with AccessKey [$($out.AccessKey)] SecretKey [$($out.SecretKey)]"
+                            }
+                        }
+                        <# $SecondaryUsersName=$SecondaryUsers.Name
+                        $SecondaryUsersAccessKey=$SecondaryUsers.AccessKey
+                        $SecondaryUsersSecretKey=$SecondaryUsers.SecretKey #>
+                    }else{
+                        Write-LogDebug "No secondary S3 Users found."
+                        $PrimaryUserList=$PrimaryOntaps3ServicesUsers | Where-Object {$_.Name -ne "root"}
+                        foreach($User in $PrimaryUserList){
+                            Write-Log "[$mySecondaryVserver] Create S3 User [$($User.Name)]"
+                            Write-LogDebug "New-NcProtocolS3ServicesUsers -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Name $($User.Name) -Comment $($User.Comment)"
+                            $out=New-NcProtocolS3ServicesUsers -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Name $User.Name -Comment $User.Comment -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: New-NcProtocolS3ServicesUsers failed [$ErrorVar]" }
+                            Write-log "[$mySecondaryVserver] User [$($User.Name)] Created with AccessKey [$($out.AccessKey)] SecretKey [$($out.SecretKey)]"
+                        }
+                    }
+                }
+                if($null -ne ($PrimaryOntaps3ServicesPolicy | Where-Object {$_.ReadOnly -ne $True})){
+                    Write-LogDebug "Check S3 policy existence on secondary"
+                    $SecondaryPolicy=Get-NcProtocolS3ServicesPolicy -Vserver $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar | Where-Object {$_.ReadOnly -ne $True}
+                    if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcProtocolS3ServicesPolicy failed [$ErrorVar]" }
+                    if($null -ne $SecondaryPolicy){
+                        foreach($Policy in ($PrimaryOntaps3ServicesPolicy | Where-Object {$_.ReadOnly -ne $True})){
+                            $selectedSecondaryPolicy=$SecondaryPolicy | Where-Object {$_.Name -eq $Policy.Name}
+                            if($null -ne $selectedSecondaryPolicy){
+                                Write-Log "[$mySecondaryVserver] S3 Policy [$($Policy.name)] already exists"
+                            }else{
+                                Write-Log "Policy $($Policy.Name) does not exists on secondary"
+                                Write-Log "Create new policy and then add statements inside"
+
+                                $bodystatements=@{"statements"=@()}
+                                $index=0
+                                foreach($statement in $Policy.Statements){
+                                    $bodystatements.statements+=@{
+                                        "actions"=@()
+                                        "effect"=$statement.Effect
+                                        "resources"=@()
+                                        "sid"=$statement.Sid
+                                    }
+                                    $bodystatements.statements[$index].actions=$statement.Actions
+                                    $bodystatements.statements[$index].resources=$statement.Resources
+                                    $index++
+                                }
+                                Write-LogDebug "New-NcProtocolS3ServicesPolicy -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $($Policy.Name) -Comment $($Policy.Comment))"
+                                $ret=New-NcProtocolS3ServicesPolicy -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $Policy.Name -Comment $Policy.Comment -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: New-NcProtocolS3ServicesPolicy failed [$ErrorVar]" }
+                                Write-LogDebug "Get-NcVserver -Name $mySecondaryVserver -Controller $mySecondaryController"
+                                $myVserver=Get-NcVserver -Name $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcVserver failed [$ErrorVar]" }
+                                $mySecondaryVserverUUID=$myVserver.Uuid
+                                $uri=$("https://"+$mySecondaryController.Name+"/api/protocols/s3/services/$mySecondaryVserverUUID/policies/$($Policy.Name)")
+                                Write-LogDebug "RestRequest -Controller $mySecondaryController -method patch -uri $uri -body $bodystatements -workOn $mySecondaryVserver"
+                                $ret=RestRequest -Controller $mySecondaryController -method "patch" -uri $uri -bodymethod $bodystatements -workOn $mySecondaryVserver -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: RestRequest failed [$ErrorVar]" }
+                            }
+                            if($selectedSecondaryPolicy.Statements.count -ne $Policy.Statements.count){
+                                Write-Log "S3 Policy $($Policy.Name) exists but statements count is not identical"
+                                #* patch method always replace existing statements with suplied statements
+                                <# Write-LogDebug "First delete existing Policy and recreate it"
+                                Write-LogDebug "Remove-NcProtocolS3ServicesPolicy -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $($Policy.Name)"
+                                $ret=Remove-NcProtocolS3ServicesPolicy -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $Policy.Name -Confirm:$False -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Remove-NcProtocolS3ServicesPolicy failed [$ErrorVar]" } #>
+                                $bodystatements=@{"statements"=@()}
+                                $index=0
+                                foreach($statement in $Policy.Statements){
+                                    $bodystatements.statements+=@{
+                                        "actions"=@()
+                                        "effect"=$statement.Effect
+                                        "resources"=@()
+                                        "sid"=$statement.Sid
+                                    }
+                                    $bodystatements.statements[$index].actions=$statement.Actions
+                                    $bodystatements.statements[$index].resources=$statement.Resources
+                                    $index++
+                                }
+                                <# Write-LogDebug "New-NcProtocolS3ServicesPolicy -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $($Policy.Name) -Comment $($Policy.Comment))"
+                                $ret=New-NcProtocolS3ServicesPolicy -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $Policy.Name -Comment $Policy.Comment -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: New-NcProtocolS3ServicesPolicy failed [$ErrorVar]" } #>
+                                Write-LogDebug "Get-NcVserver -Name $mySecondaryVserver -Controller $mySecondaryController"
+                                $myVserver=Get-NcVserver -Name $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcVserver failed [$ErrorVar]" }
+                                $mySecondaryVserverUUID=$myVserver.Uuid
+                                $uri=$("https://"+$mySecondaryController.Name+"/api/protocols/s3/services/$mySecondaryVserverUUID/policies/$($Policy.Name)")
+                                Write-LogDebug "RestRequest -Controller $mySecondaryController -method patch -uri $uri -body $bodystatements -workOn $mySecondaryVserver"
+                                $ret=RestRequest -Controller $mySecondaryController -method "patch" -uri $uri -bodymethod $bodystatements -workOn $mySecondaryVserver -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: RestRequest failed [$ErrorVar]" }
+                            }
+                        }
+                        
+                    }else{
+                        Write-Log "No S3 Policy exists on secondary"
+                        Write-Log "Create new S3 Policy and then add statements inside"
+                        foreach($Policy in ($PrimaryOntaps3ServicesPolicy | Where-Object {$_.ReadOnly -ne $True})){
+                            $bodystatements=@{"statements"=@()}
+                            $index=0
+                            foreach($statement in $Policy.Statements){
+                                $bodystatements.statements+=@{
+                                    "actions"=@()
+                                    "effect"=$statement.Effect
+                                    "resources"=@()
+                                    "sid"=$statement.Sid
+                                }
+                                $bodystatements.statements[$index].actions=$statement.Actions
+                                $bodystatements.statements[$index].resources=$statement.Resources
+                                $index++
+                            }
+                            Write-LogDebug "New-NcProtocolS3ServicesPolicy -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $($Policy.Name) -Comment $($Policy.Comment))"
+                            $SecondaryPolicy=New-NcProtocolS3ServicesPolicy -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $Policy.Name -Comment $Policy.Comment -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: New-NcProtocolS3ServicesPolicy failed [$ErrorVar]" }
+                            Write-LogDebug "Get-NcVserver -Name $mySecondaryVserver -Controller $mySecondaryController"
+                            $myVserver=Get-NcVserver -Name $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcVserver failed [$ErrorVar]" }
+                            $mySecondaryVserverUUID=$myVserver.Uuid
+                            $uri=$("https://"+$mySecondaryController.Name+"/api/protocols/s3/services/$mySecondaryVserverUUID/policies/$($Policy.Name)")
+                            Write-LogDebug "RestRequest -Controller $mySecondaryController -method patch -uri $uri -body $bodystatements -workOn $mySecondaryVserver"
+                            $ret=RestRequest -Controller $mySecondaryController -method "patch" -uri $uri -bodymethod $bodystatements -workOn $mySecondaryVserver -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: RestRequest failed [$ErrorVar]" }
+                        }
+                    }
+                }
+                if($null -ne $PrimaryOntaps3ServicesGroups){
+                    Write-Log "[$mySecondaryVserver] Check S3 groups existence on secondary"
+                    $SecondaryGroups=Get-NcProtocolS3ServicesGroups -SvmName $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcProtocolS3ServicesGroups failed [$ErrorVar]" }
+                    if($null -ne $SecondaryGroups){
+                        Write-Log "[$mySecondaryVserver] Groups already exist"
+                    }else{
+                        foreach($Group in $PrimaryOntaps3ServicesGroups){
+                            Write-Log "[$mySecondaryVserver] Create S3 Group [$($Group.Name)]"
+                            Write-LogDebug "New-NcProtocolS3ServicesGroups -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $($Group.Name) -Users $($Group.Users) -Policies $($Group.Policies)"
+                            $out=New-NcProtocolS3ServicesGroups -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $Group.Name -Users $Group.Users -Policies $Group.Policies -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: New-NcProtocolS3ServicesGroups failed [$ErrorVar]" }
+                        }
+                    }
+                }
+                
+                if($IsPrimaryHTTPSenabled -eq $True){   
+                  Write-Log "[$mySecondaryVserver] Check certificate existence on secondary"
+                    Write-LogDebug "Get-NcSecurityCertificate -Controller $myPrimaryController -Vserver $myPrimaryVserver -CommonName $PrimaryCertificateName"
+                    $PrimaryCertificate=Get-NcSecurityCertificate -Controller $myPrimaryController -Vserver $myPrimaryVserver -CommonName $PrimaryCertificateName -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcSecurityCertificate failed [$ErrorVar]" }
+                    $PrimaryCertificateSize=$PrimaryCertificate.Size
+                    $PrimaryCertificateType=$PrimaryCertificate.Type
+                    Write-LogDebug "Get-NcSecurityCertificate -Controller $mySecondaryController -Vserver $mySecondaryVserver -CommonName $PrimaryCertificateName"
+                    $SecondaryCertificate=Get-NcSecurityCertificate -Controller $mySecondaryController -Vserver $mySecondaryVserver -CommonName $PrimaryCertificateName -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcSecurityCertificate failed [$ErrorVar]" }
+                    if($null -ne $SecondaryCertificate){
+                        Write-Log "[$mySecondaryVserver] Certificate [$PrimaryCertificateName] already exists"
+                        <# $SecondaryCertificateName=$SecondaryCertificate.CommonName
+                        $SecondaryCertificateSize=$SecondaryCertificate.Size
+                        $SecondaryCertificateType=$SecondaryCertificate.Type #>
+                    }else{
+                        Write-Log "[$mySecondaryVserver] Create new certificate [$PrimaryCertificateName]"
+                        Write-LogDebug "New-NcSecurityCertificate -CommonName $PrimaryCertificateName -Controller $mySecondaryController -VserverContext $mySecondaryVserver -Size $PrimaryCertificateSize -Type $PrimaryCertificateType"
+                        $SecondaryCertificate=New-NcSecurityCertificate -CommonName $PrimaryCertificateName -Controller $mySecondaryController -VserverContext $mySecondaryVserver -Size $PrimaryCertificateSize -Type $PrimaryCertificateType -ErrorVariable ErrorVar
+                        if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: New-NcSecurityCertificate failed [$ErrorVar]" }
+                    }
+                    Write-Log "[$mySecondaryVserver] Create S3 Service with HTTPS enabled"
+                    Write-LogDebug "New-NcProtocolS3Services -Vserver $mySecondaryVserver -Controller $mySecondaryController -Comment $PrimaryComment -Enabled $False `
+                    -Buckets @{Name=$($PrimaryBuckets[0].Name)} -CertificateName $PrimaryCertificateName -IsHttpEnabled $IsPrimaryHTTPEnabled `
+                    -IsHttpsEnabled $IsPrimaryHTTPSenabled -Name $PrimaryName -Port $PrimaryPort -SecurePort $PrimarySecurePort -User $PrimaryUsers"
+                    foreach($user in $PrimaryUsers){
+                        $user.PSObject.Properties.Remove('AccessKey')
+                        $user.PSObject.Properties.Remove('SecretKey')
+                    }
+                    $withoutRootUserList=$PrimaryUsers | Where-Object {$_.Name -ne "root"}
+                    $out=New-NcProtocolS3Services -Vserver $mySecondaryVserver -Controller $mySecondaryController -Comment $PrimaryComment -Enabled $False `
+                    -Buckets @{Name=$PrimaryBuckets[0].Name} -CertificateName $PrimaryCertificateName -IsHttpEnabled $IsPrimaryHTTPEnabled `
+                    -IsHttpsEnabled $IsPrimaryHTTPSEnabled -Name $PrimaryName -Port $PrimaryPort -SecurePort $PrimarySecurePort -User $withoutRootUserList -ErrorVariable ErrorVar 
+                    if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: New-NcProtocolS3Services failed [$ErrorVar]" }
+                }else{
+                    Write-Log "[$mySecondaryVserver] Create S3 Service with HTTPS disabled"
+                    Write-LogDebug "New-NcProtocolS3Services -Vserver $mySecondaryVserver -Controller $mySecondaryController -Comment $PrimaryComment -Enabled $False `
+                    -Buckets @{Name=$($PrimaryBuckets[0].Name)} -IsHttpEnabled $IsPrimaryHTTPEnabled -User $PrimaryUsers `
+                    -IsHttpsEnabled $PrimaryHTTPSEnabled -Name $PrimaryName -Port $PrimaryPort -SecurePort $PrimarySecurePort"
+                    foreach($user in $PrimaryUsers){
+                        $user.PSObject.Properties.Remove('AccessKey')
+                        $user.PSObject.Properties.Remove('SecretKey')
+                    }
+                    $withoutRootUserList=$PrimaryUsers | Where-Object {$_.Name -ne "root"}
+                    $out=New-NcProtocolS3Services -Vserver $mySecondaryVserver -Controller $mySecondaryController -Comment $PrimaryComment -Enabled $False `
+                    -Buckets @{Name=$PrimaryBuckets[0].Name} -IsHttpEnabled $IsPrimaryHTTPEnabled `
+                    -IsHttpsEnabled $PrimaryHTTPSEnabled -Name $PrimaryName -Port $PrimaryPort -SecurePort $PrimarySecurePort -User $withoutRootUserList -ErrorVariable ErrorVar 
+                    if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: New-NcProtocolS3Services failed [$ErrorVar]" }
+                }
+                
             }
         }
     }
+    Write-LogDebug "[$myPrimaryVserver]: end"
+	return $Return
 }
 Catch {
     Error_Handling $_ $workOn -donotcleanlog4net
@@ -7111,6 +7396,8 @@ Try {
         }else{
             $SecondaryVserver = Get-NcVserver -Controller $mySecondaryController -Name $mySecondaryVserver  -ErrorVariable ErrorVar -ONTAPI
         }
+        # PSTK 9.16.1 now correctly returns allowed protocols per SVM but still not return root volume security style
+        #$SecondaryVserver = Get-NcVserver -Controller $mySecondaryController -Name $mySecondaryVserver  -ErrorVariable ErrorVar 
         if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcVserver failed for $mySecondaryVserver [$ErrorVar]" }
         if ( $null -eq $SecondaryVserver ) { $Return = $False ; Clean_Throw "ERROR: Get-NcVserver failed for $mySecondaryVserver [$ErrorVar]" }
 
@@ -7169,9 +7456,11 @@ Try {
                 #? Have to check why S3 protocol is excluded here?
                 #$ProtocolsWithoutS3=$PrimaryAllowedProtocols | Where-Object {$_ -ne "s3"}
                 #? Reintroduce S3 protocol at SVM level to see the impact and allow create_update_ontapS3 to works
+                #* Set allowed protocols is not supported with REST API
+                #* So in REST API call mode, we need to force dialogue in ONTAPI for Set-NcVserver and AllowedProtocols parameter
                 $ProtocolsWithoutS3=$PrimaryAllowedProtocols
-                Write-LogDebug "Set-NcVserver -AllowedProtocols $ProtocolsWithoutS3 -Name $mySecondaryVserver -Controller $mySecondaryController "
-                $out=Set-NcVserver -AllowedProtocols $ProtocolsWithoutS3 -Name $mySecondaryVserver -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                Write-LogDebug "Set-NcVserver -AllowedProtocols $ProtocolsWithoutS3 -Name $mySecondaryVserver -Controller $mySecondaryController -ONTAPI"
+                $out=Set-NcVserver -AllowedProtocols $ProtocolsWithoutS3 -Name $mySecondaryVserver -Controller $mySecondaryController -ONTAPI -ErrorVariable ErrorVar
                 if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcVserver failed [$ErrorVar]" }
                 # Write-LogDebug "set_vserver_protocols_with_rest -myVserver $mySecondaryVserver -allowedProtocols $PrimaryAllowedProtocols -myController $mySecondaryController"
                 # $out=set_vserver_protocols_with_rest -myVserver $mySecondaryVserver -allowedProtocols $PrimaryAllowedProtocols -myController $mySecondaryController
@@ -7180,7 +7469,7 @@ Try {
         }
 
         # Check and Update Vserver Parameters
-        if ( $SecondaryRootVolumeSecurityStyle -ne $SecondaryRootVolumeSecurityStyle ) {
+        if ( $PrimaryRootVolumeSecurityStyle -ne $SecondaryRootVolumeSecurityStyle ) {
             Write-LogWarn "Not same RootVolumeSecurityStyle: [$myPrimaryVserver] [$PrimaryRootVolumeSecurityStyle] vs [$mySecondaryVserver] [$SecondaryRootVolumeSecurityStyle]"
         }
         
@@ -15545,7 +15834,7 @@ Try {
                             if($created -ne $True){
                                 Clean_Throw "ERROR: Failed to Post new CIFS server Job Details with reason [$JobDetail]"
                             }else{
-                                if($JobDetail.state-ne "success"){
+                                if($JobDetail.state -ne "success"){
                                     Clean_Throw "ERROR : Failed Post new CIFS server with reason [$($JobDetail.message)] [$($JobDetail.Error)]"
                                 }else{
                                     Write-Log "[$workOn] Cifs server is joined"
@@ -18038,7 +18327,12 @@ Try {
             $filepath=$($Global:JsonPath+"Get-NcVserver.json")
             Clean_Throw "ERROR: failed to read $filepath"
         }
-        $mySecondaryVserver=$myPrimaryVserver
+        if($Global:RESTORE_ORIGINAL -eq $True){
+            Write-LogDebug "Restore to original so set secondary vserver to primary vserver and check its existence"
+            $mySecondaryVserver=$myPrimaryVserver
+        }else{
+            Write-LogDebug "Restore to alternate SVM envelope"
+        }
     }
     <# if($Backup -eq $True){
         $PrimaryVserver | ConvertTo-Json -Depth 7 | Out-File -FilePath $($Global:JsonPath+"Get-NcVserver.json") -Encoding ASCII -Width 65535
