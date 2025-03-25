@@ -551,9 +551,9 @@ Function create_config_file_cli ([string]$primaryCluster,[string]$secondaryClust
 
 	if ((Test-Path $Global:CONFFILE) -eq $True ) {
 		$read_conf = read_config_file $Global:CONFFILE
-		if ( $read_conf -eq $null ){
-        		Write-LogError "ERROR: read configuration file $Global:CONFFILE failed"
-        		clean_and_exit 1 ;
+		if ( $null -eq $read_conf ){
+            Write-LogError "ERROR: read configuration file $Global:CONFFILE failed"
+        	clean_and_exit 1 ;
 		}
         if(-not $primaryCluster){
 		    $primaryCluster=$read_conf.Get_Item("PRIMARY_CLUSTER")
@@ -602,7 +602,6 @@ Function RestRequest(
     [System.Object]$bodymethod
 )
 {
-    Write-Log "[$workOn] Invoke REST request"
     Write-LogDebug "[$workOn]: start"
     if($method -match "patch|post|delete"){
         $bodyjson=$bodymethod | ConvertTo-Json -Depth 100
@@ -625,8 +624,8 @@ Function RestRequest(
         Write-LogDebug "[$workOn]: end"
         return $False
     }
-    if($null -ne $ret -and $ret.count -gt 1){
-        if($ret.contains("job.Uuid")){
+    if($null -ne $ret -and $ret.count -ge 1){
+        if($ret.PSobject.Properties.name -contains "job"){
             $JobUuid=$ret.job.Uuid
             Write-LogDebug "Check $method job status [$JobUuid]"
             $StartTime=Get-Date
@@ -636,6 +635,7 @@ Function RestRequest(
                 $JobDetail=Get-RESTJob -Cred $myCred -url $("https://"+$Controller.Name+$ret.job._links.self.href)
                 if($JobDetail.state -eq "success"){
                     $JobDone=$True
+                    $Return=$True
                     break
                 }else{
                     $JobStatus=$JobDetail.state
@@ -643,6 +643,7 @@ Function RestRequest(
                     if($JobStatus -eq "failure"){
                         $JobCompletion=$JobDetail.message
                         Write-LogError "[$workOn] $method job status [$JobCompletion]"
+                        $Return=$False
                         break
                     }
                 }
@@ -655,12 +656,22 @@ Function RestRequest(
                 }
                 Start-Sleep 5
             }
+        }elseif($ret.num_records -gt 0){
+            Write-LogDebug "Records found [$($ret.records)]"
+            $Return=$ret.records
         }else{
-            Write-LogDebug "Invoke-RestMethod return [$ret]"
+            Write-LogDebug "no records found"
+            $Return=$null
         }
+    }elseif($ret.records.Length -eq 0){
+        Write-LogDebug "no records found"
+        $Return=$null
+    }else{
+        Write-LogDebug "unknow other case with [$($ret | out-string)]"
+        $Return=$ret
     }
     Write-LogDebug "[$workOn]: end"
-    return $True
+    return $Return
 }
 
 #############################################################################################
@@ -6374,9 +6385,11 @@ Function create_update_ontaps3(
 	[NetApp.Ontapi.Filer.C.NcController] $mySecondaryController,
 	[string] $myPrimaryVserver,
     [string] $mySecondaryVserver,
-    [string]$workOn=$mySecondaryVserver,
-    [bool]$Backup,
-    [bool]$Restore) {
+    [string] $workOn=$mySecondaryVserver,
+    [switch] $FromCreateVolume,
+    [string] $ForFlexgroup="",
+    [bool] $Backup,
+    [bool] $Restore) {
 
 Try {
     $Return = $True
@@ -6389,11 +6402,11 @@ Try {
         Write-LogDebug "Get-NcProtocolS3Services -Vserver $myPrimaryVserver -Controller $myPrimaryController"
         $PrimaryOntaps3Services = Get-NcProtocolS3Services -Vserver $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcProtocolS3Services failed [$ErrorVar]" }
-        Write-LogDebug "Get-NcProtocolS3Bucket -Vserver $myPrimaryVserver -Controller $myPrimaryController -Name $($PrimaryOntaps3Services.Buckets.Name)"
-        $PrimaryOntaps3Bucket = Get-NcProtocolS3Bucket -Vserver $myPrimaryVserver -Controller $myPrimaryController -Name $PrimaryOntaps3Services.Buckets.Name -ErrorVariable ErrorVar
+        Write-LogDebug "Get-NcProtocolS3Bucket -Vserver $myPrimaryVserver -Controller $myPrimaryController"
+        $PrimaryOntaps3Bucket = Get-NcProtocolS3Bucket -Vserver $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcProtocolS3Bucket failed [$ErrorVar]" }
-        Write-LogDebug "Get-NcProtocolS3ServicesBucket -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Name $($PrimaryOntaps3Services.Buckets.Name)"
-        $PrimaryOntaps3ServicesBucket = Get-NcProtocolS3ServicesBucket -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Name $PrimaryOntaps3Services.Buckets.Name -ErrorVariable ErrorVar
+        Write-LogDebug "Get-NcProtocolS3ServicesBucket -VserverContext $myPrimaryVserver -Controller $myPrimaryController"
+        $PrimaryOntaps3ServicesBucket = Get-NcProtocolS3ServicesBucket -VserverContext $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
         if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcProtocolS3ServicesBucket failed [$ErrorVar]" }
         Write-LogDebug "Get-NcProtocolS3ServicesGroups -SvmName $myPrimaryVserver -Controller $myPrimaryController"
         $PrimaryOntaps3ServicesGroups = Get-NcProtocolS3ServicesGroups -SvmName $myPrimaryVserver -Controller $myPrimaryController  -ErrorVariable ErrorVar
@@ -6531,26 +6544,31 @@ Try {
                 $SecondaryBuckets=$SecondaryOntaps3Services.Buckets #>
             }else{
                 Write-Log "[$workOn] Ontap S3 Service not found. Create it"
-                Write-LogDebug "Get-NcProtocolS3Bucket -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $($PrimaryBuckets[0].Name)"
-                $SecondaryBucket=Get-NcProtocolS3Bucket -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $PrimaryBuckets[0].Name -ErrorVariable ErrorVar
-                if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcProtocolS3Bucket failed [$ErrorVar]" }
-                if($null -ne $SecondaryBucket){
-                    Write-Log "[$mySecondaryVserver] Ontap S3 Bucket [$($PrimaryBuckets[0].Name)] already exists"
-                    <# $SecondaryBucketName=$SecondaryBucket.Name
-                    $SecondaryBucketSize=$SecondaryBucket.Size
-                    $SecondaryBucketType=$SecondaryBucket.Type
-                    $SecondaryBucketVersioningState=$SecondaryBucket.VersioningState #>
-                }else{
-                    Write-LogDebug "New-NcProtocolS3Bucket -Name $($PrimaryBuckets[0].Name) -Vserver $mySecondaryVserver -Controller $mySecondaryController -Size $($PrimaryBuckets[0].Size) -Type $($PrimaryBuckets[0].Type) -VersioningState $($PrimaryBuckets[0].VersioningState)"
-                    $SecondaryBucket=New-NcProtocolS3Bucket `
-                    -Name $PrimaryBuckets[0].Name `
-                    -Vserver $mySecondaryVserver `
-                    -Controller $mySecondaryController `
-                    -Size $PrimaryBuckets[0].Size `
-                    -Type $PrimaryBuckets[0].Type `
-                    -VersioningState $PrimaryBuckets[0].VersioningState `
-                    -ErrorVariable ErrorVar
-                    if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: New-NcProtocolS3Bucket failed [$ErrorVar]" }
+                foreach($bucket in $PrimaryBuckets){
+                    Write-LogDebug "Get-NcProtocolS3Bucket -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $($bucket.Name)"
+                    $SecondaryBucket=Get-NcProtocolS3Bucket -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $bucket.Name -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcProtocolS3Bucket failed [$ErrorVar]" }
+                    if($null -ne $SecondaryBucket){
+                        Write-Log "[$mySecondaryVserver] Ontap S3 Bucket [$($bucket.Name)] already exists"
+                        <# $SecondaryBucketName=$SecondaryBucket.Name
+                        $SecondaryBucketSize=$SecondaryBucket.Size
+                        $SecondaryBucketType=$SecondaryBucket.Type
+                        $SecondaryBucketVersioningState=$SecondaryBucket.VersioningState #>
+                    }else{
+                        if($FromCreateVolume -eq $False){
+                            Write-Log "[$mySecondaryVserver] Create bucket [$($bucket.Name)]"
+                            Write-LogDebug "New-NcProtocolS3Bucket -Name $($bucket.Name) -Vserver $mySecondaryVserver -Controller $mySecondaryController -Size $($bucket.Size) -Type $($bucket.Type) -VersioningState $($bucket.VersioningState)"
+                            $SecondaryBucket=New-NcProtocolS3Bucket `
+                            -Name $bucket.Name `
+                            -Vserver $mySecondaryVserver `
+                            -Controller $mySecondaryController `
+                            -Size $bucket.Size `
+                            -Type $bucket.Type `
+                            -VersioningState $bucket.VersioningState `
+                            -ErrorVariable ErrorVar
+                            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: New-NcProtocolS3Bucket failed [$ErrorVar]" }
+                        }
+                    }
                 }
                 if($null -ne ($PrimaryOntaps3ServicesUsers | Where-Object {$_.Name -ne "root"})){
                     Write-Log "[$mySecondaryVserver] Check S3 Users existence on secondary"
@@ -6704,7 +6722,7 @@ Try {
                 }
                 
                 if($IsPrimaryHTTPSenabled -eq $True){   
-                  Write-Log "[$mySecondaryVserver] Check certificate existence on secondary"
+                    Write-Log "[$mySecondaryVserver] Check certificate existence on secondary"
                     Write-LogDebug "Get-NcSecurityCertificate -Controller $myPrimaryController -Vserver $myPrimaryVserver -CommonName $PrimaryCertificateName"
                     $PrimaryCertificate=Get-NcSecurityCertificate -Controller $myPrimaryController -Vserver $myPrimaryVserver -CommonName $PrimaryCertificateName -ErrorVariable ErrorVar
                     if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcSecurityCertificate failed [$ErrorVar]" }
@@ -6725,36 +6743,257 @@ Try {
                         if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: New-NcSecurityCertificate failed [$ErrorVar]" }
                     }
                     Write-Log "[$mySecondaryVserver] Create S3 Service with HTTPS enabled"
-                    Write-LogDebug "New-NcProtocolS3Services -Vserver $mySecondaryVserver -Controller $mySecondaryController -Comment $PrimaryComment -Enabled $False `
-                    -Buckets @{Name=$($PrimaryBuckets[0].Name)} -CertificateName $PrimaryCertificateName -IsHttpEnabled $IsPrimaryHTTPEnabled `
-                    -IsHttpsEnabled $IsPrimaryHTTPSenabled -Name $PrimaryName -Port $PrimaryPort -SecurePort $PrimarySecurePort -User $PrimaryUsers"
+                    <# $userList=@()
                     foreach($user in $PrimaryUsers){
-                        $user.PSObject.Properties.Remove('AccessKey')
-                        $user.PSObject.Properties.Remove('SecretKey')
+                        # $user.PSObject.Properties.Remove('AccessKey')
+                        # $user.PSObject.Properties.Remove('SecretKey')
+                        $userList+=@{"name"=$user.Name}
+                    } #>
+                    $bucketNameList=@()
+                    foreach($bucket in $PrimaryBuckets){
+                        $bucketDetail=New-Object -TypeName DataONTAP.C.Types.S3.Bucket
+                        $bucketDetail.Name=$bucket.Name
+                        $bucketNameList+=$bucketDetail
                     }
-                    $withoutRootUserList=$PrimaryUsers | Where-Object {$_.Name -ne "root"}
+                    # $withoutRootUserList=$userList | Where-Object {$_.Name -ne "root"}
+                    Write-LogDebug "New-NcProtocolS3Services -Vserver $mySecondaryVserver -Controller $mySecondaryController -Comment $PrimaryComment -Enabled $False `
+                    -Buckets $bucketNameList -CertificateName $PrimaryCertificateName -IsHttpEnabled $IsPrimaryHTTPEnabled `
+                    -IsHttpsEnabled $IsPrimaryHTTPSenabled -Name $PrimaryName -Port $PrimaryPort -SecurePort $PrimarySecurePort"
                     $out=New-NcProtocolS3Services -Vserver $mySecondaryVserver -Controller $mySecondaryController -Comment $PrimaryComment -Enabled $False `
-                    -Buckets @{Name=$PrimaryBuckets[0].Name} -CertificateName $PrimaryCertificateName -IsHttpEnabled $IsPrimaryHTTPEnabled `
-                    -IsHttpsEnabled $IsPrimaryHTTPSEnabled -Name $PrimaryName -Port $PrimaryPort -SecurePort $PrimarySecurePort -User $withoutRootUserList -ErrorVariable ErrorVar 
+                    -Buckets $bucketNameList -CertificateName $PrimaryCertificateName -IsHttpEnabled $IsPrimaryHTTPEnabled `
+                    -IsHttpsEnabled $IsPrimaryHTTPSEnabled -Name $PrimaryName -Port $PrimaryPort -SecurePort $PrimarySecurePort -ErrorVariable ErrorVar 
                     if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: New-NcProtocolS3Services failed [$ErrorVar]" }
                 }else{
                     Write-Log "[$mySecondaryVserver] Create S3 Service with HTTPS disabled"
-                    Write-LogDebug "New-NcProtocolS3Services -Vserver $mySecondaryVserver -Controller $mySecondaryController -Comment $PrimaryComment -Enabled $False `
-                    -Buckets @{Name=$($PrimaryBuckets[0].Name)} -IsHttpEnabled $IsPrimaryHTTPEnabled -User $PrimaryUsers `
-                    -IsHttpsEnabled $PrimaryHTTPSEnabled -Name $PrimaryName -Port $PrimaryPort -SecurePort $PrimarySecurePort"
+                    
+                    <# $userList=@()
                     foreach($user in $PrimaryUsers){
-                        $user.PSObject.Properties.Remove('AccessKey')
-                        $user.PSObject.Properties.Remove('SecretKey')
+                        # $user.PSObject.Properties.Remove('AccessKey')
+                        # $user.PSObject.Properties.Remove('SecretKey')
+                        $userList+=@{"name"=$user.Name}
+                    } #>
+                    $bucketNameList=@()
+                    foreach($bucket in $PrimaryBuckets){
+                        $bucketDetail=New-Object -TypeName DataONTAP.C.Types.S3.Bucket
+                        $bucketDetail.Name=$bucket.Name
+                        $bucketNameList+=$bucketDetail
                     }
-                    $withoutRootUserList=$PrimaryUsers | Where-Object {$_.Name -ne "root"}
+                    #$withoutRootUserList=$userList | Where-Object {$_.Name -ne "root"}
+                    Write-LogDebug "New-NcProtocolS3Services -Vserver $mySecondaryVserver -Controller $mySecondaryController -Comment $PrimaryComment -Enabled $False `
+                    -Buckets $bucketNameList -IsHttpEnabled $IsPrimaryHTTPEnabled `
+                    -IsHttpsEnabled $IsPrimaryHTTPSEnabled -Name $PrimaryName -Port $PrimaryPort -SecurePort $PrimarySecurePort"
                     $out=New-NcProtocolS3Services -Vserver $mySecondaryVserver -Controller $mySecondaryController -Comment $PrimaryComment -Enabled $False `
-                    -Buckets @{Name=$PrimaryBuckets[0].Name} -IsHttpEnabled $IsPrimaryHTTPEnabled `
-                    -IsHttpsEnabled $PrimaryHTTPSEnabled -Name $PrimaryName -Port $PrimaryPort -SecurePort $PrimarySecurePort -User $withoutRootUserList -ErrorVariable ErrorVar 
+                    -Buckets $bucketNameList -IsHttpEnabled $IsPrimaryHTTPEnabled `
+                    -IsHttpsEnabled $IsPrimaryHTTPSEnabled -Name $PrimaryName -Port $PrimaryPort -SecurePort $PrimarySecurePort -ErrorVariable ErrorVar 
                     if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: New-NcProtocolS3Services failed [$ErrorVar]" }
                 }
                 
             }
         }
+    }
+    if($FromCreateVolume -eq $True){
+        Write-LogDebug "Need to create destination bucket through a snapmirror protect job"
+        Write-LogDebug "So first need to create a snapmirror object-store config"
+        
+        ###########################################################################################################################################
+
+        Write-LogDebug "Regenerate user root access_key on secondary"
+        Write-LogDebug "Set-NcProtocolS3ServicesUsers -Name root -Controller $mySecondaryController -vserverContext $mySecondaryVserver -RegenerateKeys"
+        $SecondaryRootUser=Set-NcProtocolS3ServicesUsers -Name root -Controller $mySecondaryController -vserverContext $mySecondaryVserver -RegenerateKeys -ErrorVariable ErrorVar
+        if($null -eq $SecondaryRootUser){
+            Write-LogError "ERROR: fail to regenerate root user access_key & secret_key"
+            $Return=$False
+        }
+        Write-Log "[$mySecondaryVserver] user root access_key[$($SecondaryRootUser.AccessKey)] secret_key[$($SecondaryRootUser.SecretKey)]"
+
+        Write-LogDebug "Create snapmirror object-store config for source->DR direction"
+        $bodySnapmirrorObjectStoreConfig=@{
+            "access_key"=$SecondaryRootUser.AccessKey
+            "secret_password"=$SecondaryRootUser.SecretKey
+            "authentication_type"="key"
+            "provider_type"="ONTAP_S3"
+            "owner"="s3_snapmirror"
+            "snapmirror_use"="data"
+            "svm"=@{"name"=$myPrimaryVserver}
+            "url_style"="path_style"
+            "container"="*"
+            "certificate_validation_enabled"="false"
+        }
+        if($IsPrimaryHTTPSEnabled -eq $True){
+            $bodySnapmirrorObjectStoreConfig+=@{
+                "ssl_enabled"="true"
+                "port"=$PrimarySecurePort
+            }
+        }else{
+            $bodySnapmirrorObjectStoreConfig+=@{
+                "ssl_enabled"="false"
+                "port"=$PrimaryPort
+            }
+        }
+        $PrimaryVserverUuid=Get-NcVserver -Name $myPrimaryVserver -Controller $myPrimaryController -ErrorVariable ErrorVar
+        $PrimaryVserverUuid=$PrimaryVserverUuid.Uuid
+        $SecondaryVserverUuid=Get-NcVserver -Name $mySecondaryVserver -Controller $mySecondaryController -ErrorVariable ErrorVar
+        $SecondaryVserverUuid=$SecondaryVserverUuid.Uuid
+        $SnapmirrorObjectStoreConfigName=$("vserver:"+$SecondaryVserverUuid+":"+$PrimaryVserverUuid)
+        Write-LogDebug "Check if snapmirror object-store config already exists on secondary"
+        $uri=$("https://"+$mySecondaryController.Name+"/api/cloud/targets?name="+$SnapmirrorObjectStoreConfigName)
+        Write-LogDebug "RestRequest -Controller $mySecondaryController -method get -uri $uri -workOn $mySecondaryVserver"
+        $ret=RestRequest -Controller $mySecondaryController -method "get" -uri $uri -workOn $mySecondaryVserver -ErrorVariable ErrorVar
+        if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: RestRequest failed [$ErrorVar]" }
+        if($null -ne $ret){
+            Write-Log "[$mySecondaryVserver] Snapmirror Object-Store Config [$SnapmirrorObjectStoreConfigName] already exists"
+        }else{
+            $bodySnapmirrorObjectStoreConfig+=@{"name"=$SnapmirrorObjectStoreConfigName}
+            Write-LogDebug "Get-NcNetInterface -Vserver $mySecondaryVserver"
+            $S3lif=Get-NcNetInterface -Vserver $mySecondaryVserver | Where-Object {$_.ServiceNames.Contains("data_s3_server")}
+            $S3ServerIP=$S3lif[0].Address
+            $bodySnapmirrorObjectStoreConfig+=@{"server"=$S3ServerIP}
+            Write-LogDebug "Create Snapmirror Objec-Store Config with body [$($bodySnapmirrorObjectStoreConfig | Out-String)]"
+            $uri=$("https://"+$mySecondaryController.Name+"/api/cloud/targets?return_records=true")
+            Write-LogDebug "RestRequest -Controller $mySecondaryController -method post -uri $uri -bodymethod $bodySnapmirrorObjectStoreConfig -workOn $mySecondaryVserver"
+            $ret=RestRequest -Controller $mySecondaryController -method "post" -uri $uri -bodymethod $bodySnapmirrorObjectStoreConfig -workOn $mySecondaryVserver -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: RestRequest failed [$ErrorVar]" }
+            Write-Log "[$mySecondaryVserver] Snapmirror Object-Store Config [$SnapmirrorObjectStoreConfigName] created"
+        }
+
+        ###########################################################################################################################################
+
+        Write-LogDebug "Regenerate user root access_key on primary"
+        Write-LogDebug "Set-NcProtocolS3ServicesUsers -Name root -Controller $myPrimaryController -vserverContext $myPrimaryVserver -RegenerateKeys"
+        $PrimaryRootUser=Set-NcProtocolS3ServicesUsers -Name root -Controller $myPrimaryController -vserverContext $myPrimaryVserver -RegenerateKeys -ErrorVariable ErrorVar
+        if($null -eq $PrimaryRootUser){
+            Write-LogError "ERROR: fail to regenerate root user access_key & secret_key"
+            $Return=$False
+        }
+        Write-Log "[$myPrimaryVserver] user root access_key[$($PrimaryRootUser.AccessKey)] secret_key[$($PrimaryRootUser.SecretKey)]"
+
+        Write-LogDebug "Create snapmirror object-store config for DR->source direction"
+        $bodySnapmirrorObjectStoreConfig=@{
+            "access_key"=$PrimaryRootUser.AccessKey
+            "secret_password"=$PrimaryRootUser.SecretKey
+            "authentication_type"="key"
+            "provider_type"="ONTAP_S3"
+            "owner"="s3_snapmirror"
+            "snapmirror_use"="data"
+            "svm"=@{"name"=$mySecondaryVserver}
+            "url_style"="path_style"
+            "container"="*"
+            "certificate_validation_enabled"="false"
+        }
+        if($IsPrimaryHTTPSEnabled -eq $True){
+            $bodySnapmirrorObjectStoreConfig+=@{
+                "ssl_enabled"="true"
+                "port"=$PrimarySecurePort
+            }
+        }else{
+            $bodySnapmirrorObjectStoreConfig+=@{
+                "ssl_enabled"="false"
+                "port"=$PrimaryPort
+            }
+        }
+        $SnapmirrorObjectStoreConfigName=$("vserver:"+$PrimaryVserverUuid+":"+$SecondaryVserverUuid)
+        Write-LogDebug "Check if snapmirror object-store config already exists on primary"
+        $uri=$("https://"+$myPrimaryController.Name+"/api/cloud/targets?name="+$SnapmirrorObjectStoreConfigName)
+        Write-LogDebug "RestRequest -Controller $myPrimaryController -method get -uri $uri -workOn $myPrimaryVserver"
+        $ret=RestRequest -Controller $myPrimaryController -method "get" -uri $uri -workOn $myPrimaryVserver -ErrorVariable ErrorVar
+        if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: RestRequest failed [$ErrorVar]" }
+        if($null -ne $ret){
+            Write-Log "[$myPrimaryVserver] Snapmirror Object-Store Config [$SnapmirrorObjectStoreConfigName] already exists"
+        }else{
+            $bodySnapmirrorObjectStoreConfig+=@{"name"=$SnapmirrorObjectStoreConfigName}
+            Write-LogDebug "Get-NcNetInterface -Vserver $myPrimaryVserver"
+            $S3lif=Get-NcNetInterface -Vserver $myPrimaryVserver | Where-Object {$_.ServiceNames.Contains("data_s3_server")}
+            $S3ServerIP=$S3lif[0].Address
+            $bodySnapmirrorObjectStoreConfig+=@{"server"=$S3ServerIP}
+            Write-LogDebug "Create Snapmirror Objec-Store Config with body [$($bodySnapmirrorObjectStoreConfig | Out-String)]"
+            $uri=$("https://"+$myPrimaryController.Name+"/api/cloud/targets?return_records=true")
+            Write-LogDebug "RestRequest -Controller $myPrimaryController -method post -uri $uri -bodymethod $bodySnapmirrorObjectStoreConfig -workOn $myPrimaryVserver"
+            $ret=RestRequest -Controller $myPrimaryController -method "post" -uri $uri -bodymethod $bodySnapmirrorObjectStoreConfig -workOn $myPrimaryVserver -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: RestRequest failed [$ErrorVar]" }
+            Write-Log "[$myPrimaryVserver] Snapmirror Object-Store Config [$SnapmirrorObjectStoreConfigName] created"
+        }
+        
+        ###########################################################################################################################################
+
+        Write-LogDebug "Set data S3 lif up on secondary"
+        $S3lif=Get-NcNetInterface -Vserver $mySecondaryVserver | Where-Object {$_.ServiceNames.Contains("data_s3_server")}
+        $S3lifName=$S3lif.InterfaceName
+        if($S3lif.AdministrativeStatus -eq "up"){
+            Write-Log "[$mySecondaryVserver] lif [$S3lifName] already up"
+        }else{
+            Write-LogDebug "Set-NcNetInterface -Vserver $mySecondaryVserver -Name $S3lifName -AdministrativeStatus up -Controller $mySecondaryController"
+            $ret=Set-NcNetInterface -Vserver $mySecondaryVserver -Name $S3lifName -AdministrativeStatus up -Controller $mySecondaryController -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: fail to set lif [$S3lifName] up [$ErrorVar]" }
+            Write-Log "[$mySecondaryVserver] lif [$S3lifName] set to up"
+        }
+
+        ###########################################################################################################################################
+
+        $clusterSourceName=(Get-NcCluster -Controller $myPrimaryController).ClusterName
+        $clusterDestinationName=(Get-NcCluster -Controller $mySecondaryController).ClusterName
+
+        Write-Log "[$mySecondaryVserver] set ONTAP S3 service enable"
+        Write-LogDebug "Set-NcProtocolS3Services -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $PrimaryName -Enabled $True"
+        $ret=Set-NcProtocolS3Services -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $PrimaryName -Enabled $True -ErrorVariable ErrorVar
+        if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcProtocolS3Services failed [$ErrorVar]" }
+
+        foreach($bucket in $PrimaryBuckets){
+            Write-LogDebug "Get-NcProtocolS3ServicesBucket -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Name $($bucket.Name)"
+            $bucketDetails=Get-NcProtocolS3ServicesBucket -VserverContext $myPrimaryVserver -Controller $myPrimaryController -Name $bucket.Name -ErrorVariable ErrorVar
+            if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcProtocolS3ServicesBucket failed [$ErrorVar]" }
+            $bucketVolumeName=$bucketDetails.VolumeName
+            if($bucketVolumeName -eq $ForFlexgroup){
+                Write-LogDebug "Get-NcSnapmirror -Controller $mySecondaryController -SourceLocation $($myPrimaryVserver+":/bucket/"+$($bucket.Name))"
+                $existingSnapmirrorRelationship=Get-NcSnapmirror -Controller $mySecondaryController -SourceLocation $($myPrimaryVserver+":/bucket/"+$($bucket.Name)) -ErrorVariable ErrorVar
+                if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcSnapmirror failed [$ErrorVar]" }
+                if ($null -ne $existingSnapmirrorRelationship){
+                    Write-Log "[$mySecondaryVserver] bucket [$($bucket.Name)] already protected. Skip it"
+                    continue
+                }else{
+                    Write-LogDebug "[$mySecondaryVserver] Protect Flexgroup [$bucketVolumeName]"
+                    $bodySnapmirrorProtect=@{
+                        "create_destination"=@{
+                            "enabled"="true"
+                            "size"=$bucket.Size
+                        }
+                        "destination"=@{
+                            "cluster"=@{
+                                "name"=$clusterDestinationName
+                            }
+                            "path"="$($mySecondaryVserver):/bucket/$($bucket.Name)"
+                        }
+                        "policy"=@{
+                            "name"="Continuous"
+                        }
+                        "source"=@{
+                            "cluster"=@{
+                                "name"=$clusterSourceName
+                            }
+                            "path"="$($myPrimaryVserver):/bucket/$($bucket.Name)"
+                        }
+                        "state"="snapmirrored"
+                    }
+                    $uri=$("https://"+$mySecondaryController.Name+"/api/snapmirror/relationships?return_records=true")
+                    Write-LogDebug "RestRequest -Controller $mySecondaryController -method post -uri $uri -bodymethod $bodySnapmirrorProtect -workOn $mySecondaryVserver"
+                    $ret=RestRequest -Controller $mySecondaryController -method "post" -uri $uri -bodymethod $bodySnapmirrorProtect -workOn $mySecondaryVserver -ErrorVariable ErrorVar
+                    if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: RestRequest failed [$ErrorVar]" }
+                    if($ret=$False){$Return=$False}
+                    else{
+                        Write-LogDebug "Get-NcProtocolS3ServicesBucket -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Name $($bucket.Name)"
+                        $bucketSecondaryDetails=Get-NcProtocolS3ServicesBucket -VserverContext $mySecondaryVserver -Controller $mySecondaryController -Name $bucket.Name -ErrorVariable ErrorVar
+                        if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcProtocolS3ServicesBucket failed [$ErrorVar]" }
+                        $bucketSecondaryVolumeName=$bucketSecondaryDetails.VolumeName
+                        Write-Log "[$mySecondaryVserver] bucket [$($bucket.Name)] with source volume [$bucketVolumeName] protected by S3 snapmirror on destination volume [$bucketSecondaryVolumeName]"
+                    }
+                }
+            }else{
+                Write-LogDebug "currently ignoring bucket [$($bucket.Name)]"
+            }
+        }
+        Write-Log "[$mySecondaryVserver] set ONTAP S3 service disable"
+        Write-LogDebug "Set-NcProtocolS3Services -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $PrimaryName -Enabled $False"
+        $ret=Set-NcProtocolS3Services -Vserver $mySecondaryVserver -Controller $mySecondaryController -Name $PrimaryName -Enabled $False -ErrorVariable ErrorVar
+        if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Set-NcProtocolS3Services failed [$ErrorVar]" }
     }
     Write-LogDebug "[$myPrimaryVserver]: end"
 	return $Return
@@ -8558,7 +8797,7 @@ Catch {
 # create_volume_voldr
 # 
 # creates volume on DR SVM
-# creates Felxvol & Flexgroup
+# creates Flexvol & Flexgroup
 Function create_volume_voldr(
 	[NetApp.Ontapi.Filer.C.NcController] $myPrimaryController,
 	[NetApp.Ontapi.Filer.C.NcController] $mySecondaryController,
@@ -9637,170 +9876,181 @@ Try {
                 # # Write-LogDebug "Get-NcVol -VserverContext $PrimaryVserver -Query `@`{VolumeIdAttributes=`@`{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended=`"flexgroup`"`}`} -Controller $myPrimaryController"
                 # # $PrimaryFlexgroupMaster= Get-NcVol -ONTAPI  -VserverContext $PrimaryVserver -Query @{VolumeIdAttributes=@{FlexgroupUuid=$PrimaryFlexgroupUuid;StyleExtended="flexgroup"}} -Controller $myPrimaryController -ErrorVariable ErrorVar
                 # # if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Failed to get flexgroup master informations [$PrimaryVolName] [$ErrorVar]" }
-                Write-LogDebug "Work in normal mode with flexgroup, so add __dst at the end of volume name"
-                $SecondaryFlexgroupMasterName=$($PrimaryVolName+'__dst')
-                if($SecondaryFlexgroupMasterName -match "__dst__dst$"){
-                    Write-LogDebug $("Work in mode ["+$Global:Run_Mode+"] with secondary name [$SecondaryFlexgroupMasterName] so replace it with ["+$($SecondaryFlexgroupMasterName -Replace "__dst__dst","")+"]")
-                    $SecondaryFlexgroupMasterName=$SecondaryFlexgroupMasterName -Replace "__dst__dst",""
-                }
-                Write-LogDebug "Secondary Name [$SecondaryFlexgroupMasterName]"
-                $PrimaryFlexgroupMasterName=$PrimaryVolName
-                $PrimaryFlexgroupMasterState=$PrimaryVolState
-                $PrimaryFlexgroupMasterType=$PrimaryVolType
+                if($PrimaryVol.is_object_store -eq $True){
+                    Write-LogDebug "flexgroup [$PrimaryVolName] is a bucket, so ignore it in the normal process of create a DP destination volume"
+                    Write-LogDebug "Need to protect a bucket through S3 snapmirror"
+                    Write-Log "[$workOn] flexgroup [$PrimaryVolName] is a S3 bucket"
+                    if($Global:PreserveIdentity -eq $True){
+                        Write-LogError "ERROR: Currently create a DR with ONTAP S3 cannot be performed in Preserve Identity mode"
+                        clean_and_exit 1
+                    }
+                    if ( ( $ret=create_update_ontaps3 -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore -FromCreateVolume -ForFlexgroup $PrimaryVolName) -ne $True ) { Write-LogError "ERROR: create_update_ontaps3" ; $Return = $False }
+                }else{
+                    Write-LogDebug "Work in normal mode with flexgroup, so add __dst at the end of volume name"
+                    $SecondaryFlexgroupMasterName=$($PrimaryVolName+'__dst')
+                    if($SecondaryFlexgroupMasterName -match "__dst__dst$"){
+                        Write-LogDebug $("Work in mode ["+$Global:Run_Mode+"] with secondary name [$SecondaryFlexgroupMasterName] so replace it with ["+$($SecondaryFlexgroupMasterName -Replace "__dst__dst","")+"]")
+                        $SecondaryFlexgroupMasterName=$SecondaryFlexgroupMasterName -Replace "__dst__dst",""
+                    }
+                    Write-LogDebug "Secondary Name [$SecondaryFlexgroupMasterName]"
+                    $PrimaryFlexgroupMasterName=$PrimaryVolName
+                    $PrimaryFlexgroupMasterState=$PrimaryVolState
+                    $PrimaryFlexgroupMasterType=$PrimaryVolType
 
-                if( $Global:SelectVolume -eq $True -and $Global:NonInteractive -eq $False )
-                {
-                    # if we run with SelectVolume option in Interactive mode, we must confirm if this volume must be included on Secondary SVM or not
-                    $volsizeGB=[math]::round($PrimaryVolSize/1024/1024,2)
-                    $ANS=Read-HostOptions -question "[$workOn] Does volume [$PrimaryFlexgroupMasterName  $($volsizeGB) GB  $PrimaryVolJunctionPath] need to be replicated on destination ?" -options "y/n"
+                    if( $Global:SelectVolume -eq $True -and $Global:NonInteractive -eq $False )
+                    {
+                        # if we run with SelectVolume option in Interactive mode, we must confirm if this volume must be included on Secondary SVM or not
+                        $volsizeGB=[math]::round($PrimaryVolSize/1024/1024,2)
+                        $ANS=Read-HostOptions -question "[$workOn] Does volume [$PrimaryFlexgroupMasterName  $($volsizeGB) GB  $PrimaryVolJunctionPath] need to be replicated on destination ?" -options "y/n"
 
-                    if ( $ANS -eq 'n' ) {
-                        Write-LogDebug "SelectVolume volume [$PrimaryFlexgroupMasterName] excluded"
-                        if($PreviousSelectVolumes.where({$_ -match $PrimaryFlexgroupMasterName},'First').Count -as [bool]){
-                            Write-Log "[$workOn] [$PrimaryFlexgroupMasterName] was previously selected for replication"
-                            $ANS=Read-HostOptions -question "[$mySecondaryVserver] Do you want to remove destination volume [$SecondaryFlexgroupMasterName] and associated Snapmirror Relationship ?" -options "y/n"
-                            if($ANS -eq 'y'){
-                                if((delete_snapmirror_relationship -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -PrimaryVolumeName $PrimaryFlexgroupMasterName -IsFlexgroup $True) -ne $True){Write-LogError "ERROR: delete_snapmirror_relationship failed";return $false}
-                                if((umount_volume $mySecondaryController $mySecondaryVserver $SecondaryFlexgroupMasterName) -ne $True){Write-LogError "ERROR: umount_volume failed";return $false}
-                                if((remove_volume $mySecondaryController $mySecondaryVserver $SecondaryFlexgroupMasterName ) -ne $True){Write-LogError "ERROR: remove_volume failed";return $false}  
+                        if ( $ANS -eq 'n' ) {
+                            Write-LogDebug "SelectVolume volume [$PrimaryFlexgroupMasterName] excluded"
+                            if($PreviousSelectVolumes.where({$_ -match $PrimaryFlexgroupMasterName},'First').Count -as [bool]){
+                                Write-Log "[$workOn] [$PrimaryFlexgroupMasterName] was previously selected for replication"
+                                $ANS=Read-HostOptions -question "[$mySecondaryVserver] Do you want to remove destination volume [$SecondaryFlexgroupMasterName] and associated Snapmirror Relationship ?" -options "y/n"
+                                if($ANS -eq 'y'){
+                                    if((delete_snapmirror_relationship -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -PrimaryVolumeName $PrimaryFlexgroupMasterName -IsFlexgroup $True) -ne $True){Write-LogError "ERROR: delete_snapmirror_relationship failed";return $false}
+                                    if((umount_volume $mySecondaryController $mySecondaryVserver $SecondaryFlexgroupMasterName) -ne $True){Write-LogError "ERROR: umount_volume failed";return $false}
+                                    if((remove_volume $mySecondaryController $mySecondaryVserver $SecondaryFlexgroupMasterName ) -ne $True){Write-LogError "ERROR: remove_volume failed";return $false}  
+                                }
                             }
+                            continue 
                         }
-                        continue 
+                        if ( $ANS -eq 'y' ){
+                            Write-LogDebug "SelectVolume volume [$SecondaryFlexgroupMasterName] included" 
+                            Save_Volume_To_Selectvolumedb -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -SourceVserver $myPrimaryVserver -DestinationVserver $mySecondaryVserver -PrimaryVolumeName $PrimaryFlexgroupMasterName -SecondaryVolumeName $SecondaryFlexgroupMasterName  
+                        }
                     }
-                    if ( $ANS -eq 'y' ){
-                        Write-LogDebug "SelectVolume volume [$SecondaryFlexgroupMasterName] included" 
-                        Save_Volume_To_Selectvolumedb -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -SourceVserver $myPrimaryVserver -DestinationVserver $mySecondaryVserver -PrimaryVolumeName $PrimaryFlexgroupMasterName -SecondaryVolumeName $SecondaryFlexgroupMasterName  
-                    }
-                }
 
-                if ( ( $PrimaryFlexgroupMasterState -eq "online" ) -and ( $PrimaryFlexgroupMasterType -eq "rw" ) ) {
-                    # check this volume Name on secondary SVM
-                    Write-LogDebug "Check if [$SecondaryFlexgroupMasterName] volume exists on destination"
-                    Write-LogDebug "Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $SecondaryFlexgroupMasterName"
-                    $SecondaryFlexgroup = Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $SecondaryFlexgroupMasterName  -ErrorVariable ErrorVar 
-                    if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcVol failed [$ErrorVar]" }
-                    if ( $null -eq $SecondaryFlexgroup ) {
-                        # Create this Flexgroup if it does not exist on secondary
-                        Write-Log "[$workOn] Create Flexgroup [$SecondaryFlexgroupMasterName] on [$mySecondaryVserver]"
-                        if($Global:XDPPolicy -eq ""){$Policy="MirrorAllSnapshots"}
-                        elseif($Global:XDPPolicy -match "Sync|StrictSync"){
-                            Write-LogWarn "SM-S is not yet compatible with Flexgroup, switch to async MirrorAllSnapshots policy for this volume"
-                            $Policy="MirrorAllSnapshots"
-                        }else{$Policy=$Global:XDPPolicy}
-                        if( ( $Global:MirrorSchedule -eq "none" ) -or ( $Global:MirrorSchedule.Length -eq 0 ) ){
-                            $Schedule="hourly"
-                        }else{
-                            $Schedule=$Global:MirrorSchedule
-                        }
-                        Write-LogDebug "Schedule [$Schedule]"
-                        $ProtectFlexgroupDone=$False
-                        $PathList=$($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName)
-                        if($Global:PSTKCall -ne "Rest"){
-                            Write-LogDebug "Enable-NcSnapmirrorProtect -Policy $Policy -PathList $PathList -Schedule $Schedule -DestinationVserver $mySecondaryVserver -AutoInitialize $False -Controller $mySecondaryController"
-                            $ProtectJob=Enable-NcSnapmirrorProtect -Policy $Policy -PathList $PathList -Schedule $Schedule -DestinationVserver $mySecondaryVserver -AutoInitialize $False -Controller $mySecondaryController -ErrorVariable ErrorVar
-                            if ( $? -ne $True ) { Write-LogError "ERROR: Enable-NcSnapmirrorProtect failed [$ErrorVar]" }
-                            
-                            Start-Sleep -Seconds 5
+                    if ( ( $PrimaryFlexgroupMasterState -eq "online" ) -and ( $PrimaryFlexgroupMasterType -eq "rw" ) ) {
+                        # check this volume Name on secondary SVM
+                        Write-LogDebug "Check if [$SecondaryFlexgroupMasterName] volume exists on destination"
+                        Write-LogDebug "Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $SecondaryFlexgroupMasterName"
+                        $SecondaryFlexgroup = Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $SecondaryFlexgroupMasterName  -ErrorVariable ErrorVar 
+                        if ( $? -ne $True ) { $Return = $False ; Clean_Throw "ERROR: Get-NcVol failed [$ErrorVar]" }
+                        if ( $null -eq $SecondaryFlexgroup ) {
+                            # Create this Flexgroup if it does not exist on secondary
+                            Write-Log "[$workOn] Create Flexgroup [$SecondaryFlexgroupMasterName] on [$mySecondaryVserver]"
+                            if($Global:XDPPolicy -eq ""){$Policy="MirrorAllSnapshots"}
+                            elseif($Global:XDPPolicy -match "Sync|StrictSync"){
+                                Write-LogWarn "SM-S is not yet compatible with Flexgroup, switch to async MirrorAllSnapshots policy for this volume"
+                                $Policy="MirrorAllSnapshots"
+                            }else{$Policy=$Global:XDPPolicy}
+                            if( ( $Global:MirrorSchedule -eq "none" ) -or ( $Global:MirrorSchedule.Length -eq 0 ) ){
+                                $Schedule="hourly"
+                            }else{
+                                $Schedule=$Global:MirrorSchedule
+                            }
+                            Write-LogDebug "Schedule [$Schedule]"
+                            $ProtectFlexgroupDone=$False
+                            $PathList=$($myPrimaryVserver+":"+$PrimaryFlexgroupMasterName)
                             if($Global:PSTKCall -ne "Rest"){
-                                $ProtectJobDetail=Get-NcJob -Id $ProtectJob.ResultJobid -Controller $mySecondaryController
-                                $SnapmirrorProtectJobID=$ProtectJobDetail.ResultJobid
-                                if($ProtectJobDetail.JobState -eq "failure"){
-                                    $reason=$ProtectJobDetail.JobCompletion
-                                    Write-LogWarn "[$mySecondaryVserver] Protect Flexgroup [$SecondaryFlexgroupMasterName] Failed because [$reason]"    
-                                }
-                            }else{
-                                $CredSecondary=get_local_cDotcred($mySecondaryController)
-                                $ProtectJobDetail=Get-RESTJob -Cred $CredSecondary -url $("https://"+$mySecondaryController.Name+"/api/cluster/jobs/"+$ProtectJob.Uuid)
-                                if($ProtectJobDetail.state-eq "failure"){
-                                    $reason=$ProtectJobDetail.message
-                                    Write-LogWarn "[$mySecondaryVserver] Protect Flexgroup [$SecondaryFlexgroupMasterName] Failed because [$reason]"    
-                                }
-                            }
-                            
-                            #Write-LogDebug "wait_snapmirror_dr_status -DestinationVserver $mySecondaryVserver -PrimaryVolume $PrimaryFlexgroupMasterName -SecondaryVolumeName $SecondaryFlexgroupMasterName -Status idle -MirrorState uninitialized -mySecondaryController $mySecondaryController" 
-                            #$ret=wait_snapmirror_dr_status -DestinationVserver $mySecondaryVserver -PrimaryVolume $PrimaryFlexgroupMasterName -SecondaryVolumeName $SecondaryFlexgroupMasterName -Status "idle" -MirrorState "uninitialized" -mySecondaryController $mySecondaryController
-                            
-                            if($ProtectJob.state -ne "success" -and $ProtectJob.state -ne "running"){
-                                $reason=$($ProtectJobDetail.state+":"+$ProtectJobDetail.message)
-                                Write-LogError "[$mySecondaryVserver] Protect Flexgroup [$SecondaryFlexgroupMasterName] not completed [$reason]"
-                            }
-                            
-                            $StartTime=Get-date
-                            $SnapmirrorProtectJobDone=$False
-                            while($SnapmirrorProtectJobDone -ne $True){
+                                Write-LogDebug "Enable-NcSnapmirrorProtect -Policy $Policy -PathList $PathList -Schedule $Schedule -DestinationVserver $mySecondaryVserver -AutoInitialize $False -Controller $mySecondaryController"
+                                $ProtectJob=Enable-NcSnapmirrorProtect -Policy $Policy -PathList $PathList -Schedule $Schedule -DestinationVserver $mySecondaryVserver -AutoInitialize $False -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                if ( $? -ne $True ) { Write-LogError "ERROR: Enable-NcSnapmirrorProtect failed [$ErrorVar]" }
+                                
+                                Start-Sleep -Seconds 5
                                 if($Global:PSTKCall -ne "Rest"){
-                                    Write-LogDebug "Get-NcJobHistory -Id $SnapmirrorProtectJobID -Controller $mySecondaryController"
-                                    $JobDetail=Get-NcJobHistory -Id $ProtectJob.ResultJobid -Controller $mySecondaryController -ErrorVariable ErrorVar
-                                    if($JobDetail.JobEventType[0] -eq "failed"){
-                                        Write-LogError "ERROR: Enable-NcSnapmirrorProtect Job failed"
-                                        $SnapmirrorProtectJobDone=$True
-                                        $ProtectFlexgroupDone=$False
-                                    }
-                                    if($JobDetail.JobEventType[0] -eq "succeeded"){
-                                        $SnapmirrorProtectJobDone=$True
-                                        $ProtectFlexgroupDone=$True
-                                    }
-                                    Start-Sleep 2
-                                    $CurrentTime=Get-date
-                                    $Global:TimeoutTime = ($CurrentTime - $StartTime).TotalSeconds
-                                    if ( $Global:TimeoutTime -gt $Global:STOP_TIMEOUT ) { # STOP_TIMEOUT equal to 5 minutes
-                                        Write-LogError "ERROR: Timeout waiting Snapmirror Protect Job for flexgroup [$SecondaryFlexgroupMasterName]"
+                                    $ProtectJobDetail=Get-NcJob -Id $ProtectJob.ResultJobid -Controller $mySecondaryController
+                                    $SnapmirrorProtectJobID=$ProtectJobDetail.ResultJobid
+                                    if($ProtectJobDetail.JobState -eq "failure"){
+                                        $reason=$ProtectJobDetail.JobCompletion
+                                        Write-LogWarn "[$mySecondaryVserver] Protect Flexgroup [$SecondaryFlexgroupMasterName] Failed because [$reason]"    
                                     }
                                 }else{
-                                    Write-LogDebug "Get-RESTJob -Cred $CredSecondary -url "+$("https://"+$mySecondaryController.Name+"/api/cluster/jobs/"+$ProtectJob.Uuid)
                                     $CredSecondary=get_local_cDotcred($mySecondaryController)
-                                    $JobDetail=Get-RESTJob -Cred $CredSecondary -url $("https://"+$mySecondaryController.Name+"/api/cluster/jobs/"+$ProtectJob.Uuid)
-                                    if($JobDetail.state -eq "success"){
-                                        $SnapmirrorProtectJobDone=$True
-                                        $ProtectFlexgroupDone=$True
-                                    }else{
-                                        $ProtectFlexgroupDone=$False
+                                    $ProtectJobDetail=Get-RESTJob -Cred $CredSecondary -url $("https://"+$mySecondaryController.Name+"/api/cluster/jobs/"+$ProtectJob.Uuid)
+                                    if($ProtectJobDetail.state-eq "failure"){
+                                        $reason=$ProtectJobDetail.message
+                                        Write-LogWarn "[$mySecondaryVserver] Protect Flexgroup [$SecondaryFlexgroupMasterName] Failed because [$reason]"    
                                     }
                                 }
-                            }
-                            if( ($Global:Run_Mode -eq "ConfigureDR") -or ($Global:SelectVolume -eq $True) ){
-                                if($ProtectFlexgroupDone -eq $True){
-                                    Write-LogDebug "Invoke-NcSnapmirrorInitialize -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Controller $mySecondaryController"
-                                    $ret=Invoke-NcSnapmirrorInitialize -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Controller $mySecondaryController  -ErrorVariable ErrorVar
-                                    if ( $? -ne $True ) {Write-LogError "ERROR: Failed to Initialize Snapmirror Relationship [$ErrorVar]"}
+                                
+                                #Write-LogDebug "wait_snapmirror_dr_status -DestinationVserver $mySecondaryVserver -PrimaryVolume $PrimaryFlexgroupMasterName -SecondaryVolumeName $SecondaryFlexgroupMasterName -Status idle -MirrorState uninitialized -mySecondaryController $mySecondaryController" 
+                                #$ret=wait_snapmirror_dr_status -DestinationVserver $mySecondaryVserver -PrimaryVolume $PrimaryFlexgroupMasterName -SecondaryVolumeName $SecondaryFlexgroupMasterName -Status "idle" -MirrorState "uninitialized" -mySecondaryController $mySecondaryController
+                                
+                                if($ProtectJob.state -ne "success" -and $ProtectJob.state -ne "running"){
+                                    $reason=$($ProtectJobDetail.state+":"+$ProtectJobDetail.message)
+                                    Write-LogError "[$mySecondaryVserver] Protect Flexgroup [$SecondaryFlexgroupMasterName] not completed [$reason]"
                                 }
-                            }
-                            
-                        }else{
-                            # $DestinationPath=$($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName)
-                            # $CreateDestination=New-Object NetApp.Ontapi.Filer.C.Snapmirror930.CreateDestination
-                            # $CreateDestination.Enabled=$True
-                            # Write-LogDebug "Enable-NcSnapmirrorProtect -Policy $Policy -PathList $PathList -Schedule $Schedule -DestinationVserver $mySecondaryVserver -DestinationPath $DestinationPath -CreateDestination $CreateDestination -AutoInitialize $False -Controller $mySecondaryController"
-                            # $ProtectJob=Enable-NcSnapmirrorProtect -Policy $Policy -PathList $PathList -Schedule $Schedule -DestinationVserver $mySecondaryVserver -DestinationPath $DestinationPath -CreateDestination $CreateDestination -AutoInitialize $False -Controller $mySecondaryController -ErrorVariable ErrorVar
-                            # if ( $? -ne $True ) { Write-LogError "ERROR: Enable-NcSnapmirrorProtect failed [$ErrorVar]" }
-
-                            # Get sourceVolume TieringPolicy Information
-                            # If TieringPolicy is set on source Volume, we will use the same Tiering Policy on destination volume
-                            # It not set, we will use Tiering Policy auto on secondary volume
-                            # But if Global argument TieringPolicy as been set during svmtool call, then we will use this TieringPolicy for destination volume
-                            if($Global:TieringPolicy.Length -gt 0){
-                                Write-Log "[$Workon] Global TieringPolicy is set to [$Global:TieringPolicy]. So, volume [$PrimaryFlexgroupMasterName] will get this policy"
-                                $TieringPolicy=$Global:TieringPolicy
+                                
+                                $StartTime=Get-date
+                                $SnapmirrorProtectJobDone=$False
+                                while($SnapmirrorProtectJobDone -ne $True){
+                                    if($Global:PSTKCall -ne "Rest"){
+                                        Write-LogDebug "Get-NcJobHistory -Id $SnapmirrorProtectJobID -Controller $mySecondaryController"
+                                        $JobDetail=Get-NcJobHistory -Id $ProtectJob.ResultJobid -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                        if($JobDetail.JobEventType[0] -eq "failed"){
+                                            Write-LogError "ERROR: Enable-NcSnapmirrorProtect Job failed"
+                                            $SnapmirrorProtectJobDone=$True
+                                            $ProtectFlexgroupDone=$False
+                                        }
+                                        if($JobDetail.JobEventType[0] -eq "succeeded"){
+                                            $SnapmirrorProtectJobDone=$True
+                                            $ProtectFlexgroupDone=$True
+                                        }
+                                        Start-Sleep 2
+                                        $CurrentTime=Get-date
+                                        $Global:TimeoutTime = ($CurrentTime - $StartTime).TotalSeconds
+                                        if ( $Global:TimeoutTime -gt $Global:STOP_TIMEOUT ) { # STOP_TIMEOUT equal to 5 minutes
+                                            Write-LogError "ERROR: Timeout waiting Snapmirror Protect Job for flexgroup [$SecondaryFlexgroupMasterName]"
+                                        }
+                                    }else{
+                                        Write-LogDebug "Get-RESTJob -Cred $CredSecondary -url "+$("https://"+$mySecondaryController.Name+"/api/cluster/jobs/"+$ProtectJob.Uuid)
+                                        $CredSecondary=get_local_cDotcred($mySecondaryController)
+                                        $JobDetail=Get-RESTJob -Cred $CredSecondary -url $("https://"+$mySecondaryController.Name+"/api/cluster/jobs/"+$ProtectJob.Uuid)
+                                        if($JobDetail.state -eq "success"){
+                                            $SnapmirrorProtectJobDone=$True
+                                            $ProtectFlexgroupDone=$True
+                                        }else{
+                                            $ProtectFlexgroupDone=$False
+                                        }
+                                    }
+                                }
+                                if( ($Global:Run_Mode -eq "ConfigureDR") -or ($Global:SelectVolume -eq $True) ){
+                                    if($ProtectFlexgroupDone -eq $True){
+                                        Write-LogDebug "Invoke-NcSnapmirrorInitialize -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Controller $mySecondaryController"
+                                        $ret=Invoke-NcSnapmirrorInitialize -DestinationVserver $mySecondaryVserver -DestinationVolume $SecondaryFlexgroupMasterName -SourceVserver $myPrimaryVserver -SourceVolume $PrimaryFlexgroupMasterName -Controller $mySecondaryController  -ErrorVariable ErrorVar
+                                        if ( $? -ne $True ) {Write-LogError "ERROR: Failed to Initialize Snapmirror Relationship [$ErrorVar]"}
+                                    }
+                                }
+                                
                             }else{
-                                $PrimaryAggr=Get-NcAggr -Controller $myPrimaryController -Name $PrimaryVolAggr  -ErrorVariable ErrorVar
-                                if($PrimaryAggr.AggrRaidAttributes.IsComposite -eq $True){
-                                    $PrimaryVolumeTieringPolicy=$PrimaryVol.VolumeCompAggrAttributes.TieringPolicy
-                                    Write-Log "[$Workon] volume [$PrimaryFlexgroupMasterName] gets its TieringPolicy from primary volume [$PrimaryVolumeTieringPolicy]"
-                                    $TieringPolicy=$PrimaryVolumeTieringPolicy
+                                # $DestinationPath=$($mySecondaryVserver+":"+$SecondaryFlexgroupMasterName)
+                                # $CreateDestination=New-Object NetApp.Ontapi.Filer.C.Snapmirror930.CreateDestination
+                                # $CreateDestination.Enabled=$True
+                                # Write-LogDebug "Enable-NcSnapmirrorProtect -Policy $Policy -PathList $PathList -Schedule $Schedule -DestinationVserver $mySecondaryVserver -DestinationPath $DestinationPath -CreateDestination $CreateDestination -AutoInitialize $False -Controller $mySecondaryController"
+                                # $ProtectJob=Enable-NcSnapmirrorProtect -Policy $Policy -PathList $PathList -Schedule $Schedule -DestinationVserver $mySecondaryVserver -DestinationPath $DestinationPath -CreateDestination $CreateDestination -AutoInitialize $False -Controller $mySecondaryController -ErrorVariable ErrorVar
+                                # if ( $? -ne $True ) { Write-LogError "ERROR: Enable-NcSnapmirrorProtect failed [$ErrorVar]" }
+
+                                # Get sourceVolume TieringPolicy Information
+                                # If TieringPolicy is set on source Volume, we will use the same Tiering Policy on destination volume
+                                # It not set, we will use Tiering Policy auto on secondary volume
+                                # But if Global argument TieringPolicy as been set during svmtool call, then we will use this TieringPolicy for destination volume
+                                if($Global:TieringPolicy.Length -gt 0){
+                                    Write-Log "[$Workon] Global TieringPolicy is set to [$Global:TieringPolicy]. So, volume [$SecondaryFlexgroupMasterName] will get this policy"
+                                    $TieringPolicy=$Global:TieringPolicy
                                 }else{
-                                    Write-Log "[$Workon] no TieringPolicy defined on source volume. So, volume [$PrimaryFlexgroupMasterName] will be set with Policy [auto]"
-                                    $TieringPolicy="auto"
+                                    $PrimaryAggr=Get-NcAggr -Controller $myPrimaryController -Name $PrimaryVolAggr  -ErrorVariable ErrorVar
+                                    if($PrimaryAggr.AggrRaidAttributes.IsComposite -eq $True){
+                                        $PrimaryVolumeTieringPolicy=$PrimaryVol.VolumeCompAggrAttributes.TieringPolicy
+                                        Write-Log "[$Workon] volume [$SecondaryFlexgroupMasterName] gets its TieringPolicy from primary volume [$PrimaryVolumeTieringPolicy]"
+                                        $TieringPolicy=$PrimaryVolumeTieringPolicy
+                                    }else{
+                                        Write-Log "[$Workon] no TieringPolicy defined on source volume. So, volume [$SecondaryFlexgroupMasterName] will be set with Policy [auto]"
+                                        $TieringPolicy="auto"
+                                    }
                                 }
+                                #! attention au cas de creation d'une relation snapmirror protect pour copier un flexgroup à la destination
+                                #! si ce flexgroup est en fait un bucket S3 il faut utiliser une policy continuous pour faire du snapmirror S3 
+                                #! et non du snapmirror classique
+                                REST_create_snapmirror -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -PrimaryVol $PrimaryFlexgroupMasterName -SecondaryVol $SecondaryFlexgroupMasterName -Group_type "flexgroup" -Policy $Policy -Policy_type $Policy_type -Schedule $Global:MirrorSchedule -workOn $mySecondaryVserver -TieringPolicy $TieringPolicy
                             }
-                            #! attention au cas de creation d'une relation snapmirror protect pour copier une flexgroup à la destination
-                            #! si ce flexgroup est en fait un bucket S3 il faut utiliser une policy continuous poru faire du snapmirror S3 
-                            #! et non du snapmirror classic
-                            REST_create_snapmirror -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -PrimaryVol $PrimaryFlexgroupMasterName -SecondaryVol $SecondaryFlexgroupMasterName -Group_type "flexgroup" -Policy $Policy -Policy_type $Policy_type -Schedule $Global:MirrorSchedule -workOn $mySecondaryVserver -TieringPolicy $TieringPolicy
+                                
+                        }elseif($PrimaryFlexgroupMasterName -notin $ListFlexgroup){
+                            Write-Log "[$workOn] Flexgroup [$SecondaryFlexgroupMasterName] already exists" 
+                            $ListFlexgroup+=$PrimaryFlexgroupMasterName
                         }
-                            
-                    }elseif($PrimaryFlexgroupMasterName -notin $ListFlexgroup){
-                        Write-Log "[$workOn] Flexgroup [$SecondaryFlexgroupMasterName] already exists" 
-                        $ListFlexgroup+=$PrimaryFlexgroupMasterName
                     }
                 }
             }else{
@@ -9808,6 +10058,7 @@ Try {
                 Write-Log "[$workon] Process a Flexgroup volume [$PrimaryVolName]"
                 if($Backup -eq $False){
                     # check this volume Name on secondary SVM
+                    Write-LogDebug "Backup[$Backup] Restore[$Restore]"
                     Write-LogDebug "Check if [$PrimaryVolName] volume exists on destination"
                     Write-LogDebug "Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $PrimaryVolName"
                     $SecondaryFlexgroup = Get-NcVol -Controller $mySecondaryController -Vserver $mySecondaryVserver -Volume $PrimaryVolName  -ErrorVariable ErrorVar 
@@ -18885,9 +19136,7 @@ Try {
 	if ( ( $ret=create_snapmirror_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn -DDR $DDR -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to create all snapmirror relations " ; $Return = $False }
     if ( ( $ret=create_update_snap_policy_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) {Write-LogError "ERROR: create_update_snap_policy_dr"}
     if ( ( $ret=map_lundr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: Failed to map all LUNs " ; $Return = $False }
-    if ( ( $ret=create_update_ontaps3 -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: create_update_ontaps3" ; $Return = $False }
-    #* Replication S3snapmirror = snapmirror avec policy continuous sur laquelle on peut regler rpo et throttle
-    #* Ajout/Création de create_update_CG
+    #if ( ( $ret=create_update_ontaps3 -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $runBackup -Restore $runRestore) -ne $True ) { Write-LogError "ERROR: create_update_ontaps3" ; $Return = $False }
     if ( ( $ret = resync_vserver_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -Backup $runBackup -Restore $runRestore) -ne $True ) {
         Write-LogError "ERROR: Resync error"
         clean_and_exit 1
@@ -28007,9 +28256,9 @@ Try {
     
     if("Users" -in $objects){
         Write-Log "[$mySecondaryVserver] Restore Object Users"
-        if ( ( $ret=create_update_ontaps3 -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $False -Restore $True) -ne $True ) { Write-LogError "ERROR: Failed to restore all Role"}
+        #if ( ( $ret=create_update_ontaps3 -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $False -Restore $True) -ne $True ) { Write-LogError "ERROR: Failed to restore all Role"}
         #if( $null -ne $Global:DefaultLocalUserCredentials ){
-            if ( ( $ret=create_update_localuser_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $False -Restore $True) -ne $True ) { Write-LogError "ERROR: Failed to restore all local user"}
+        if ( ( $ret=create_update_localuser_dr -myPrimaryController $myPrimaryController -mySecondaryController $mySecondaryController -myPrimaryVserver $myPrimaryVserver -mySecondaryVserver $mySecondaryVserver -workOn $workOn  -Backup $False -Restore $True) -ne $True ) { Write-LogError "ERROR: Failed to restore all local user"}
         #}else{
         #    Write-LogWarn "WARNING: SKIPPING local user create/update with no default credentials"
         #}
@@ -28359,7 +28608,7 @@ Function create_update_servicepolicy_dr(
                             # if($? -ne $True){
                             #     Clean_Throw "ERROR: Fail to create service-policy [$PolicyName] on secondary"
                             # }
-                            if($PolicyCreated){Write-Log "Policy [$PolicyName] created successfully on secondary"}
+                            if($PolicyCreated){Write-Log "[$mySecondaryVserver] Policy [$PolicyName] created successfully"}
                         }
                     }
                 }
